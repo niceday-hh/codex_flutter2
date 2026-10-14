@@ -406,7 +406,7 @@ class _ReminderDetailState extends State<ReminderDetail> {
             if (v < 0.9) { setState(() => slide = 0); return; }
             setState(() => busy = true);
             try { await widget.onAck(); } catch (e) {
-              if (mounted) { setState(() { busy = false; slide = 0; }); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(niceError(e)))); }
+              if (mounted && context.mounted) { setState(() { busy = false; slide = 0; }); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(niceError(e)))); }
             }
           }),
         ] else const Text('到时会通过系统通知提醒你', style: TextStyle(color: muted)),
@@ -431,9 +431,9 @@ class _ReminderEditorState extends State<ReminderEditor> {
     if (saving) return;
     r.text = text.text.trim();
     String? error;
-    if (r.text.isEmpty) error = '请输入提醒内容';
-    else if (r.repeat == 'weekly' && r.days.isEmpty) error = '请选择重复星期';
-    else if (r.repeat == 'none' && !r.date.isAfter(DateTime.now())) error = '请选择未来的日期和时间';
+    if (r.text.isEmpty) { error = '请输入提醒内容'; }
+    else if (r.repeat == 'weekly' && r.days.isEmpty) { error = '请选择重复星期'; }
+    else if (r.repeat == 'none' && !r.date.isAfter(DateTime.now())) { error = '请选择未来的日期和时间'; }
     if (error != null) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error))); return; }
     setState(() => saving = true);
     try {
@@ -475,7 +475,7 @@ class _ReminderEditorState extends State<ReminderEditor> {
           segments: const [ButtonSegment(value: 'none', label: Text('仅一次')), ButtonSegment(value: 'daily', label: Text('每天')), ButtonSegment(value: 'weekly', label: Text('每周'))],
           selected: {r.repeat}, onSelectionChanged: (v) => setState(() { r.repeat = v.first; if (r.repeat == 'weekly' && r.days.isEmpty) r.days = [r.date.weekday]; }))),
         if (r.repeat == 'weekly') ...[const SizedBox(height: 16), Wrap(spacing: 8, runSpacing: 8, children: List.generate(7, (i) => FilterChip(
-          label: Text(weekdays[i]), selected: r.days.contains(i + 1), onSelected: (v) => setState(() { if (v) { r.days.add(i + 1); } else { r.days.remove(i + 1); } })))],
+          label: Text(weekdays[i]), selected: r.days.contains(i + 1), onSelected: (v) => setState(() { if (v) { r.days.add(i + 1); } else { r.days.remove(i + 1); } }))))],
       ])), const SizedBox(height: 14),
       Surface(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
         const ListTile(title: Text('提醒方式', style: TextStyle(fontWeight: FontWeight.w700))),
@@ -489,7 +489,7 @@ class _ReminderEditorState extends State<ReminderEditor> {
         if (r.sound) ListTile(leading: const Icon(Icons.music_note_outlined, color: purple), title: const Text('从系统选择铃声'),
           subtitle: Text(r.ringtone.isEmpty ? '系统默认' : '已选择系统铃声'), trailing: const Icon(Icons.chevron_right), onTap: () async {
             try { final v = await native.invokeMethod<String>('pickRingtone', r.ringtone); if (v != null && mounted) setState(() => r.ringtone = v); }
-            catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(niceError(e)))); }
+            catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(niceError(e)))); }
           }),
       ])), const SizedBox(height: 14),
       Surface(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [

@@ -48,7 +48,7 @@ ParsedVoice parseVoice(String source, {DateTime? now, Reminder? defaults}) {
   if (hour == 12 && (s.contains('凌晨') || s.contains('午夜'))) hour = 0;
   final hasTime = hour != null && hour < 24 && minute < 60;
   var date = DateTime(current.year, current.month, current.day,
-    hasTime ? hour! : current.hour + 1, hasTime ? minute : 0);
+    hasTime ? hour : current.hour + 1, hasTime ? minute : 0);
   bool explicitDate = false;
   if (s.contains('后天')) { date = date.add(const Duration(days: 2)); explicitDate = true; }
   else if (s.contains('明天')) { date = date.add(const Duration(days: 1)); explicitDate = true; }

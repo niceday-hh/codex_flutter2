@@ -68,6 +68,8 @@ jobs:
           PY
       - name: Build APK for Honor 100 (arm64)
         run: flutter build apk --release --target-platform android-arm64
+      - name: Native notification, acknowledgement and lockscreen privacy tests
+        run: cd android && ./gradlew :app:testReleaseUnitTest --no-daemon
       - name: Verify APK metadata and embedded assets
         run: |
           python3 - <<'PY'
