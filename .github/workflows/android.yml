@@ -89,6 +89,12 @@ jobs:
         run: |
           bash tool/bootstrap.sh
           flutter build apk --debug --target-platform android-x64
+      - name: Free space for Android system image
+        run: |
+          (cd android && ./gradlew --stop)
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk /usr/local/lib/android/sdk/system-images /opt/hostedtoolcache/CodeQL
+          rm -rf "$PUB_CACHE" "$HOME/.gradle/caches"
+          df -h /
       - name: Enable emulator acceleration
         run: sudo chmod 666 /dev/kvm
       - name: Real Android process-death, Doze and reboot checks
