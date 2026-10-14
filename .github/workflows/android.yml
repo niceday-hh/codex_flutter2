@@ -1,0 +1,124 @@
+name: Android build and release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.7'
+          channel: stable
+          cache: true
+      - name: Bootstrap Android platform
+        run: bash tool/bootstrap.sh
+      - name: Analyze Flutter code
+        run: flutter analyze
+      - name: Flutter UI and voice parser tests
+        run: flutter test
+      - name: Native schedule and retry tests
+        run: |
+          mkdir -p tool/out
+          javac -d tool/out native/app/src/main/java/com/niceday/memo/Schedule.java tool/ScheduleTest.java
+          java -cp tool/out ScheduleTest
+      - uses: actions/cache@v4
+        with:
+          path: model-downloads
+          key: paraformer-zh-int8-a071ee5419e14adb
+      - name: Prepare embedded offline model
+        run: python3 tool/fetch_model.py
+      - name: Configure signing if release secrets exist
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          python3 - <<'PY'
+          import base64, os
+          from pathlib import Path
+          if os.environ.get('KEYSTORE_BASE64'):
+              for name in ['STORE_PASSWORD', 'KEY_PASSWORD', 'KEY_ALIAS']:
+                  if not os.environ.get(name):
+                      raise SystemExit('Incomplete signing secrets')
+              key = Path(os.environ['RUNNER_TEMP']) / 'memo-release.jks'
+              key.write_bytes(base64.b64decode(os.environ['KEYSTORE_BASE64'], validate=True))
+              key.chmod(0o600)
+              def prop(s):
+                  return s.replace('\\', '\\\\').replace('\n', '\\n').replace('\r', '\\r')
+              Path('android/key.properties').write_text(
+                  f'storeFile={prop(str(key))}\nstorePassword={prop(os.environ["STORE_PASSWORD"])}\n'
+                  f'keyPassword={prop(os.environ["KEY_PASSWORD"])}\nkeyAlias={prop(os.environ["KEY_ALIAS"])}\n')
+              Path('signing-kind.txt').write_text('release')
+          else:
+              Path('signing-kind.txt').write_text('ci-test')
+          PY
+      - name: Build APK for Honor 100 (arm64)
+        run: flutter build apk --release --target-platform android-arm64
+      - name: Verify APK metadata and embedded assets
+        run: |
+          python3 - <<'PY'
+          import json, os, zipfile
+          from pathlib import Path
+          apk = Path('build/app/outputs/flutter-apk/app-release.apk')
+          with zipfile.ZipFile(apk) as z:
+              for name in ['assets/flutter_assets/assets/models/model.int8.onnx', 'assets/flutter_assets/assets/models/tokens.txt', 'lib/arm64-v8a/libsherpa-onnx-c-api.so']:
+                  assert name in z.namelist(), f'Missing APK entry: {name}'
+              assert z.getinfo('assets/flutter_assets/assets/models/model.int8.onnx').file_size > 100000000
+          Path('build/app/outputs/flutter-apk/BUILD_INFO.json').write_text(json.dumps({
+              'version': '0.1.0', 'build': 1, 'source_commit': os.environ['GITHUB_SHA'],
+              'flutter': '3.35.7', 'abi': 'arm64-v8a', 'signing': Path('signing-kind.txt').read_text(),
+              'model': 'paraformer-zh-int8-2025-10-07',
+              'model_archive_sha256': 'a071ee5419e14adb34d7f970ab98105a45e6608018b168f023ca2e4810744abe',
+              'tests': ['flutter analyze', 'flutter test', '11 native schedule/retry checks'],
+              'device_tested': False}, ensure_ascii=False, indent=2))
+          PY
+          apk_dir=build/app/outputs/flutter-apk
+          mv "$apk_dir/app-release.apk" "$apk_dir/timed-memo-0.1.0-arm64.apk"
+          cd "$apk_dir"
+          sha256sum timed-memo-0.1.0-arm64.apk > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: timed-memo-0.1.0-arm64
+          path: |
+            build/app/outputs/flutter-apk/*.apk
+            build/app/outputs/flutter-apk/BUILD_INFO.json
+            build/app/outputs/flutter-apk/SHA256SUMS.txt
+          retention-days: 30
+          compression-level: 0
+      - name: Publish versioned GitHub Release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="$(cat .release-version)"
+          version="$(sed -n 's/^version: \([^+]*\).*/\1/p' pubspec.yaml)"
+          [[ "$tag" == "v$version" ]]
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release already exists. Bump application version for the next release."
+            exit 0
+          fi
+          cp docs/releases/v0.1.0.md "$RUNNER_TEMP/release-notes.md"
+          if [[ "$(cat signing-kind.txt)" == "ci-test" ]]; then
+            printf '\n签名：本次为 CI 测试签名体验版。签名密钥未提交到仓库；后续改用固定正式签名时可能需要卸载重装，请先保留重要提醒。\n' >> "$RUNNER_TEMP/release-notes.md"
+          else
+            printf '\n签名：使用仓库配置的固定正式签名。\n' >> "$RUNNER_TEMP/release-notes.md"
+          fi
+          gh release create "$tag" --target "$GITHUB_SHA" --title "定时备忘录 $tag · 体验版" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" --prerelease \
+            build/app/outputs/flutter-apk/timed-memo-0.1.0-arm64.apk \
+            build/app/outputs/flutter-apk/BUILD_INFO.json build/app/outputs/flutter-apk/SHA256SUMS.txt
