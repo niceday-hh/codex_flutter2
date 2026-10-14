@@ -60,20 +60,40 @@ shell('input', 'keyevent', 'KEYCODE_WAKEUP')
 shell('wm', 'dismiss-keyguard', check=False)
 shell('am', 'broadcast', '-n', RECEIVER, '-a', 'CLEAR')
 id, planned = seed(240)
-before = int(time.time() * 1000)
+before_trace = json.loads(runtime()['trace'])
+before_count = len(before_trace)
 adb('reboot')
 adb('wait-for-device')
 for _ in range(90):
     if shell('getprop', 'sys.boot_completed') == '1': break
     time.sleep(1)
-time.sleep(5)
-try:
-    trace = json.loads(runtime()['trace'])
-except Exception:
-    shell('input', 'keyevent', 'KEYCODE_WAKEUP'); shell('wm', 'dismiss-keyguard', check=False)
-    time.sleep(5); trace = json.loads(runtime()['trace'])
-assert any(e['type'] == 'restored' and e['at'] >= before and 'BOOT_COMPLETED' in e['detail'] for e in trace), 'Boot receiver did not restore'
-assert any(e['type'] == 'scheduled' and e['id'] == id and e['at'] >= before for e in trace), 'Alarm was not re-registered after boot'
+# sys.boot_completed is set before all queued app broadcasts are delivered.
+# Compare newly appended device events, not host vs guest wall clocks.
+restored = False
+value = {}
+trace = []
+for attempt in range(100):
+    try:
+        value = runtime()
+        trace = json.loads(value.get('trace', '[]'))
+        fresh = trace[before_count:] if len(trace) >= before_count else trace
+        restored = any(e['type'] == 'restored' and 'BOOT_COMPLETED' in e['detail'] for e in fresh)
+        scheduled = any(e['type'] == 'scheduled' and e['id'] == id for e in fresh)
+        if restored and scheduled: break
+    except Exception:
+        pass
+    if attempt == 45:
+        shell('input', 'keyevent', 'KEYCODE_WAKEUP')
+        shell('wm', 'dismiss-keyguard', check=False)
+    time.sleep(1)
+print('Boot diagnostic:', json.dumps({'trace': trace, 'lastError': value.get('lastError'),
+    'before_count': before_count, 'restored': restored}, ensure_ascii=False), flush=True)
+if not restored:
+    print(shell('dumpsys', 'package', PACKAGE), flush=True)
+    log = shell('logcat', '-d', '-t', '500', check=False)
+    print('\n'.join(line for line in log.splitlines() if 'niceday' in line or 'FATAL EXCEPTION' in line or 'Reminder' in line), flush=True)
+assert restored, 'Boot receiver did not restore'
+assert any(e['type'] == 'scheduled' and e['id'] == id for e in fresh), 'Alarm was not re-registered after boot'
 assert PACKAGE in shell('dumpsys', 'alarm'), 'System has no alarm registration after boot'
 print('PASS: reboot restored scheduled reminder without opening Flutter Activity', flush=True)
 Path('device-test-results.json').write_text(json.dumps({'process_death_doze': True, 'reboot_restore_without_activity': True}, indent=2))
