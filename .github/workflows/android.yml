@@ -85,7 +85,7 @@ jobs:
               'flutter': '3.35.7', 'abi': 'arm64-v8a', 'signing': Path('signing-kind.txt').read_text(),
               'model': 'paraformer-zh-int8-2025-10-07',
               'model_archive_sha256': 'a071ee5419e14adb34d7f970ab98105a45e6608018b168f023ca2e4810744abe',
-              'tests': ['flutter analyze', 'flutter test', '11 native schedule/retry checks'],
+              'tests': ['flutter analyze', 'flutter test', '11 native schedule/retry checks', '5 native notification/privacy tests'],
               'device_tested': False}, ensure_ascii=False, indent=2))
           PY
           apk_dir=build/app/outputs/flutter-apk

@@ -16,6 +16,8 @@ import java.io.*;
 
 public final class MainActivity extends FlutterActivity {
     private MethodChannel channel;
+    private SharedPreferences memoPreferences;
+    private SharedPreferences.OnSharedPreferenceChangeListener memoListener;
     private MethodChannel.Result permissionResult, ringtoneResult;
     private AudioRecord recorder;
     private Thread audioThread;
@@ -31,6 +33,11 @@ public final class MainActivity extends FlutterActivity {
     @Override public void configureFlutterEngine(FlutterEngine engine) {
         super.configureFlutterEngine(engine);
         channel = new MethodChannel(engine.getDartExecutor().getBinaryMessenger(), "memo/native");
+        memoPreferences = getSharedPreferences("memo", Context.MODE_PRIVATE);
+        memoListener = (preferences, key) -> {
+            if ("reminders".equals(key) && channel != null) channel.invokeMethod("stateChanged", null);
+        };
+        memoPreferences.registerOnSharedPreferenceChangeListener(memoListener);
         channel.setMethodCallHandler((call, result) -> {
             try {
                 ReminderEngine store = new ReminderEngine(this);
@@ -168,6 +175,10 @@ public final class MainActivity extends FlutterActivity {
     @Override protected void onStop() {
         super.onStop();
         try { stopRecording(true); } catch (Exception ignored) {}
+    }
+    @Override protected void onDestroy() {
+        if (memoPreferences != null && memoListener != null) memoPreferences.unregisterOnSharedPreferenceChangeListener(memoListener);
+        super.onDestroy();
     }
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent); setIntent(intent);

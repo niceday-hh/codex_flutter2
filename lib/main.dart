@@ -66,6 +66,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     super.initState(); WidgetsBinding.instance.addObserver(this);
     native.setMethodCallHandler((call) async {
       if (call.method == 'openReminder') { await reload(); if (mounted) openById(call.arguments as int); }
+      if (call.method == 'stateChanged') { await reload(); }
     });
     initialize();
   }
@@ -126,7 +127,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       : error != null ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
         Text(error!), TextButton(onPressed: reload, child: const Text('重新加载'))]))
       : IndexedStack(index: tab, children: [homePage(), calendarPage(),
-        VoicePage(store: store, onSaved: reload), settingsPage()])),
+        TickerMode(enabled: tab == 2, child: VoicePage(store: store, onSaved: reload, active: tab == 2)), settingsPage()])),
     floatingActionButton: !loading && error == null && (tab == 0 || tab == 1)
       ? FloatingActionButton(onPressed: () => edit(), backgroundColor: purple,
           foregroundColor: Colors.white, tooltip: '新建提醒', child: const Icon(Icons.add_rounded, size: 32)) : null,
@@ -512,7 +513,8 @@ class _ReminderEditorState extends State<ReminderEditor> {
 class VoicePage extends StatefulWidget {
   final MemoStore store;
   final Future<void> Function() onSaved;
-  const VoicePage({super.key, required this.store, required this.onSaved});
+  final bool active;
+  const VoicePage({super.key, required this.store, required this.onSaved, required this.active});
   @override State<VoicePage> createState() => _VoicePageState();
 }
 class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
@@ -529,6 +531,13 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
   @override void dispose() {
     timer?.cancel(); animation.dispose(); text.dispose(); WidgetsBinding.instance.removeObserver(this);
     native.invokeMethod('cancelRecording'); super.dispose();
+  }
+  @override void didUpdateWidget(VoicePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.active && !widget.active && recording) {
+      timer?.cancel(); native.invokeMethod('cancelRecording');
+      recording = false; warning = '录音已停止，请重新录音';
+    }
   }
   @override void didChangeAppLifecycleState(AppLifecycleState state) {
     if ((state == AppLifecycleState.paused || state == AppLifecycleState.detached) && recording) {

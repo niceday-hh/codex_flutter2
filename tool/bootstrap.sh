@@ -6,7 +6,8 @@ if [[ ! -f android/gradlew ]]; then
   platform_temp="$(mktemp -d)"
   trap 'rm -rf "$platform_temp"' EXIT
   flutter create --platforms=android --android-language=java --project-name=timed_memo --org=com.niceday --no-pub "$platform_temp/platform"
-  cp -R "$platform_temp/platform/android" android
+  mkdir -p android
+  cp -R "$platform_temp/platform/android/." android/
   rm -rf android/app/src/main/java android/app/src/main/kotlin
 fi
 cp -R native/. android/

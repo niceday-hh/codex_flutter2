@@ -5,19 +5,19 @@ import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 import 'reminder.dart';
 
 Future<String> transcribe(String pcmPath) async {
-  final dir = await native.invokeMethod<String>('filesDir');
-  if (dir == null) throw StateError('无法打开语音模型目录');
-  for (final name in ['model.int8.onnx', 'tokens.txt']) {
-    final file = File('$dir/asr/$name');
-    if (!await file.exists()) {
-      await file.parent.create(recursive: true);
-      final bytes = await rootBundle.load('assets/models/$name');
-      final temp = File('${file.path}.tmp');
-      await temp.writeAsBytes(bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes), flush: true);
-      await temp.rename(file.path);
-    }
-  }
   try {
+    final dir = await native.invokeMethod<String>('filesDir');
+    if (dir == null) throw StateError('无法打开语音模型目录');
+    for (final name in ['model.int8.onnx', 'tokens.txt']) {
+      final file = File('$dir/asr/$name');
+      if (!await file.exists()) {
+        await file.parent.create(recursive: true);
+        final bytes = await rootBundle.load('assets/models/$name');
+        final temp = File('${file.path}.tmp');
+        await temp.writeAsBytes(bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes), flush: true);
+        await temp.rename(file.path);
+      }
+    }
     return await compute(_decode, {'dir': '$dir/asr', 'pcm': pcmPath});
   } finally {
     final pcm = File(pcmPath);

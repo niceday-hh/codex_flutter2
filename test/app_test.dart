@@ -19,7 +19,8 @@ void main() {
     await tester.pumpWidget(const MemoApp()); await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('留一点空间，给重要的事'), findsOneWidget);
     for (final label in ['日历', '语音', '设置', '备忘录']) {
-      await tester.tap(find.text(label).last); await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text(label)).last);
+      await tester.pump(); await tester.pump(const Duration(milliseconds: 400));
       expect(tester.takeException(), isNull);
     }
     await tester.tap(find.byTooltip('新建提醒')); await tester.pumpAndSettle();
