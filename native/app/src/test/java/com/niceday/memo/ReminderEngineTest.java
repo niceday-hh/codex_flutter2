@@ -156,4 +156,20 @@ public class ReminderEngineTest {
         assertThrows(IllegalArgumentException.class, () -> engine.importBackup(invalid));
         assertEquals(1, new JSONObject(engine.state()).getJSONArray("reminders").length());
     }
+    @Test public void upgradeRestoreReplacesLegacyAlarmBroadcastToken() throws Exception {
+        JSONObject r = future(row()).put("nextTrigger", System.currentTimeMillis() + 120000);
+        persist(r);
+        Intent oldIntent = new Intent(context, ReminderReceiver.class).setAction(ReminderEngine.BASE)
+            .setData(android.net.Uri.parse("memo://" + ReminderEngine.BASE + "/1"))
+            .putExtra("id", 1).putExtra("token", r.getLong("nextTrigger")).putExtra("version", 1L);
+        PendingIntent legacy = PendingIntent.getBroadcast(context, 1, oldIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        engine.restore(false, Intent.ACTION_MY_PACKAGE_REPLACED);
+        assertThrows(PendingIntent.CanceledException.class, () -> legacy.send());
+        PendingIntent replacement = PendingIntent.getBroadcast(context, 1, oldIntent,
+            PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
+        assertNotNull(replacement);
+        assertNotEquals(legacy, replacement);
+        assertNotNull(context.getSystemService(AlarmManager.class).getNextAlarmClock());
+    }
 }

@@ -183,11 +183,14 @@ public final class ReminderEngine {
     }
     private PendingIntent intent(JSONObject r, String action, long token) throws JSONException {
         int id = r.getInt("id");
+        // User-visible alarms and dismissal must not wait behind slow background broadcasts.
         Intent intent = new Intent(context, ReminderReceiver.class).setAction(action)
             .setData(Uri.parse("memo://" + action + "/" + id))
+            .addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             .putExtra("id", id).putExtra("token", token).putExtra("version", r.optLong("version"));
+        // Recreate the token so an upgrade replaces older intents without foreground priority.
         return PendingIntent.getBroadcast(context, id, intent,
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
     private PendingIntent showIntent(int id) {
         Intent show = new Intent(context, MainActivity.class).setAction("com.niceday.memo.OPEN")
