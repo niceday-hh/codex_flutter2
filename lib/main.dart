@@ -97,6 +97,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   }
   Future<void> edit([Reminder? existing]) async {
     final draft = existing == null ? store.draft() : Reminder.fromJson({...existing.toJson()});
+    draft.enabled = true;
+    draft.completed = false;
     final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => ReminderEditor(reminder: draft, store: store)));
     if (saved == true) { await reload(); toast('提醒已保存'); }
   }
@@ -154,6 +156,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     });
     final active = list.where((r) => r.enabled || r.unread).toList();
     final complete = list.where((r) => r.completed).toList();
+    final paused = list.where((r) => !r.enabled && !r.completed && !r.unread).toList();
     final now = DateTime.now();
     return RefreshIndicator(onRefresh: reload, child: ListView(
       padding: const EdgeInsets.only(bottom: 90), physics: const AlwaysScrollableScrollPhysics(), children: [
@@ -180,6 +183,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       if (active.isEmpty) emptyState('留一点空间，给重要的事', '点击右下角 +，或用语音创建第一条提醒'),
       ...active.map(reminderCard),
       if (complete.isNotEmpty) ...[section('已完成', '${complete.length} 条'), ...complete.map(reminderCard)],
+      if (paused.isNotEmpty) ...[section('未启用', '${paused.length} 条'), ...paused.map(reminderCard)],
     ]));
   }
   Widget section(String title, String subtitle) => Padding(padding: const EdgeInsets.fromLTRB(24, 26, 24, 12),
@@ -199,7 +203,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         const SizedBox(width: 15), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(r.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: r.completed ? muted : ink, fontWeight: FontWeight.w600)),
           const SizedBox(height: 6), Wrap(spacing: 5, runSpacing: 4, children: [
-            Tag(r.completed ? '已完成' : r.unread ? '未读 ${r.attempts}/${r.totalCount}' : r.repeatLabel),
+            Tag(r.completed ? '已完成' : !r.enabled ? '未启用' : r.unread ? '未读 ${r.attempts}/${r.totalCount}' : r.repeatLabel),
             Text(dateLabel(r.displayDate), style: const TextStyle(fontSize: 11, color: muted)),
           ]),
         ])), PopupMenuButton<String>(tooltip: '更多操作', onSelected: (v) => v == 'edit' ? edit(r) : remove(r),
@@ -259,7 +263,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         child: const Icon(Icons.notifications_rounded, color: Colors.white, size: 32)),
       const SizedBox(width: 16), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('定时备忘录', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-        Text('v0.1.0 · 本地保存 · 离线语音', style: TextStyle(color: muted, fontSize: 12))])),
+        Text('v0.2.0 · 本地保存 · 离线语音', style: TextStyle(color: muted, fontSize: 12))])),
     ]))),
     section('默认提醒', '新提醒使用这些设置'),
     settingsGroup([
@@ -297,6 +301,44 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       settingRow(Icons.battery_saver_outlined, '后台运行', store.status['battery'] == true ? '不受电池优化' : '检查电池优化', () => native.invokeMethod('batterySettings')),
       settingRow(Icons.phonelink_setup_rounded, '应用系统设置', '荣耀应用启动管理', () => native.invokeMethod('appSettings')),
     ]),
+    section('数据迁移', ''), settingsGroup([
+      settingRow(Icons.file_upload_outlined, '导出备忘录', '保存到你选择的位置', () async {
+        final ok = await native.invokeMethod<bool>('exportBackup');
+        if (ok == true) { toast('备份已保存，包含提醒内容，请妥善保管'); }
+      }),
+      settingRow(Icons.file_download_outlined, '合并导入备忘录', '保留现有数据，导入的过去任务归档', () async {
+        final proceed = await showDialog<bool>(context: context, builder: (c) => AlertDialog(
+          title: const Text('合并导入备忘录'),
+          content: const Text('导入会新增记录，不覆盖现有提醒。过去的单次任务会归入已完成；铃声使用新手机的系统默认。重复导入会新增重复记录。'),
+          actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+            TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('选择文件'))]));
+        if (proceed != true) { return; }
+        await native.invokeMethod('requestNotifications');
+        final count = await native.invokeMethod<int>('importBackup');
+        if (count != null) { toast('已合并导入 $count 条提醒'); }
+      }),
+    ]),
+    section('提醒自检', ''), settingsGroup([
+      settingRow(Icons.notifications_active_outlined, '15秒后发送测试提醒', '返回桌面或其他 App，观察提醒是否到达', () async {
+        await native.invokeMethod('requestNotifications');
+        await native.invokeMethod('testReminder');
+        toast('测试提醒已设置，请返回桌面等待15秒');
+      }),
+      ListTile(leading: const Icon(Icons.alarm_on, color: purple), title: const Text('系统闹钟排程'),
+        subtitle: Text(store.status['exact'] == true ? '精确定时已可用，状态栏可能显示下一闹钟' : '尚未允许精确定时，提醒不会静默降级')),
+      ListTile(leading: const Icon(Icons.schedule, color: purple), title: const Text('最近实际触发'),
+        subtitle: Text(eventTime(store.status['lastReceived']))),
+      ListTile(leading: const Icon(Icons.restart_alt, color: purple), title: const Text('最近恢复排程'),
+        subtitle: Text(eventTime(store.status['lastRestored']))),
+      ...(store.status['channels'] as List? ?? []).map((item) {
+        final channel = Map<String, dynamic>.from(item as Map);
+        return settingRow(Icons.view_agenda_outlined, '检查通知横幅与锁屏显示',
+          '${channel['name']} · ${(channel['importance'] as int? ?? 0) >= 4 ? '高重要性' : '需检查通道设置'}',
+          () => native.invokeMethod('channelSettings', channel['id']));
+      }),
+      const ListTile(leading: Icon(Icons.security, color: purple), title: Text('固定发布签名'),
+        subtitle: Text('新版之间支持覆盖更新；首次与旧版并存，保留旧数据')),
+    ]),
     section('语音', ''), settingsGroup([
       const ListTile(leading: Icon(Icons.mic_none_rounded, color: purple), title: Text('离线语音识别'),
         subtitle: Text('中文 Paraformer int8 · 录音不上传'), trailing: Tag('已内置')),
@@ -305,7 +347,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       '• 手动划掉系统通知，或在 App 中滑动确认，才算已读。点开通知、横幅自动收起不算已读。\n\n'
       '• 达到总次数后停止再次提醒，但仍保留未读状态。下一次每日／每周提醒重新计数。\n\n'
       '• 荣耀手机请检查应用启动管理，允许自启动与后台运行。系统休眠、勿扰模式、强行停止会影响提醒和亮屏。\n\n'
-      '• 未授权精确定时会使用系统近似定时；深度休眠时短间隔重提醒可能延迟。',
+      '• 提醒使用系统闹钟排程；从最近任务划掉不需要重新打开 App。系统强行停止会阻止提醒，需要手动再打开。\n\n'
+      '• 横幅和锁屏通知最终受系统通道设置控制。请用提醒自检测试，并检查允许横幅、锁屏通知和勿扰设置。',
       style: TextStyle(color: muted, fontSize: 13, height: 1.7)))),
     if ((store.status['lastError'] as String? ?? '').isNotEmpty) Padding(padding: const EdgeInsets.all(24),
       child: Text('最近的系统提示：${store.status['lastError']}', style: const TextStyle(color: muted, fontSize: 12))),
@@ -345,6 +388,11 @@ Widget emptyState(String title, String subtitle) => Padding(padding: const EdgeI
   const SizedBox(height: 20), Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
   const SizedBox(height: 8), Text(subtitle, textAlign: TextAlign.center, style: const TextStyle(color: muted, fontSize: 13)),
 ]));
+String eventTime(dynamic stamp) {
+  if (stamp is! int || stamp <= 0) { return '暂无记录'; }
+  final d = DateTime.fromMillisecondsSinceEpoch(stamp);
+  return '${d.month}月${d.day}日 ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}:${d.second.toString().padLeft(2, '0')}';
+}
 String dateLabel(DateTime d) => '${d.month}月${d.day}日';
 bool sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
 bool occursOn(Reminder r, DateTime d) {
@@ -431,6 +479,8 @@ class _ReminderEditorState extends State<ReminderEditor> {
   Future<void> save() async {
     if (saving) return;
     r.text = text.text.trim();
+    r.enabled = true;
+    r.completed = false;
     String? error;
     if (r.text.isEmpty) { error = '请输入提醒内容'; }
     else if (r.repeat == 'weekly' && r.days.isEmpty) { error = '请选择重复星期'; }

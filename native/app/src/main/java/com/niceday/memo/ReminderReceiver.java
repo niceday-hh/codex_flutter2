@@ -12,7 +12,7 @@ public final class ReminderReceiver extends BroadcastReceiver {
                 engine.fire(intent);
             } else {
                 boolean changed = Intent.ACTION_TIME_CHANGED.equals(action) || Intent.ACTION_TIMEZONE_CHANGED.equals(action);
-                engine.restore(changed);
+                engine.restore(changed, action == null ? "系统恢复" : action);
             }
         } catch (Exception e) { engine.error("提醒处理失败：" + e.getClass().getSimpleName()); }
     }

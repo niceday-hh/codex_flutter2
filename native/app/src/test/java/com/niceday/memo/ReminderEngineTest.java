@@ -3,6 +3,7 @@ package com.niceday.memo;
 import android.Manifest;
 import android.app.*;
 import android.content.*;
+import android.os.UserManager;
 import org.json.*;
 import org.junit.*;
 import org.junit.runner.RunWith;
@@ -19,7 +20,11 @@ public class ReminderEngineTest {
     long token;
     @Before public void setup() throws Exception {
         context = RuntimeEnvironment.getApplication();
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofDays(21000));
+        Shadows.shadowOf(context.getSystemService(UserManager.class)).setUserUnlocked(true);
+        Shadows.shadowOf(context.getSystemService(AlarmManager.class)).setCanScheduleExactAlarms(true);
         context.getSharedPreferences("memo", Context.MODE_PRIVATE).edit().clear().commit();
+        context.createDeviceProtectedStorageContext().getSharedPreferences("memo-runtime", Context.MODE_PRIVATE).edit().clear().commit();
         Shadows.shadowOf((Application) context).grantPermissions(Manifest.permission.POST_NOTIFICATIONS);
         engine = new ReminderEngine(context);
         token = System.currentTimeMillis() - 1;
@@ -89,5 +94,66 @@ public class ReminderEngineTest {
         engine.delete(1);
         engine.fire(intent(ReminderEngine.BASE, token));
         assertEquals(0, new JSONObject(engine.state()).getJSONArray("reminders").length());
+    }
+    JSONObject future(JSONObject r) throws Exception {
+        Calendar d = Calendar.getInstance(); d.add(Calendar.MINUTE, 3);
+        return r.put("year", d.get(Calendar.YEAR)).put("month", d.get(Calendar.MONTH) + 1)
+            .put("day", d.get(Calendar.DAY_OF_MONTH)).put("hour", d.get(Calendar.HOUR_OF_DAY))
+            .put("minute", d.get(Calendar.MINUTE));
+    }
+    @Test public void editingCompletedTaskReactivatesAndRegistersAlarmClock() throws Exception {
+        engine.fire(intent(ReminderEngine.BASE, token)); engine.acknowledge(1, token);
+        JSONObject r = future(row()); assertFalse(r.getBoolean("enabled"));
+        engine.save(r.toString());
+        assertTrue(row().getBoolean("enabled")); assertFalse(row().getBoolean("completed"));
+        assertTrue(row().getLong("nextTrigger") > System.currentTimeMillis());
+        assertNotNull(context.getSystemService(AlarmManager.class).getNextAlarmClock());
+    }
+    @Test public void legacyInvisibleTaskIsRecovered() throws Exception {
+        JSONObject r = future(row()).put("enabled", false).put("completed", false).put("nextTrigger", 0);
+        persist(r); engine.restore(false);
+        assertTrue(row().getBoolean("enabled")); assertTrue(row().getLong("nextTrigger") > 0);
+    }
+    @Test public void missingExactPermissionCannotSilentlySaveApproximateTask() throws Exception {
+        Shadows.shadowOf(context.getSystemService(AlarmManager.class)).setCanScheduleExactAlarms(false);
+        String data = future(row()).toString();
+        assertThrows(IllegalArgumentException.class, () -> engine.save(data));
+        assertEquals(token, row().getLong("nextTrigger"));
+    }
+    @Test public void bootRestoreRegistersSystemAlarmWithoutActivity() throws Exception {
+        JSONObject r = future(row()).put("nextTrigger", System.currentTimeMillis() + 120000);
+        persist(r); engine.restore(false, Intent.ACTION_BOOT_COMPLETED);
+        assertNotNull(context.getSystemService(AlarmManager.class).getNextAlarmClock());
+        assertTrue(new JSONObject(engine.state()).getJSONObject("status").getLong("lastRestored") > 0);
+    }
+    @Test public void directBootMetadataContainsNoReminderContentAndMergesAfterUnlock() throws Exception {
+        engine.restore(false);
+        String metadata = context.createDeviceProtectedStorageContext().getSharedPreferences("memo-runtime", Context.MODE_PRIVATE)
+            .getString("reminders", "");
+        assertFalse(metadata.contains("私人测试内容")); assertFalse(new JSONArray(metadata).getJSONObject(0).has("text"));
+        Shadows.shadowOf(context.getSystemService(UserManager.class)).setUserUnlocked(false);
+        ReminderEngine locked = new ReminderEngine(context);
+        locked.fire(intent(ReminderEngine.BASE, token)); locked.acknowledge(1, token);
+        Shadows.shadowOf(context.getSystemService(UserManager.class)).setUserUnlocked(true);
+        JSONObject restored = new JSONObject(new ReminderEngine(context).state()).getJSONArray("reminders").getJSONObject(0);
+        assertEquals("私人测试内容", restored.getString("text"));
+        assertEquals(1, restored.getInt("attempts")); assertTrue(restored.getBoolean("completed"));
+    }
+    @Test public void importMergesRemapsIdsAndArchivesPastOneOffs() throws Exception {
+        JSONArray records = new JSONArray().put(future(new JSONObject(row().toString()))).put(new JSONObject(row().toString()));
+        String backup = new JSONObject().put("format", "timed-memo").put("version", 1).put("reminders", records).toString();
+        assertEquals(2, engine.importBackup(backup));
+        JSONArray all = new JSONObject(engine.state()).getJSONArray("reminders");
+        assertEquals(3, all.length()); assertEquals(1, all.getJSONObject(0).getInt("id"));
+        assertNotEquals(1, all.getJSONObject(1).getInt("id"));
+        assertTrue(all.getJSONObject(1).getBoolean("enabled")); assertTrue(all.getJSONObject(2).getBoolean("completed"));
+    }
+    @Test public void invalidImportIsAtomicAndExportRoundTrips() throws Exception {
+        assertEquals(1, BackupCodec.decode(engine.exportBackup()).length());
+        JSONArray rows = new JSONArray().put(future(new JSONObject(row().toString())))
+            .put(new JSONObject(row().toString()).put("day", 32));
+        String invalid = new JSONObject().put("format", "timed-memo").put("version", 1).put("reminders", rows).toString();
+        assertThrows(IllegalArgumentException.class, () -> engine.importBackup(invalid));
+        assertEquals(1, new JSONObject(engine.state()).getJSONArray("reminders").length());
     }
 }

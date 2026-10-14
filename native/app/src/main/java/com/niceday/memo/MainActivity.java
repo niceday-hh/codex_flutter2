@@ -19,6 +19,9 @@ public final class MainActivity extends FlutterActivity {
     private SharedPreferences memoPreferences;
     private SharedPreferences.OnSharedPreferenceChangeListener memoListener;
     private MethodChannel.Result permissionResult, ringtoneResult;
+    private MethodChannel.Result documentResult;
+    private String exportDocument;
+    private final java.util.concurrent.ExecutorService documents = java.util.concurrent.Executors.newSingleThreadExecutor();
     private AudioRecord recorder;
     private Thread audioThread;
     private volatile boolean recording;
@@ -98,10 +101,30 @@ public final class MainActivity extends FlutterActivity {
                     case "cancelRecording" -> { stopRecording(true); result.success(null); }
                     case "initialReminderId" -> result.success(getIntent().getIntExtra("reminderId", 0));
                     case "restore" -> { store.restore(false); result.success(null); }
+                    case "testReminder" -> result.success(store.createTest(15));
+                    case "channelSettings" -> {
+                        String id = (String) call.arguments;
+                        startActivity(new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()).putExtra(Settings.EXTRA_CHANNEL_ID, id));
+                        result.success(null);
+                    }
+                    case "exportBackup" -> {
+                        if (documentResult != null) throw new IllegalStateException("文件操作处理中");
+                        exportDocument = store.exportBackup(); documentResult = result;
+                        startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/json")
+                            .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, "timed-memo-backup.json"), 104);
+                    }
+                    case "importBackup" -> {
+                        if (documentResult != null) throw new IllegalStateException("文件操作处理中");
+                        documentResult = result;
+                        startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*")
+                            .addCategory(Intent.CATEGORY_OPENABLE), 105);
+                    }
                     default -> result.notImplemented();
                 }
             } catch (Exception e) {
                 if (ringtoneResult == result) ringtoneResult = null;
+                if (documentResult == result) { documentResult = null; exportDocument = null; }
                 result.error("NATIVE", e.getMessage(), null);
             }
         });
@@ -126,6 +149,41 @@ public final class MainActivity extends FlutterActivity {
             Uri uri = resultCode == Activity.RESULT_OK && data != null
                 ? data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI) : null;
             ringtoneResult.success(uri == null ? null : uri.toString()); ringtoneResult = null;
+        }
+        if ((request == 104 || request == 105) && documentResult != null) {
+            final MethodChannel.Result result = documentResult;
+            final String backup = exportDocument;
+            documentResult = null; exportDocument = null;
+            final Uri uri = resultCode == Activity.RESULT_OK && data != null ? data.getData() : null;
+            if (uri == null) { result.success(null); return; }
+            documents.execute(() -> {
+                try {
+                    if (request == 104) {
+                        try (OutputStream output = getContentResolver().openOutputStream(uri, "wt")) {
+                            if (output == null) throw new IOException("无法写入文件");
+                            output.write(backup.getBytes(java.nio.charset.StandardCharsets.UTF_8)); output.flush();
+                        }
+                        runOnUiThread(() -> result.success(true));
+                    } else {
+                        String source;
+                        try (InputStream input = getContentResolver().openInputStream(uri);
+                             ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
+                            if (input == null) throw new IOException("无法读取文件");
+                            byte[] buffer = new byte[8192]; int count;
+                            while ((count = input.read(buffer)) != -1) {
+                                if (bytes.size() + count > BackupCodec.MAX_BYTES) throw new IOException("备份文件不能超过8MB");
+                                bytes.write(buffer, 0, count);
+                            }
+                            source = bytes.toString(java.nio.charset.StandardCharsets.UTF_8.name());
+                        }
+                        final String json = source;
+                        runOnUiThread(() -> {
+                            try { result.success(new ReminderEngine(this).importBackup(json)); }
+                            catch (Exception e) { result.error("IMPORT", "导入失败，原有数据保留：" + e.getMessage(), null); }
+                        });
+                    }
+                } catch (Exception e) { runOnUiThread(() -> result.error("DOCUMENT", e.getMessage(), null)); }
+            });
         }
     }
     private void startRecording() throws IOException {
@@ -179,6 +237,7 @@ public final class MainActivity extends FlutterActivity {
     @Override protected void onDestroy() {
         if (memoPreferences != null && memoListener != null) memoPreferences.unregisterOnSharedPreferenceChangeListener(memoListener);
         super.onDestroy();
+        documents.shutdown();
     }
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent); setIntent(intent);

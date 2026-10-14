@@ -19,7 +19,7 @@ android {
     }
     kotlinOptions { jvmTarget = JavaVersion.VERSION_17.toString() }
     defaultConfig {
-        applicationId = "com.niceday.memo"
+        applicationId = "com.niceday.memo.stable"
         minSdk = 26
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -28,6 +28,7 @@ android {
     if (keyFile.exists()) {
         signingConfigs {
             create("release") {
+                storeType = "PKCS12"
                 keyAlias = keyProperties["keyAlias"] as String
                 keyPassword = keyProperties["keyPassword"] as String
                 storeFile = file(keyProperties["storeFile"] as String)
@@ -37,7 +38,7 @@ android {
     }
     buildTypes {
         release {
-            signingConfig = if (keyFile.exists()) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
+            signingConfig = if (keyFile.exists()) signingConfigs.getByName("release") else null
             isMinifyEnabled = false
             isShrinkResources = false
         }
