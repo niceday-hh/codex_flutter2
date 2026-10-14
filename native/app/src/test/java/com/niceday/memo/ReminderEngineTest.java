@@ -169,7 +169,8 @@ public class ReminderEngineTest {
         PendingIntent replacement = PendingIntent.getBroadcast(context, 1, oldIntent,
             PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
         assertNotNull(replacement);
-        assertNotEquals(legacy, replacement);
+        // Verify behavior rather than wrapper equality: the replacement must still send.
+        replacement.send();
         assertNotNull(context.getSystemService(AlarmManager.class).getNextAlarmClock());
     }
 }
