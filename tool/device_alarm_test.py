@@ -50,17 +50,24 @@ shell('dumpsys', 'battery', 'unplug')
 shell('dumpsys', 'deviceidle', 'force-idle')
 try:
     fired = None
-    for _ in range(40):
+    host_started = time.monotonic()
+    host_deadline = host_started + 180
+    while time.monotonic() < host_deadline:
         time.sleep(1)
         rows = json.loads(runtime()['reminders'])
         fired = next(r for r in rows if r['id'] == id)
         if fired.get('attempts', 0) == 1:
             break
+        # Guest wall time defines the alarm deadline. A slow virtual device must not
+        # be declared late solely because 40 host seconds elapsed.
+        if int(shell('date', '+%s')) * 1000 > planned + 16000:
+            break
     value = runtime()
     trace = json.loads(value['trace'])
     alarm_diagnostic = {'planned': planned, 'clock_before': clock_before,
         'clock_after': device_clock(), 'reminder': fired, 'trace': trace,
-        'lastError': value.get('lastError'), 'auto_time_disabled': True}
+        'lastError': value.get('lastError'), 'auto_time_disabled': True,
+        'host_poll_elapsed_ms': int((time.monotonic() - host_started) * 1000)}
     print('Alarm diagnostic:', json.dumps(alarm_diagnostic, ensure_ascii=False), flush=True)
     Path('device-test-results.json').write_text(json.dumps({'process_death_doze': False,
         'reboot_restore_without_activity': False, 'alarm_diagnostic': alarm_diagnostic}, indent=2))
