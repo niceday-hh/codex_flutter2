@@ -28,8 +28,21 @@ public final class BackupCodec {
         int interval = r.optInt("intervalMinutes", 5), total = r.optInt("totalCount", 3);
         if (interval < 1 || interval > 1440 || total < 1 || total > 20) throw new IllegalArgumentException("重提醒设置无效");
         r.put("intervalMinutes", interval).put("totalCount", total);
+        validateStyle(r);
+    }
+    public static void validateStyle(JSONObject r) throws JSONException {
         if (!Arrays.asList("system", "off", "once", "twice", "three", "strong").contains(r.optString("vibration", "three")))
             throw new IllegalArgumentException("振动模式无效");
+        if (!Arrays.asList("banner", "drawer").contains(r.optString("presentation", "banner")))
+            throw new IllegalArgumentException("通知展示方式无效");
+        if (!Arrays.asList("private", "hidden").contains(r.optString("lockscreen", "private")))
+            throw new IllegalArgumentException("锁屏显示方式无效");
+        for (String field : Arrays.asList("sound", "wakeScreen")) {
+            if (r.has(field) && !(r.get(field) instanceof Boolean)) throw new IllegalArgumentException("提醒开关无效");
+        }
+        r.put("sound", r.optBoolean("sound", true)).put("wakeScreen", r.optBoolean("wakeScreen", true))
+            .put("vibration", r.optString("vibration", "three")).put("ringtone", r.optString("ringtone", ""))
+            .put("presentation", r.optString("presentation", "banner")).put("lockscreen", r.optString("lockscreen", "private"));
     }
     public static JSONArray decode(String source) throws JSONException {
         if (source.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES) throw new IllegalArgumentException("备份文件不能超过8MB");

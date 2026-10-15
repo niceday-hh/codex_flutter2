@@ -23,6 +23,7 @@ public final class ReminderEngine {
     private final boolean unlocked;
     private final AlarmManager alarms;
     private final NotificationManager notifications;
+    private final NotificationStyles styles;
 
     public ReminderEngine(Context context) {
         this.context = context.getApplicationContext();
@@ -31,6 +32,7 @@ public final class ReminderEngine {
         prefs = unlocked ? this.context.getSharedPreferences("memo", Context.MODE_PRIVATE) : runtime;
         alarms = (AlarmManager) this.context.getSystemService(Context.ALARM_SERVICE);
         notifications = (NotificationManager) this.context.getSystemService(Context.NOTIFICATION_SERVICE);
+        styles = new NotificationStyles(this.context, notifications, runtime);
     }
     private static final String[] RUNTIME_FIELDS = {"nextTrigger", "activeOccurrence", "attempts", "retryAt",
         "acknowledged", "completed", "enabled", "lastAck", "lastFired", "metaRevision"};
@@ -81,8 +83,12 @@ public final class ReminderEngine {
     }
     public String state() throws JSONException {
         JSONObject result = new JSONObject();
-        result.put("reminders", read());
-        result.put("defaults", new JSONObject(prefs.getString("defaults", "{}")));
+        JSONArray rows = read();
+        JSONObject defaults = new JSONObject(prefs.getString("defaults", "{}"));
+        BackupCodec.validateStyle(defaults);
+        JSONArray groups = styles.groups(rows, new JSONObject(defaults.toString()), unlocked);
+        result.put("reminders", rows);
+        result.put("defaults", defaults);
         JSONObject status = new JSONObject();
         status.put("notifications", notifications.areNotificationsEnabled());
         status.put("exact", Build.VERSION.SDK_INT < 31 || alarms.canScheduleExactAlarms());
@@ -93,23 +99,27 @@ public final class ReminderEngine {
         status.put("lastReceived", runtime.getLong("lastReceived", 0));
         status.put("lastRestored", runtime.getLong("lastRestored", 0));
         status.put("package", context.getPackageName());
-        status.put("version", "0.2.0");
-        JSONArray channels = new JSONArray();
-        for (NotificationChannel c : notifications.getNotificationChannels()) {
-            channels.put(new JSONObject().put("id", c.getId()).put("name", c.getName())
-                .put("importance", c.getImportance()).put("sound", c.getSound() != null)
-                .put("vibration", c.shouldVibrate()));
-        }
-        status.put("channels", channels);
+        status.put("version", "0.3.0");
+        status.put("notificationStyles", groups);
+        status.put("hiddenChannelCount", styles.hiddenCount(groups));
         result.put("status", status);
         return result.toString();
     }
     public void defaults(String json) throws JSONException {
-        new JSONObject(json);
-        if (!prefs.edit().putString("defaults", json).commit()) throw new IllegalStateException("保存失败");
+        JSONObject values = new JSONObject(json);
+        BackupCodec.validateStyle(values);
+        values.remove("notificationChannelId"); values.remove("notificationStyle");
+        ensureChannel(new JSONObject(values.toString()));
+        if (!prefs.edit().putString("defaults", values.toString()).commit()) throw new IllegalStateException("保存失败");
+    }
+    public String channelForStyle(String json) throws JSONException {
+        JSONObject values = new JSONObject(json);
+        BackupCodec.validateStyle(values);
+        return ensureChannel(values);
     }
     public void save(String json) throws JSONException {
         JSONObject r = new JSONObject(json);
+        r.remove("notificationChannelId"); r.remove("notificationStyle");
         BackupCodec.validateReminder(r);
         if (Build.VERSION.SDK_INT >= 31 && !alarms.canScheduleExactAlarms())
             throw new IllegalArgumentException("请先开启闹钟与提醒权限，白名单和电池优化不能替代这项权限");
@@ -143,11 +153,11 @@ public final class ReminderEngine {
         }
         replacement.put(r);
         // Persist the new generation before cancelling old alarms: stale delivery is rejected.
+        ensureChannel(r);
         write(replacement);
         cancel(id, BASE);
         cancel(id, RETRY);
         notifications.cancel(id);
-        ensureChannel(r);
         scheduleBase(r);
     }
     public void delete(int id) throws JSONException {
@@ -250,6 +260,7 @@ public final class ReminderEngine {
         long retryAt = Schedule.mayRetry(false, r.optInt("attempts"), r.optInt("totalCount"))
             ? now + r.optInt("intervalMinutes") * 60000L : 0;
         r.put("retryAt", retryAt);
+        ensureChannel(r);
         write(rows);
         scheduleBase(r);
         schedule(r, RETRY, retryAt, token);
@@ -279,6 +290,7 @@ public final class ReminderEngine {
                 long n = next(r, "none".equals(r.optString("repeat")) ? 0 : now);
                 r.put("nextTrigger", n);
             }
+            ensureChannel(r);
         }
         write(rows);
         for (int i = 0; i < rows.length(); i++) {
@@ -292,30 +304,7 @@ public final class ReminderEngine {
         }
     }
     private String ensureChannel(JSONObject r) throws JSONException {
-        boolean sound = r.optBoolean("sound", true);
-        String vibration = r.optString("vibration", "three");
-        Uri ringtone = r.optString("ringtone").isEmpty()
-            ? RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            : Uri.parse(r.getString("ringtone"));
-        String channelId = "memo_v2_" + Integer.toHexString((sound + ":" + vibration + ":" + ringtone).hashCode());
-        NotificationChannel channel = new NotificationChannel(channelId, "备忘录提醒 · " + vibration,
-            NotificationManager.IMPORTANCE_HIGH);
-        channel.setDescription("到时提醒与未读再次提醒；滑动消除即可确认本次提醒");
-        channel.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);
-        channel.enableVibration(!"off".equals(vibration));
-        if (!"system".equals(vibration) && !"off".equals(vibration)) {
-            long[] pattern = switch (vibration) {
-                case "once" -> new long[]{0, 250};
-                case "twice" -> new long[]{0, 250, 200, 250};
-                case "strong" -> new long[]{0, 700, 250, 700};
-                default -> new long[]{0, 200, 200, 200, 200, 200};
-            };
-            channel.setVibrationPattern(pattern);
-        }
-        channel.setSound(sound ? ringtone : null, new AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
-        notifications.createNotificationChannel(channel);
-        return channelId;
+        return styles.ensure(r, unlocked);
     }
     @SuppressWarnings("deprecation")
     private void notify(JSONObject r, long token) throws JSONException {
@@ -342,7 +331,7 @@ public final class ReminderEngine {
             // Also redact the actual payload when locked, even if system privacy settings are permissive.
             .setContentText(locked ? "有一条待办提醒 · 解锁后查看" : r.optString("text", "有一条待办提醒"))
             .setSubText("第" + r.optInt("attempts") + "/" + r.optInt("totalCount") + "次 · 划掉即确认")
-            .setVisibility(Notification.VISIBILITY_PRIVATE).setPublicVersion(publicVersion)
+            .setVisibility(NotificationStyles.visibility(r)).setPublicVersion(publicVersion)
             .setCategory(Notification.CATEGORY_ALARM).setContentIntent(content)
             .setDeleteIntent(dismiss).setAutoCancel(false).setOnlyAlertOnce(false);
         if (Build.VERSION.SDK_INT >= 29) builder.setAllowSystemGeneratedContextualActions(false);
@@ -350,7 +339,9 @@ public final class ReminderEngine {
         notifications.notify(id, builder.build());
         NotificationChannel actual = notifications.getNotificationChannel(channelId);
         trace("notified", id, token, "importance=" + actual.getImportance() + ";redacted=" + locked);
-        if (actual.getImportance() < NotificationManager.IMPORTANCE_HIGH) error("通知通道未允许横幅，请在提醒自检中打开通道设置");
+        if (actual.getImportance() == NotificationManager.IMPORTANCE_NONE) error("此通知样式已被系统关闭，请打开对应的系统通知设置");
+        else if (NotificationStyles.importance(r) == NotificationManager.IMPORTANCE_HIGH && actual.getImportance() < NotificationManager.IMPORTANCE_HIGH)
+            error("系统通道未允许横幅，请打开这条提醒的系统通知设置");
         if (r.optBoolean("wakeScreen", true)) {
             try {
                 PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
@@ -363,8 +354,13 @@ public final class ReminderEngine {
     public void error(String message) { runtime.edit().putString("lastError", message).commit(); }
     public String exportBackup() throws JSONException {
         if (!unlocked) throw new IllegalStateException("请先解锁手机");
+        JSONArray portable = new JSONArray(), rows = read();
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject r = new JSONObject(rows.getJSONObject(i).toString());
+            r.remove("notificationChannelId"); r.remove("notificationStyle"); portable.put(r);
+        }
         return new JSONObject().put("format", "timed-memo").put("version", 1)
-            .put("exportedAt", System.currentTimeMillis()).put("reminders", read())
+            .put("exportedAt", System.currentTimeMillis()).put("reminders", portable)
             .put("defaults", new JSONObject(prefs.getString("defaults", "{}"))).toString(2);
     }
     public int importBackup(String source) throws JSONException {
@@ -383,6 +379,8 @@ public final class ReminderEngine {
                 .put("retryAt", 0).put("acknowledged", false)
                 .put("completed", r.optBoolean("completed") || ("none".equals(r.optString("repeat")) && n == 0))
                 .put("ringtone", "");
+            r.remove("notificationChannelId"); r.remove("notificationStyle");
+            ensureChannel(r);
             rows.put(r);
         }
         // Validate the whole file before a single atomic data write; merge never overwrites local rows.
@@ -395,13 +393,17 @@ public final class ReminderEngine {
     }
     public int createTest(int seconds) throws JSONException {
         seconds = Math.max(15, Math.min(300, seconds));
+        JSONObject defaults = new JSONObject(prefs.getString("defaults", "{}"));
+        BackupCodec.validateStyle(defaults);
         Calendar calendar = Calendar.getInstance(); calendar.add(Calendar.MINUTE, 1);
         JSONObject config = new JSONObject().put("id", 0).put("text", "后台提醒自检")
             .put("year", calendar.get(Calendar.YEAR)).put("month", calendar.get(Calendar.MONTH) + 1)
             .put("day", calendar.get(Calendar.DAY_OF_MONTH)).put("hour", calendar.get(Calendar.HOUR_OF_DAY))
             .put("minute", calendar.get(Calendar.MINUTE)).put("repeat", "none").put("days", new JSONArray())
-            .put("enabled", true).put("sound", true).put("vibration", "three").put("wakeScreen", true)
-            .put("intervalMinutes", 5).put("totalCount", 1).put("ringtone", "");
+            .put("enabled", true).put("sound", defaults.getBoolean("sound")).put("vibration", defaults.getString("vibration"))
+            .put("wakeScreen", defaults.getBoolean("wakeScreen")).put("ringtone", defaults.getString("ringtone"))
+            .put("presentation", defaults.getString("presentation")).put("lockscreen", defaults.getString("lockscreen"))
+            .put("intervalMinutes", 5).put("totalCount", 1);
         save(config.toString());
         int id = prefs.getInt("nextId", 1) - 1;
         JSONArray rows = read(); JSONObject r = find(rows, id);

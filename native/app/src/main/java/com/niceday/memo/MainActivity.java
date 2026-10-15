@@ -102,6 +102,12 @@ public final class MainActivity extends FlutterActivity {
                     case "initialReminderId" -> result.success(getIntent().getIntExtra("reminderId", 0));
                     case "restore" -> { store.restore(false); result.success(null); }
                     case "testReminder" -> result.success(store.createTest(15));
+                    case "notificationStyleSettings" -> {
+                        String id = store.channelForStyle((String) call.arguments);
+                        startActivity(new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()).putExtra(Settings.EXTRA_CHANNEL_ID, id));
+                        result.success(null);
+                    }
                     case "channelSettings" -> {
                         String id = (String) call.arguments;
                         startActivity(new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)

@@ -11,7 +11,7 @@ class Reminder {
   String repeat;
   List<int> days;
   bool enabled, sound, wakeScreen;
-  String vibration, ringtone;
+  String vibration, ringtone, presentation, lockscreen;
   int intervalMinutes, totalCount;
   int attempts, activeOccurrence, nextTrigger;
   bool acknowledged, completed;
@@ -20,6 +20,7 @@ class Reminder {
     this.repeat = 'none', List<int>? days, this.enabled = true,
     this.sound = true, this.wakeScreen = true, this.vibration = 'three',
     this.ringtone = '', this.intervalMinutes = 5, this.totalCount = 3,
+    this.presentation = 'banner', this.lockscreen = 'private',
     this.attempts = 0, this.activeOccurrence = 0, this.nextTrigger = 0,
     this.acknowledged = false, this.completed = false})
       : date = date ?? DateTime.now().add(const Duration(hours: 1)),
@@ -36,6 +37,8 @@ class Reminder {
     wakeScreen: j['wakeScreen'] as bool? ?? true,
     vibration: j['vibration'] as String? ?? 'three',
     ringtone: j['ringtone'] as String? ?? '',
+    presentation: j['presentation'] as String? ?? 'banner',
+    lockscreen: j['lockscreen'] as String? ?? 'private',
     intervalMinutes: j['intervalMinutes'] as int? ?? 5,
     totalCount: j['totalCount'] as int? ?? 3,
     attempts: j['attempts'] as int? ?? 0,
@@ -51,6 +54,11 @@ class Reminder {
     'sound': sound, 'wakeScreen': wakeScreen, 'vibration': vibration,
     'ringtone': ringtone, 'intervalMinutes': intervalMinutes,
     'totalCount': totalCount,
+    'presentation': presentation, 'lockscreen': lockscreen,
+  };
+  Map<String, dynamic> get notificationConfig => {
+    'sound': sound, 'vibration': vibration, 'ringtone': ringtone,
+    'presentation': presentation, 'lockscreen': lockscreen,
   };
   String get time => '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   String get repeatLabel => switch (repeat) {
@@ -82,6 +90,8 @@ class MemoStore {
     sound: defaults['sound'] as bool? ?? true,
     wakeScreen: defaults['wakeScreen'] as bool? ?? true,
     ringtone: defaults['ringtone'] as String? ?? '',
+    presentation: defaults['presentation'] as String? ?? 'banner',
+    lockscreen: defaults['lockscreen'] as String? ?? 'private',
   );
   Future<void> save(Reminder r) async {
     await native.invokeMethod('save', jsonEncode(r.toJson()));
@@ -97,5 +107,8 @@ class MemoStore {
   }
   Future<void> saveDefaults() async {
     await native.invokeMethod('saveDefaults', jsonEncode(defaults));
+  }
+  Future<void> openNotificationSettings(Reminder r) async {
+    await native.invokeMethod('notificationStyleSettings', jsonEncode(r.notificationConfig));
   }
 }

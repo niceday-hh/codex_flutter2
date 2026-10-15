@@ -263,10 +263,17 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         child: const Icon(Icons.notifications_rounded, color: Colors.white, size: 32)),
       const SizedBox(width: 16), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('定时备忘录', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-        Text('v0.2.0 · 本地保存 · 离线语音', style: TextStyle(color: muted, fontSize: 12))])),
+        Text('v0.3.0 · 本地保存 · 离线语音', style: TextStyle(color: muted, fontSize: 12))])),
     ]))),
     section('默认提醒', '新提醒使用这些设置'),
     settingsGroup([
+      NotificationDisplayOptions(defaultSettings: true,
+        presentation: store.defaults['presentation'] as String? ?? 'banner',
+        lockscreen: store.defaults['lockscreen'] as String? ?? 'private',
+        onPresentationChanged: (v) async { store.defaults['presentation'] = v; await persistDefaults(); },
+        onLockscreenChanged: (v) async { store.defaults['lockscreen'] = v; await persistDefaults(); }),
+      settingRow(Icons.tune_rounded, '默认样式的系统设置', '管理此样式的横幅与锁屏权限',
+        () => store.openNotificationSettings(store.draft())),
       settingRow(Icons.vibration, '振动模式', vibrationLabel(store.defaults['vibration'] as String? ?? 'three'), () async {
         final v = await chooseVibration(context, store.defaults['vibration'] as String? ?? 'three');
         if (v != null) { store.defaults['vibration'] = v; await persistDefaults(); }
@@ -292,11 +299,10 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     ]),
     section('隐私与提醒权限', ''),
     settingsGroup([
-      const ListTile(leading: Icon(Icons.lock_outline, color: purple), title: Text('锁屏隐藏内容'),
-        subtitle: Text('只显示有待办提醒，解锁后查看正文'), trailing: Icon(Icons.check_circle_outline, color: purple)),
-      settingRow(Icons.notifications_none, '通知权限', store.status['notifications'] == true ? '已开启' : '需开启', () async {
-        await native.invokeMethod('requestNotifications'); await native.invokeMethod('notificationSettings');
-      }),
+      ListTile(leading: const Icon(Icons.notifications_none, color: purple), title: const Text('通知权限'),
+        subtitle: Text(store.status['notifications'] == true ? '已开启' : '未开启，请在提醒自检中授权')),
+      const ListTile(leading: Icon(Icons.lock_outline, color: purple), title: Text('锁屏内容保护'),
+        subtitle: Text('隐藏正文或完全隐藏，由每条提醒选择；不使用全屏通知')),
       settingRow(Icons.alarm_on_rounded, '精确定时权限', store.status['exact'] == true ? '已开启' : '需开启', () => native.invokeMethod('requestExact')),
       settingRow(Icons.battery_saver_outlined, '后台运行', store.status['battery'] == true ? '不受电池优化' : '检查电池优化', () => native.invokeMethod('batterySettings')),
       settingRow(Icons.phonelink_setup_rounded, '应用系统设置', '荣耀应用启动管理', () => native.invokeMethod('appSettings')),
@@ -319,7 +325,11 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       }),
     ]),
     section('提醒自检', ''), settingsGroup([
-      settingRow(Icons.notifications_active_outlined, '15秒后发送测试提醒', '返回桌面或其他 App，观察提醒是否到达', () async {
+      settingRow(Icons.view_agenda_outlined, '检查系统通知与锁屏设置', '查看应用通知总开关；各样式可在下方单独管理', () async {
+        if (store.status['notifications'] != true) { await native.invokeMethod('requestNotifications'); }
+        await native.invokeMethod('notificationSettings');
+      }),
+      settingRow(Icons.notifications_active_outlined, '15秒后发送测试提醒', '使用当前默认样式，单次提醒；返回桌面观察', () async {
         await native.invokeMethod('requestNotifications');
         await native.invokeMethod('testReminder');
         toast('测试提醒已设置，请返回桌面等待15秒');
@@ -330,12 +340,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         subtitle: Text(eventTime(store.status['lastReceived']))),
       ListTile(leading: const Icon(Icons.restart_alt, color: purple), title: const Text('最近恢复排程'),
         subtitle: Text(eventTime(store.status['lastRestored']))),
-      ...(store.status['channels'] as List? ?? []).map((item) {
-        final channel = Map<String, dynamic>.from(item as Map);
-        return settingRow(Icons.view_agenda_outlined, '检查通知横幅与锁屏显示',
-          '${channel['name']} · ${(channel['importance'] as int? ?? 0) >= 4 ? '高重要性' : '需检查通道设置'}',
-          () => native.invokeMethod('channelSettings', channel['id']));
-      }),
+      notificationStylesList(),
       const ListTile(leading: Icon(Icons.security, color: purple), title: Text('固定发布签名'),
         subtitle: Text('新版之间支持覆盖更新；首次与旧版并存，保留旧数据')),
     ]),
@@ -354,8 +359,28 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       child: Text('最近的系统提示：${store.status['lastError']}', style: const TextStyle(color: muted, fontSize: 12))),
   ]);
   Future<void> persistDefaults() async {
-    try { await store.saveDefaults(); if (mounted) setState(() {}); }
-    catch (e) { toast(niceError(e)); }
+    try { await store.saveDefaults(); await reload(); }
+    catch (e) { await reload(); toast(niceError(e)); }
+  }
+  Widget notificationStylesList() {
+    final styles = (store.status['notificationStyles'] as List? ?? [])
+      .map((v) => Map<String, dynamic>.from(v as Map)).toList()
+      ..sort((a, b) => (b['isDefault'] == true ? 1 : 0).compareTo(a['isDefault'] == true ? 1 : 0));
+    final hidden = store.status['hiddenChannelCount'] as int? ?? 0;
+    return ExpansionTile(key: const PageStorageKey('notification-styles'),
+      leading: const Icon(Icons.tune_rounded, color: purple),
+      title: Text('通知样式（${styles.length}种）'), subtitle: const Text('按展示、振动和铃声分组'),
+      children: [
+        const Padding(padding: EdgeInsets.fromLTRB(18, 0, 18, 8),
+          child: Text('同一样式共用系统设置，修改会影响关联的所有备忘。', style: TextStyle(color: muted, fontSize: 12))),
+        ...styles.map((style) => settingRow(Icons.notifications_outlined, style['name'] as String? ?? '通知样式',
+          '${style['isDefault'] == true ? '新建默认 · ' : ''}关联 ${style['count'] ?? 0} 条备忘\n'
+          '${style['systemOverridden'] == true ? '系统设置与应用偏好不同' : channelImportanceLabel(style['importance'] as int? ?? 0)}',
+          () => native.invokeMethod('channelSettings', style['id']))),
+        if (hidden > 0) Padding(padding: const EdgeInsets.all(16), child: Text(
+          '已隐藏 $hidden 个无引用的历史通道，手机系统中的原设置仍保留。',
+          style: const TextStyle(color: muted, fontSize: 12))),
+      ]);
   }
   Widget settingsGroup(List<Widget> children) => Padding(padding: const EdgeInsets.symmetric(horizontal: 20),
     child: Surface(padding: const EdgeInsets.symmetric(vertical: 4), child: Column(children: children)));
@@ -403,6 +428,48 @@ bool occursOn(Reminder r, DateTime d) {
   return r.repeat == 'daily' || r.days.contains(d.weekday);
 }
 String niceError(Object e) => e is PlatformException ? e.message ?? '操作失败，请重试' : '操作失败：$e';
+const presentations = {'banner': '横幅和通知栏', 'drawer': '仅通知栏'};
+const lockscreens = {'private': '隐藏正文', 'hidden': '不在锁屏显示'};
+String channelImportanceLabel(int importance) => switch (importance) {
+  0 => '系统通道已关闭',
+  >= 4 => '系统通道：横幅优先级',
+  3 => '系统通道：通知栏优先级',
+  _ => '系统通道：静默或低重要性',
+};
+Future<String?> chooseNotificationOption(BuildContext context, String title, Map<String, String> options, String current) =>
+  showModalBottomSheet<String>(context: context, showDragHandle: true, builder: (c) => SafeArea(
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Padding(padding: const EdgeInsets.all(12), child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
+      ...options.entries.map((e) => ListTile(title: Text(e.value),
+        trailing: e.key == current ? const Icon(Icons.check_rounded, color: purple) : null,
+        onTap: () => Navigator.pop(c, e.key))),
+    ])));
+
+class NotificationDisplayOptions extends StatelessWidget {
+  final String presentation, lockscreen;
+  final bool defaultSettings;
+  final ValueChanged<String> onPresentationChanged, onLockscreenChanged;
+  const NotificationDisplayOptions({super.key, required this.presentation, required this.lockscreen,
+    required this.onPresentationChanged, required this.onLockscreenChanged, this.defaultSettings = false});
+  @override Widget build(BuildContext context) => Column(children: [
+    ListTile(leading: const Icon(Icons.view_agenda_outlined, color: purple),
+      title: Text(defaultSettings ? '默认展示方式' : '展示方式'),
+      subtitle: Text(presentations[presentation] ?? presentations['banner']!), trailing: const Icon(Icons.chevron_right),
+      onTap: () async {
+        final v = await chooseNotificationOption(context, '通知展示方式', presentations, presentation);
+        if (v != null && context.mounted) { onPresentationChanged(v); }
+      }),
+    ListTile(leading: const Icon(Icons.lock_outline, color: purple),
+      title: Text(defaultSettings ? '默认锁屏显示' : '锁屏显示'),
+      subtitle: Text(lockscreens[lockscreen] ?? lockscreens['private']!), trailing: const Icon(Icons.chevron_right),
+      onTap: () async {
+        final v = await chooseNotificationOption(context, '锁屏显示方式', lockscreens, lockscreen);
+        if (v != null && context.mounted) { onLockscreenChanged(v); }
+      }),
+    const Padding(padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Text('以上为应用展示偏好，实际显示仍受手机系统通知设置影响。', style: TextStyle(color: muted, fontSize: 12))),
+  ]);
+}
 const vibrations = {'system': '系统默认', 'off': '关闭', 'once': '振动一次', 'twice': '振动两次', 'three': '振动三次', 'strong': '长振动两次'};
 String vibrationLabel(String value) => vibrations[value] ?? '振动三次';
 Future<String?> chooseVibration(BuildContext context, String current) => showModalBottomSheet<String>(
@@ -530,7 +597,15 @@ class _ReminderEditorState extends State<ReminderEditor> {
       ])), const SizedBox(height: 14),
       Surface(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
         const ListTile(title: Text('提醒方式', style: TextStyle(fontWeight: FontWeight.w700))),
-        const ListTile(leading: Icon(Icons.notifications_none_rounded, color: purple), title: Text('小型系统弹窗'), subtitle: Text('锁屏隐藏正文，不全屏显示')),
+        NotificationDisplayOptions(presentation: r.presentation, lockscreen: r.lockscreen,
+          onPresentationChanged: (v) => setState(() => r.presentation = v),
+          onLockscreenChanged: (v) => setState(() => r.lockscreen = v)),
+        ListTile(leading: const Icon(Icons.tune_rounded, color: purple), title: const Text('这条提醒的系统通知设置'),
+          subtitle: const Text('管理所选样式；相同样式的备忘共用此设置'), trailing: const Icon(Icons.open_in_new_rounded),
+          onTap: () async {
+            try { await widget.store.openNotificationSettings(r); }
+            catch (e) { if (context.mounted) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(niceError(e)))); } }
+          }),
         SwitchListTile(title: const Text('尝试亮屏'), subtitle: const Text('保持锁屏，遵循手机系统限制'), value: r.wakeScreen, onChanged: (v) => setState(() => r.wakeScreen = v)),
         ListTile(leading: const Icon(Icons.vibration, color: purple), title: const Text('振动'), subtitle: Text(vibrationLabel(r.vibration)),
           trailing: const Icon(Icons.chevron_right), onTap: () async {

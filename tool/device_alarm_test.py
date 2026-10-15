@@ -82,6 +82,7 @@ try:
     assert str(received['pid']) != start_pid, 'Receiver did not restart in a new process'
     assert received['at'] >= planned, 'Alarm fired early'
     assert received['at'] - planned < 15000, 'Alarm delivery was delayed excessively'
+    delivery_delay_ms = received['at'] - planned
     assert any(e['id'] == id and e['type'] == 'notified' for e in trace), 'Notification was not posted'
     print('PASS: system alarm delivered in background after process kill and forced Doze', flush=True)
 finally:
@@ -129,5 +130,5 @@ assert any(e['type'] == 'scheduled' and e['id'] == id for e in fresh), 'Alarm wa
 assert PACKAGE in shell('dumpsys', 'alarm'), 'System has no alarm registration after boot'
 print('PASS: reboot restored scheduled reminder without opening Flutter Activity', flush=True)
 Path('device-test-results.json').write_text(json.dumps({'process_death_doze': True,
-    'reboot_restore_without_activity': True, 'alarm_delivery_delay_ms': received['at'] - planned,
+    'reboot_restore_without_activity': True, 'alarm_delivery_delay_ms': delivery_delay_ms,
     'alarm_diagnostic': alarm_diagnostic}, indent=2))

@@ -173,4 +173,100 @@ public class ReminderEngineTest {
         replacement.send();
         assertNotNull(context.getSystemService(AlarmManager.class).getNextAlarmClock());
     }
+    @Test public void drawerHiddenReminderUsesNormalPriorityAndProtectsLockedPayload() throws Exception {
+        JSONObject r = row().put("presentation", "drawer").put("lockscreen", "hidden"); persist(r);
+        Shadows.shadowOf(context.getSystemService(KeyguardManager.class)).setKeyguardLocked(true);
+        engine.fire(intent(ReminderEngine.BASE, token));
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        Notification n = Shadows.shadowOf(manager).getNotification(1);
+        assertEquals(Notification.VISIBILITY_SECRET, n.visibility);
+        assertNull(n.fullScreenIntent);
+        assertFalse(n.extras.getCharSequence(Notification.EXTRA_TEXT).toString().contains("私人"));
+        assertEquals(NotificationManager.IMPORTANCE_DEFAULT, manager.getNotificationChannel(n.getChannelId()).getImportance());
+        assertEquals("", new JSONObject(engine.state()).getJSONObject("status").getString("lastError"));
+    }
+    @Test public void referencedStylesAreGroupedAndUnusedHistoryIsRetainedButHidden() throws Exception {
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        manager.createNotificationChannel(new NotificationChannel("memo_v2_history", "历史样式", NotificationManager.IMPORTANCE_LOW));
+        JSONArray rows = new JSONArray(); JSONObject template = row();
+        for (int id = 1; id <= 10; id++) rows.put(new JSONObject(template.toString()).put("id", id)
+            .put("ringtone", "content://different-unused-ringtone/" + id));
+        context.getSharedPreferences("memo", Context.MODE_PRIVATE).edit().putString("reminders", rows.toString()).commit();
+        engine.defaults(new JSONObject().put("sound", false).put("vibration", "off").toString());
+        JSONObject status = new JSONObject(engine.state()).getJSONObject("status");
+        JSONArray groups = status.getJSONArray("notificationStyles");
+        assertEquals(1, groups.length()); assertEquals(10, groups.getJSONObject(0).getInt("count"));
+        assertTrue(groups.getJSONObject(0).getBoolean("isDefault"));
+        assertTrue(status.getInt("hiddenChannelCount") >= 1);
+        assertNotNull(manager.getNotificationChannel("memo_v2_history"));
+    }
+    @Test public void upgradingReusesLegacyChannelAndPreservesSystemChoices() throws Exception {
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        String legacy = "memo_v2_" + Integer.toHexString(("false:off:" + android.media.RingtoneManager
+            .getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)).hashCode());
+        NotificationChannel channel = new NotificationChannel(legacy, "旧名称", NotificationManager.IMPORTANCE_LOW);
+        channel.enableVibration(false); channel.setSound(null, null);
+        manager.createNotificationChannel(channel);
+        engine.restore(false, Intent.ACTION_MY_PACKAGE_REPLACED);
+        engine.fire(intent(ReminderEngine.BASE, token));
+        Notification n = Shadows.shadowOf(manager).getNotification(1);
+        assertEquals(legacy, n.getChannelId());
+        assertEquals(NotificationManager.IMPORTANCE_LOW, manager.getNotificationChannel(legacy).getImportance());
+        assertFalse(manager.getNotificationChannel(legacy).shouldVibrate());
+        assertTrue(new JSONObject(engine.state()).getJSONObject("status").getJSONArray("notificationStyles")
+            .getJSONObject(0).getBoolean("systemOverridden"));
+    }
+    @Test public void directBootKeepsCustomSoundChannelWithoutLeakingItsUri() throws Exception {
+        JSONObject r = row().put("sound", true).put("ringtone", "content://private/ringtone/71")
+            .put("presentation", "drawer").put("lockscreen", "hidden"); persist(r);
+        engine.restore(false);
+        String expected = row().getString("notificationChannelId");
+        String mirror = context.createDeviceProtectedStorageContext().getSharedPreferences("memo-runtime", Context.MODE_PRIVATE)
+            .getString("reminders", "");
+        assertFalse(mirror.contains("content://private")); assertFalse(mirror.contains("私人测试内容"));
+        Shadows.shadowOf(context.getSystemService(UserManager.class)).setUserUnlocked(false);
+        new ReminderEngine(context).fire(intent(ReminderEngine.BASE, token));
+        Notification n = Shadows.shadowOf(context.getSystemService(NotificationManager.class)).getNotification(1);
+        assertEquals(expected, n.getChannelId()); assertEquals(Notification.VISIBILITY_SECRET, n.visibility);
+    }
+    @Test public void selfTestFollowsCurrentDefaultsButOnlyAlertsOnce() throws Exception {
+        engine.defaults(new JSONObject().put("presentation", "drawer").put("lockscreen", "hidden")
+            .put("vibration", "twice").put("sound", false).put("wakeScreen", false).toString());
+        int id = engine.createTest(15);
+        JSONArray rows = new JSONObject(engine.state()).getJSONArray("reminders");
+        JSONObject test = rows.getJSONObject(rows.length() - 1);
+        assertEquals(id, test.getInt("id")); assertEquals("drawer", test.getString("presentation"));
+        assertEquals("hidden", test.getString("lockscreen")); assertEquals("twice", test.getString("vibration"));
+        assertFalse(test.getBoolean("sound")); assertFalse(test.getBoolean("wakeScreen"));
+        assertEquals(1, test.getInt("totalCount"));
+    }
+    @Test public void styleShortcutDoesNotSaveOrRescheduleReminder() throws Exception {
+        long trigger = row().getLong("nextTrigger");
+        String id = engine.channelForStyle(new JSONObject().put("presentation", "drawer").put("lockscreen", "hidden").toString());
+        assertNotNull(context.getSystemService(NotificationManager.class).getNotificationChannel(id));
+        assertEquals(trigger, row().getLong("nextTrigger"));
+        assertEquals(1, new JSONObject(engine.state()).getJSONArray("reminders").length());
+        assertNull(context.getSystemService(AlarmManager.class).getNextAlarmClock());
+    }
+    @Test public void oldBackupUsesPrivateBannerDefaultsAndNewFieldsRoundTripPortably() throws Exception {
+        JSONObject legacy = new JSONObject(row().toString()); legacy.remove("presentation"); legacy.remove("lockscreen");
+        JSONArray old = BackupCodec.decode(new JSONObject().put("format", "timed-memo").put("version", 1)
+            .put("reminders", new JSONArray().put(legacy)).toString());
+        assertEquals("banner", old.getJSONObject(0).getString("presentation"));
+        assertEquals("private", old.getJSONObject(0).getString("lockscreen"));
+        persist(future(row()).put("presentation", "drawer").put("lockscreen", "hidden")); engine.restore(false);
+        String backup = engine.exportBackup();
+        assertFalse(backup.contains("notificationChannelId")); assertFalse(backup.contains("notificationStyle"));
+        engine.importBackup(backup);
+        JSONArray rows = new JSONObject(engine.state()).getJSONArray("reminders");
+        assertEquals("drawer", rows.getJSONObject(1).getString("presentation"));
+        assertEquals("hidden", rows.getJSONObject(1).getString("lockscreen"));
+    }
+    @Test public void invalidDisplayImportDoesNotPartiallyImportEarlierValidRows() throws Exception {
+        JSONArray rows = new JSONArray().put(future(new JSONObject(row().toString())))
+            .put(new JSONObject(row().toString()).put("lockscreen", "public"));
+        String invalid = new JSONObject().put("format", "timed-memo").put("version", 1).put("reminders", rows).toString();
+        assertThrows(IllegalArgumentException.class, () -> engine.importBackup(invalid));
+        assertEquals(1, new JSONObject(engine.state()).getJSONArray("reminders").length());
+    }
 }
