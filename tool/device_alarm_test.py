@@ -110,7 +110,9 @@ for attempt in range(100):
         value = runtime()
         trace = json.loads(value.get('trace', '[]'))
         fresh = trace[before_count:] if len(trace) >= before_count else trace
-        restored = any(e['type'] == 'restored' and 'BOOT_COMPLETED' in e['detail'] for e in fresh)
+        # Wait for credential-unlocked boot too; LOCKED_BOOT_COMPLETED alone is
+        # insufficient readiness for the following secure-lockscreen UI checks.
+        restored = any(e['type'] == 'restored' and e['detail'] == 'android.intent.action.BOOT_COMPLETED' for e in fresh)
         scheduled = any(e['type'] == 'scheduled' and e['id'] == id for e in fresh)
         if restored and scheduled: break
     except Exception:

@@ -1,5 +1,6 @@
 """Real SystemUI privacy transition after the app process is gone; no physical vibration claim."""
 import json
+import re
 import subprocess
 import time
 import xml.etree.ElementTree as ET
@@ -53,6 +54,10 @@ original = {key: shell('settings', 'get', 'secure', key) for key in
 timeout_before = shell('settings', 'get', 'system', 'screen_off_timeout')
 result = {'lock_unlock_relock_without_app_process': False, 'channel_three_pulse_pattern': False,
           'physical_vibration_verified': False}
+display_sizes = re.findall(r'(\d+)x(\d+)', shell('wm', 'size'))
+assert display_sizes, 'Could not read emulator display dimensions'
+width, height = map(int, display_sizes[-1])
+result['display_size'] = [width, height]
 RESULT.write_text(json.dumps(result, indent=2))
 pin_set = False
 try:
@@ -97,12 +102,14 @@ try:
     # Open and verify the real PIN bouncer before sending any credentials.
     pin_ui = ''
     for _ in range(3):
-        shell('input', 'swipe', '500', '1600', '500', '400', '350')
+        shell('input', 'swipe', str(width // 2), str(height * 85 // 100),
+              str(width // 2), str(height * 20 // 100), '350')
         pin_ui = ui()
         if 'pinEntry' in pin_ui:
             break
         time.sleep(1)
     assert 'pinEntry' in pin_ui, f'PIN entry did not open: {pin_ui}'
+    result['credential_ui_verified'] = True
     shell('input', 'text', PIN)
     # Some builds auto-confirm a completed PIN. Never send ENTER into the unlocked shade.
     if 'pinEntry' in ui():
