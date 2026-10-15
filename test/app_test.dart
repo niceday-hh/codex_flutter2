@@ -5,6 +5,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:timed_memo/main.dart';
 import 'package:timed_memo/reminder.dart';
 
+Future<void> revealByDragging(WidgetTester tester, Finder target, Finder scrollable) async {
+  for (var i = 0; i < 40 && target.hitTestable().evaluate().isEmpty; i++) {
+    await tester.drag(scrollable, const Offset(0, -180));
+    await tester.pumpAndSettle();
+  }
+  expect(target.hitTestable(), findsOneWidget);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() {
@@ -137,13 +145,13 @@ void main() {
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
     await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置'))); await tester.pumpAndSettle();
     final settingsScroll = find.descendant(of: find.byType(IndexedStack), matching: find.byType(Scrollable)).last;
-    await tester.scrollUntilVisible(find.text('检查系统通知与锁屏设置'), 400, scrollable: settingsScroll);
+    await revealByDragging(tester, find.text('检查系统通知与锁屏设置'), settingsScroll);
     expect(find.text('检查系统通知与锁屏设置'), findsOneWidget);
     expect(find.text('检查通知横幅与锁屏显示'), findsNothing);
-    await tester.scrollUntilVisible(find.text('通知样式（2种）'), 200, scrollable: settingsScroll);
+    await revealByDragging(tester, find.text('通知样式（2种）'), settingsScroll);
     expect(find.text('横幅提醒 · 振动三次'), findsNothing);
     await tester.tap(find.text('通知样式（2种）')); await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('仅通知栏 · 不振动'), 200, scrollable: settingsScroll);
+    await revealByDragging(tester, find.text('仅通知栏 · 不振动'), settingsScroll);
     expect(find.textContaining('关联 8 条备忘'), findsOneWidget);
     expect(find.textContaining('关联 2 条备忘'), findsOneWidget);
     await tester.tap(find.text('仅通知栏 · 不振动')); await tester.pumpAndSettle();
