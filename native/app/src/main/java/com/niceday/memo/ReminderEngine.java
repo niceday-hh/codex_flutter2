@@ -74,6 +74,50 @@ public final class ReminderEngine {
             runtime.edit().putString("trace", log.toString()).commit();
         } catch (JSONException ignored) {}
     }
+    void event(String type, int id, long at, String detail) { trace(type, id, at, detail); }
+    public boolean reliableMode() { return runtime.getBoolean("reliableMode", true); }
+    public JSONObject pendingSummary() throws JSONException {
+        JSONArray rows = read(); int count = 0; long earliest = 0;
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject r = rows.getJSONObject(i);
+            if (!r.optBoolean("enabled", true)) continue;
+            long base = r.optLong("nextTrigger"), retry = !r.optBoolean("acknowledged") ? r.optLong("retryAt") : 0;
+            if (base > 0 || retry > 0) {
+                count++; long at = base > 0 && retry > 0 ? Math.min(base, retry) : Math.max(base, retry);
+                if (earliest == 0 || at < earliest) earliest = at;
+            }
+        }
+        return new JSONObject().put("count", count).put("earliest", earliest);
+    }
+    public void reliableMode(boolean enabled) throws JSONException {
+        if (enabled && (!notifications.areNotificationsEnabled() || (Build.VERSION.SDK_INT >= 31 && !alarms.canScheduleExactAlarms())))
+            throw new IllegalArgumentException("请先开启通知及闹钟与提醒权限");
+        if (!runtime.edit().putBoolean("reliableMode", enabled).commit()) throw new IllegalStateException("保存失败");
+        trace("reliable_mode", 0, 0, enabled ? "开启" : "关闭"); syncGuardian();
+    }
+    void guardianError(String message) { runtime.edit().putString("guardianError", message).commit(); }
+    private void syncGuardian() throws JSONException {
+        Intent service = new Intent(context, ReminderGuardianService.class).setAction("com.niceday.memo.GUARDIAN_UPDATE");
+        if (!reliableMode() || pendingSummary().getInt("count") == 0) { context.stopService(service); return; }
+        if (!notifications.areNotificationsEnabled() || (Build.VERSION.SDK_INT >= 31 && !alarms.canScheduleExactAlarms())) {
+            context.stopService(service); guardianError("可靠提醒需开启通知及精确定时权限"); return;
+        }
+        try { context.startForegroundService(service); }
+        catch (RuntimeException e) { guardianError("系统未允许启动可靠提醒：" + e.getClass().getSimpleName()); }
+    }
+    public void captureSnapshot(String name) {
+        try { runtime.edit().putString(name, ReminderDiagnostics.snapshot(context, read()).toString()).commit(); }
+        catch (Exception e) { runtime.edit().putString(name, "{\"error\":\"snapshot_unavailable\"}").commit(); }
+    }
+    public String exportDiagnostics() throws JSONException {
+        JSONObject current = ReminderDiagnostics.snapshot(context, read());
+        JSONObject state = new JSONObject(state()).getJSONObject("status");
+        state.remove("notificationStyles");
+        return new JSONObject().put("format", "timed-memo-diagnostics").put("version", 1)
+            .put("current", current).put("status", state)
+            .put("launchBeforeRestore", new JSONObject(runtime.getString("launchSnapshot", "{}")))
+            .put("serviceBeforeRestore", new JSONObject(runtime.getString("serviceLaunchSnapshot", "{}"))).toString(2);
+    }
     private JSONObject find(JSONArray rows, int id) throws JSONException {
         for (int i = 0; i < rows.length(); i++) {
             JSONObject r = rows.getJSONObject(i);
@@ -99,7 +143,12 @@ public final class ReminderEngine {
         status.put("lastReceived", runtime.getLong("lastReceived", 0));
         status.put("lastRestored", runtime.getLong("lastRestored", 0));
         status.put("package", context.getPackageName());
-        status.put("version", "0.3.1");
+        status.put("version", "0.4.0");
+        status.put("reliableMode", reliableMode());
+        status.put("guardianRunning", ReminderGuardianService.running(context));
+        status.put("guardianError", runtime.getString("guardianError", ""));
+        status.put("pending", pendingSummary());
+        status.put("processExits", ReminderDiagnostics.exits(context));
         status.put("notificationStyles", groups);
         status.put("hiddenChannelCount", styles.hiddenCount(groups));
         result.put("status", status);
@@ -159,6 +208,7 @@ public final class ReminderEngine {
         cancel(id, RETRY);
         notifications.cancel(id);
         scheduleBase(r);
+        syncGuardian();
     }
     public void delete(int id) throws JSONException {
         JSONArray rows = read(), replacement = new JSONArray();
@@ -168,8 +218,12 @@ public final class ReminderEngine {
         }
         write(replacement);
         cancel(id, BASE); cancel(id, RETRY); notifications.cancel(id);
+        syncGuardian();
     }
     public void acknowledge(int id, long token) throws JSONException {
+        acknowledge(id, token, "应用内确认");
+    }
+    public void acknowledge(int id, long token, String source) throws JSONException {
         JSONArray rows = read();
         JSONObject r = find(rows, id);
         if (r == null || token == 0 || r.optLong("activeOccurrence") != token) return;
@@ -182,6 +236,7 @@ public final class ReminderEngine {
         write(rows);
         cancel(id, RETRY);
         notifications.cancel(id);
+        trace("acknowledged", id, token, source); syncGuardian();
     }
     private long next(JSONObject r, long after) throws JSONException {
         Set<Integer> days = new HashSet<>();
@@ -236,8 +291,9 @@ public final class ReminderEngine {
         long token = intent.getLongExtra("token", 0);
         JSONArray rows = read();
         JSONObject r = find(rows, id);
-        if (r == null || !r.optBoolean("enabled", true) ||
-            r.optLong("version") != intent.getLongExtra("version", -1)) return;
+        if (r == null || !r.optBoolean("enabled", true) || r.optLong("version") != intent.getLongExtra("version", -1)) {
+            trace("rejected", id, token, r == null ? "记录不存在" : !r.optBoolean("enabled", true) ? "记录未启用" : "版本已过期"); return;
+        }
         long now = System.currentTimeMillis();
         runtime.edit().putLong("lastReceived", now).commit();
         trace("received", id, token, "原生广播触发");
@@ -265,9 +321,14 @@ public final class ReminderEngine {
         scheduleBase(r);
         schedule(r, RETRY, retryAt, token);
         notify(r, token, true);
+        syncGuardian();
     }
     public void restore(boolean wallClockChanged) throws JSONException { restore(wallClockChanged, "恢复排程"); }
     public void restore(boolean wallClockChanged, String reason) throws JSONException {
+        restore(wallClockChanged, reason, true);
+    }
+    void restoreFromService() throws JSONException { restore(false, "可靠服务恢复排程", false); }
+    private void restore(boolean wallClockChanged, String reason, boolean manageGuardian) throws JSONException {
         JSONArray rows = read();
         if (unlocked && prefs.getInt("schema", 1) < 2) {
             for (int i = 0; i < rows.length(); i++) {
@@ -303,6 +364,7 @@ public final class ReminderEngine {
             }
         }
         refreshNotifications();
+        if (manageGuardian) syncGuardian();
     }
     /** Refresh existing notifications after credential unlock/upgrade without another alert or attempt. */
     public void refreshNotifications() throws JSONException {
@@ -402,6 +464,7 @@ public final class ReminderEngine {
         for (int i = rows.length() - imported.length(); i < rows.length(); i++) {
             JSONObject r = rows.getJSONObject(i); ensureChannel(r); scheduleBase(r);
         }
+        syncGuardian();
         return imported.length();
     }
     public int createTest(int seconds) throws JSONException {

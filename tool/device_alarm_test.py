@@ -8,7 +8,7 @@ from pathlib import Path
 PACKAGE = 'com.niceday.memo.stable'
 RECEIVER = f'{PACKAGE}/com.niceday.memo.DebugAlarmProbe'
 def adb(*args, check=True):
-    return subprocess.run(['adb', *args], check=check, capture_output=True, text=True).stdout.strip()
+    return subprocess.run(['adb', *args], check=check, capture_output=True, text=True, timeout=45).stdout.strip()
 def shell(*args, check=True):
     return adb('shell', *args, check=check)
 def runtime():
@@ -36,6 +36,7 @@ shell('am', 'start', '-n', f'{PACKAGE}/com.niceday.memo.MainActivity')
 time.sleep(3)
 shell('input', 'keyevent', 'KEYCODE_HOME')
 shell('am', 'broadcast', '-n', RECEIVER, '-a', 'CLEAR')
+shell('am', 'broadcast', '-n', RECEIVER, '-a', 'CORE_MODE')
 clock_before = device_clock()
 id, planned = seed(25)
 print('Scheduled diagnostic:', json.dumps({'planned': planned, 'clock': clock_before,
@@ -69,7 +70,7 @@ try:
         'lastError': value.get('lastError'), 'auto_time_disabled': True,
         'host_poll_elapsed_ms': int((time.monotonic() - host_started) * 1000)}
     print('Alarm diagnostic:', json.dumps(alarm_diagnostic, ensure_ascii=False), flush=True)
-    Path('device-test-results.json').write_text(json.dumps({'process_death_doze': False,
+    Path(f'device-alarm-test-results-api{shell("getprop", "ro.build.version.sdk")}.json').write_text(json.dumps({'process_death_doze': False,
         'reboot_restore_without_activity': False, 'alarm_diagnostic': alarm_diagnostic}, indent=2))
     received_events = [e for e in trace if e['id'] == id and e['type'] == 'received']
     if not fired or fired.get('attempts') != 1 or not received_events or received_events[-1]['at'] - planned >= 15000:
@@ -131,6 +132,6 @@ assert restored, 'Boot receiver did not restore'
 assert any(e['type'] == 'scheduled' and e['id'] == id for e in fresh), 'Alarm was not re-registered after boot'
 assert PACKAGE in shell('dumpsys', 'alarm'), 'System has no alarm registration after boot'
 print('PASS: reboot restored scheduled reminder without opening Flutter Activity', flush=True)
-Path('device-test-results.json').write_text(json.dumps({'process_death_doze': True,
+Path(f'device-alarm-test-results-api{shell("getprop", "ro.build.version.sdk")}.json').write_text(json.dumps({'process_death_doze': True,
     'reboot_restore_without_activity': True, 'alarm_delivery_delay_ms': delivery_delay_ms,
     'alarm_diagnostic': alarm_diagnostic}, indent=2))

@@ -311,4 +311,76 @@ public class ReminderEngineTest {
         assertTrue(group.getString("actualVibration").contains("1 段"));
         assertArrayEquals(new long[]{0, 250}, manager.getNotificationChannel(legacy).getVibrationPattern());
     }
+
+    @Test public void reliableModeCanBeDisabledWithoutCancellingNativeAlarm() throws Exception {
+        engine.save(future(row()).toString());
+        AlarmManager manager = context.getSystemService(AlarmManager.class);
+        assertNotNull(manager.getNextAlarmClock());
+        engine.reliableMode(false);
+        assertFalse(engine.reliableMode());
+        assertNotNull(manager.getNextAlarmClock());
+        assertTrue(ReminderDiagnostics.tokenExists(context, 1, ReminderEngine.BASE));
+    }
+    @Test public void pendingSummaryCountsRetryButExcludesAcknowledgedAndInactiveRows() throws Exception {
+        long now = System.currentTimeMillis();
+        JSONArray rows = new JSONArray()
+            .put(new JSONObject(row().toString()).put("id", 1).put("nextTrigger", now + 300000))
+            .put(new JSONObject(row().toString()).put("id", 2).put("nextTrigger", 0).put("retryAt", now + 60000))
+            .put(new JSONObject(row().toString()).put("id", 3).put("enabled", false))
+            .put(new JSONObject(row().toString()).put("id", 4).put("nextTrigger", 0).put("retryAt", now + 1).put("acknowledged", true))
+            .put(new JSONObject(row().toString()).put("id", 5).put("nextTrigger", 0).put("retryAt", 0));
+        context.getSharedPreferences("memo", Context.MODE_PRIVATE).edit().putString("reminders", rows.toString()).commit();
+        assertEquals(2, engine.pendingSummary().getInt("count"));
+        assertEquals(now + 60000, engine.pendingSummary().getLong("earliest"));
+    }
+    @Test public void visibleStickyServiceRestoresTaskRemovalWithoutConsumingAttempt() throws Exception {
+        persist(future(row()).put("nextTrigger", System.currentTimeMillis() + 120000));
+        org.robolectric.android.controller.ServiceController<ReminderGuardianService> controller =
+            Robolectric.buildService(ReminderGuardianService.class).create();
+        ReminderGuardianService service = controller.get();
+        try {
+            assertEquals(Service.START_STICKY, service.onStartCommand(null, 0, 1));
+            assertTrue(ReminderGuardianService.running(context));
+            Notification n = Shadows.shadowOf(service).getLastForegroundNotification();
+            assertNotNull(n); assertNotEquals(0, n.flags & Notification.FLAG_ONGOING_EVENT);
+            assertFalse(n.extras.toString().contains("私人测试内容"));
+            NotificationChannel channel = context.getSystemService(NotificationManager.class).getNotificationChannel(n.getChannelId());
+            assertNull(channel.getSound()); assertFalse(channel.shouldVibrate());
+            service.onTaskRemoved(new Intent());
+            assertNotNull(context.getSystemService(AlarmManager.class).getNextAlarmClock());
+            assertEquals(0, row().getInt("attempts"));
+            assertFalse(row().optBoolean("acknowledged"));
+            assertTrue(new JSONObject(engine.state()).getJSONObject("status").getJSONArray("trace").toString().contains("task_removed"));
+        } finally { controller.destroy(); }
+        assertFalse(ReminderGuardianService.running(context));
+    }
+    @Test public void serviceDoesNotStayForegroundWithNoPendingWork() throws Exception {
+        persist(row().put("nextTrigger", 0).put("retryAt", 0));
+        org.robolectric.android.controller.ServiceController<ReminderGuardianService> controller =
+            Robolectric.buildService(ReminderGuardianService.class).create();
+        try {
+            assertEquals(Service.START_NOT_STICKY, controller.get().onStartCommand(null, 0, 1));
+            assertTrue(Shadows.shadowOf(controller.get()).isStoppedBySelf());
+            assertFalse(ReminderGuardianService.running(context));
+        } finally { controller.destroy(); }
+    }
+    @Test public void diagnosticsRetainBeforeRestoreSnapshotAndExcludePrivateContent() throws Exception {
+        persist(future(row()).put("nextTrigger", System.currentTimeMillis() + 120000)
+            .put("ringtone", "content://private/secret-song").put("audio", "private-recording"));
+        engine.captureSnapshot("launchSnapshot");
+        engine.restore(false);
+        String exported = engine.exportDiagnostics();
+        assertFalse(exported.contains("私人测试内容")); assertFalse(exported.contains("secret-song"));
+        assertFalse(exported.contains("private-recording")); assertFalse(exported.contains("notificationStyles"));
+        JSONObject report = new JSONObject(exported);
+        assertEquals("timed-memo-diagnostics", report.getString("format"));
+        assertFalse(report.getJSONObject("launchBeforeRestore").getJSONArray("reminders").getJSONObject(0).getBoolean("baseTokenExists"));
+        assertTrue(report.getJSONObject("current").getJSONArray("reminders").getJSONObject(0).getBoolean("baseTokenExists"));
+        assertEquals(0, row().getInt("attempts"));
+    }
+    @Test public void staleAlarmGenerationIsDiagnosedWithoutConsumingAttempt() throws Exception {
+        engine.fire(intent(ReminderEngine.BASE, token).putExtra("version", 999L));
+        assertEquals(0, row().getInt("attempts"));
+        assertTrue(new JSONObject(engine.state()).getJSONObject("status").getJSONArray("trace").toString().contains("rejected"));
+    }
 }

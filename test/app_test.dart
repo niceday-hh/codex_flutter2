@@ -176,4 +176,31 @@ void main() {
     expect(selected, 'twice'); expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
+
+  testWidgets('reliability switch persists separately and exports diagnostics rather than backup', (tester) async {
+    var reliable = true;
+    final calls = <String>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+      calls.add(call.method);
+      if (call.method == 'getState') { return jsonEncode({'reminders': [], 'defaults': {}, 'status': {
+        'notifications': true, 'exact': true, 'reliableMode': reliable, 'guardianRunning': false, 'pending': {'count': 0}}}); }
+      if (call.method == 'reliableMode') { reliable = call.arguments as bool; }
+      if (call.method == 'exportDiagnostics') { return true; }
+      return null;
+    });
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置'))); await tester.pumpAndSettle();
+    final scroll = find.descendant(of: find.byType(IndexedStack), matching: find.byType(Scrollable)).last;
+    await revealByDragging(tester, find.text('可靠提醒模式'), scroll);
+    await tester.tap(find.text('可靠提醒模式')); await tester.pumpAndSettle();
+    expect(reliable, isFalse);
+    expect(find.text('可靠模式已关闭，仍保留系统闹钟'), findsOneWidget);
+    await revealByDragging(tester, find.text('导出提醒诊断'), scroll);
+    await tester.tap(find.text('导出提醒诊断')); await tester.pumpAndSettle();
+    expect(calls, contains('exportDiagnostics'));
+    expect(calls, isNot(contains('exportBackup'))); expect(calls, isNot(contains('save')));
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  });
 }

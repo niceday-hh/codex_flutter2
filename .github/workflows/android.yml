@@ -72,6 +72,10 @@ jobs:
           path: build/app/test-results/testReleaseUnitTest/*.xml
           if-no-files-found: ignore
   emulator:
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [33, 35]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -100,7 +104,7 @@ jobs:
       - name: Real Android process-death, Doze and reboot checks
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 33
+          api-level: ${{ matrix.api }}
           arch: x86_64
           target: google_apis
           disable-animations: true
@@ -108,13 +112,12 @@ jobs:
           script: |
             python3 tool/device_alarm_test.py
             python3 tool/device_notification_test.py
+            python3 tool/device_guardian_test.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: device-test-results
-          path: |
-            device-test-results.json
-            notification-device-test-results.json
+          name: device-test-results-${{ matrix.api }}
+          path: device-*-test-results-api*.json
   publish:
     needs: [build, emulator]
     if: github.ref == 'refs/heads/main' && needs.build.outputs.signing == 'release'
@@ -127,7 +130,8 @@ jobs:
           path: release
       - uses: actions/download-artifact@v4
         with:
-          name: device-test-results
+          pattern: device-test-results-*
+          merge-multiple: true
           path: release
       - name: Publish verified signed APK and version notes
         env:

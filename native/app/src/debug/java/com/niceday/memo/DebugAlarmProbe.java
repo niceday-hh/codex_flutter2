@@ -11,6 +11,13 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
             if ("CLEAR".equals(intent.getAction())) {
                 JSONArray rows = new JSONObject(engine.state()).getJSONArray("reminders");
                 for (int i = 0; i < rows.length(); i++) engine.delete(rows.getJSONObject(i).getInt("id"));
+            } else if ("CORE_MODE".equals(intent.getAction())) {
+                engine.reliableMode(false);
+            } else if ("GUARDIAN_MODE".equals(intent.getAction())) {
+                engine.reliableMode(intent.getBooleanExtra("enabled", true));
+            } else if ("REMOVE_TASK".equals(intent.getAction())) {
+                for (ActivityManager.AppTask task : context.getSystemService(ActivityManager.class).getAppTasks())
+                    task.finishAndRemoveTask();
             } else if ("SNAPSHOT".equals(intent.getAction())) {
                 JSONArray notifications = new JSONArray();
                 NotificationManager manager = context.getSystemService(NotificationManager.class);

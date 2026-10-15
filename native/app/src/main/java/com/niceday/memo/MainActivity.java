@@ -15,6 +15,7 @@ import io.flutter.plugin.common.MethodChannel;
 import java.io.*;
 
 public final class MainActivity extends FlutterActivity {
+    private static boolean capturedLaunch;
     private MethodChannel channel;
     private SharedPreferences memoPreferences;
     private SharedPreferences.OnSharedPreferenceChangeListener memoListener;
@@ -29,6 +30,7 @@ public final class MainActivity extends FlutterActivity {
     private File audioFile;
 
     @Override public void onCreate(Bundle state) {
+        if (!capturedLaunch) { new ReminderEngine(this).captureSnapshot("launchSnapshot"); capturedLaunch = true; }
         super.onCreate(state);
         // Prevent reminder text leaking through task-switcher previews or screenshots.
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
@@ -102,6 +104,7 @@ public final class MainActivity extends FlutterActivity {
                     case "initialReminderId" -> result.success(getIntent().getIntExtra("reminderId", 0));
                     case "restore" -> { store.restore(false); result.success(null); }
                     case "testReminder" -> result.success(store.createTest(15));
+                    case "reliableMode" -> { store.reliableMode((Boolean) call.arguments); result.success(null); }
                     case "previewVibration" -> { NotificationStyles.preview(this, (String) call.arguments); result.success(null); }
                     case "notificationStyleSettings" -> {
                         String id = store.channelForStyle((String) call.arguments);
@@ -120,6 +123,12 @@ public final class MainActivity extends FlutterActivity {
                         exportDocument = store.exportBackup(); documentResult = result;
                         startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/json")
                             .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, "timed-memo-backup.json"), 104);
+                    }
+                    case "exportDiagnostics" -> {
+                        if (documentResult != null) throw new IllegalStateException("文件操作处理中");
+                        exportDocument = store.exportDiagnostics(); documentResult = result;
+                        startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/json")
+                            .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, "timed-memo-diagnostics.json"), 104);
                     }
                     case "importBackup" -> {
                         if (documentResult != null) throw new IllegalStateException("文件操作处理中");

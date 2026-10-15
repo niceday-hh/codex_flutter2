@@ -10,7 +10,7 @@ PACKAGE = 'com.niceday.memo.stable'
 RECEIVER = f'{PACKAGE}/com.niceday.memo.DebugAlarmProbe'
 BODY = '后台提醒自检'
 PIN = '1357'
-RESULT = Path('notification-device-test-results.json')
+RESULT = None
 
 
 def adb(*args, check=True):
@@ -48,6 +48,7 @@ def wait_ui(body_visible, timeout=30):
     raise AssertionError(f'SystemUI privacy mismatch (body_visible={body_visible}): {latest}')
 
 
+RESULT = Path(f'device-notification-test-results-api{shell("getprop", "ro.build.version.sdk")}.json')
 original = {key: shell('settings', 'get', 'secure', key) for key in
             ['lock_screen_show_notifications', 'lock_screen_allow_private_notifications',
              'lock_screen_lock_after_timeout', 'lockscreen.power_button_instantly_locks']}
@@ -64,6 +65,7 @@ try:
     shell('input', 'keyevent', 'KEYCODE_WAKEUP')
     shell('wm', 'dismiss-keyguard', check=False)
     broadcast('CLEAR')
+    broadcast('CORE_MODE')
     for key, value in [('lock_screen_show_notifications', '1'), ('lock_screen_allow_private_notifications', '0'),
                        ('lock_screen_lock_after_timeout', '0'), ('lockscreen.power_button_instantly_locks', '1')]:
         shell('settings', 'put', 'secure', key, value)

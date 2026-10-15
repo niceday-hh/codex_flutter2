@@ -263,8 +263,25 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         child: const Icon(Icons.notifications_rounded, color: Colors.white, size: 32)),
       const SizedBox(width: 16), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('定时备忘录', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-        Text('v0.3.1 · 本地保存 · 离线语音', style: TextStyle(color: muted, fontSize: 12))])),
+        Text('v0.4.0 · 本地保存 · 离线语音', style: TextStyle(color: muted, fontSize: 12))])),
     ]))),
+    section('后台可靠性', '增强最近任务关闭后的提醒维护'),
+    settingsGroup([
+      SwitchListTile(title: const Text('可靠提醒模式'),
+        subtitle: const Text('有待触发任务时显示静默常驻通知，提高后台可靠性；不能绕过系统强行停止'),
+        value: store.status['reliableMode'] as bool? ?? true,
+        onChanged: (enabled) async {
+          try { await native.invokeMethod('reliableMode', enabled); await reload(); }
+          catch (e) { await reload(); toast(niceError(e)); }
+        }),
+      ListTile(leading: const Icon(Icons.shield_outlined, color: purple), title: const Text('提醒服务状态'),
+        subtitle: Text(store.status['reliableMode'] == false ? '可靠模式已关闭，仍保留系统闹钟'
+          : store.status['guardianRunning'] == true ? '正在维护待触发提醒'
+          : ((store.status['pending'] as Map?)?['count'] as int? ?? 0) == 0 ? '没有待触发任务，无需常驻运行'
+          : '尚未检测到运行，请检查下方系统提示')),
+      if ((store.status['guardianError'] as String? ?? '').isNotEmpty) Padding(padding: const EdgeInsets.all(16),
+        child: Text(store.status['guardianError'] as String, style: const TextStyle(color: muted, fontSize: 12))),
+    ]),
     section('默认提醒', '新提醒使用这些设置'),
     settingsGroup([
       NotificationDisplayOptions(defaultSettings: true,
@@ -340,6 +357,10 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         subtitle: Text(eventTime(store.status['lastReceived']))),
       ListTile(leading: const Icon(Icons.restart_alt, color: purple), title: const Text('最近恢复排程'),
         subtitle: Text(eventTime(store.status['lastRestored']))),
+      settingRow(Icons.bug_report_outlined, '导出提醒诊断', '包含排程、启动前快照与进程退出原因；不含备忘正文', () async {
+        final ok = await native.invokeMethod<bool>('exportDiagnostics');
+        if (ok == true) { toast('诊断已导出，可用于排查后台提醒问题'); }
+      }),
       notificationStylesList(),
       const ListTile(leading: Icon(Icons.security, color: purple), title: Text('固定发布签名'),
         subtitle: Text('新版之间支持覆盖更新；首次与旧版并存，保留旧数据')),
