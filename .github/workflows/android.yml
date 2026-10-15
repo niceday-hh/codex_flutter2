@@ -105,12 +105,16 @@ jobs:
           target: google_apis
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -partition-size 2048
-          script: python3 tool/device_alarm_test.py
+          script: |
+            python3 tool/device_alarm_test.py
+            python3 tool/device_notification_test.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: device-test-results
-          path: device-test-results.json
+          path: |
+            device-test-results.json
+            notification-device-test-results.json
   publish:
     needs: [build, emulator]
     if: github.ref == 'refs/heads/main' && needs.build.outputs.signing == 'release'

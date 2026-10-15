@@ -99,7 +99,7 @@ public final class ReminderEngine {
         status.put("lastReceived", runtime.getLong("lastReceived", 0));
         status.put("lastRestored", runtime.getLong("lastRestored", 0));
         status.put("package", context.getPackageName());
-        status.put("version", "0.3.0");
+        status.put("version", "0.3.1");
         status.put("notificationStyles", groups);
         status.put("hiddenChannelCount", styles.hiddenCount(groups));
         result.put("status", status);
@@ -264,7 +264,7 @@ public final class ReminderEngine {
         write(rows);
         scheduleBase(r);
         schedule(r, RETRY, retryAt, token);
-        notify(r, token);
+        notify(r, token, true);
     }
     public void restore(boolean wallClockChanged) throws JSONException { restore(wallClockChanged, "恢复排程"); }
     public void restore(boolean wallClockChanged, String reason) throws JSONException {
@@ -302,12 +302,23 @@ public final class ReminderEngine {
                 schedule(r, RETRY, Math.max(now + 1000, r.optLong("retryAt")), r.optLong("activeOccurrence"));
             }
         }
+        refreshNotifications();
+    }
+    /** Refresh existing notifications after credential unlock/upgrade without another alert or attempt. */
+    public void refreshNotifications() throws JSONException {
+        if (!unlocked) return;
+        JSONArray rows = read();
+        for (android.service.notification.StatusBarNotification posted : notifications.getActiveNotifications()) {
+            JSONObject r = find(rows, posted.getId());
+            if (r == null || r.optLong("activeOccurrence") == 0 || r.optBoolean("acknowledged")) continue;
+            notify(r, r.getLong("activeOccurrence"), false);
+        }
     }
     private String ensureChannel(JSONObject r) throws JSONException {
         return styles.ensure(r, unlocked);
     }
     @SuppressWarnings("deprecation")
-    private void notify(JSONObject r, long token) throws JSONException {
+    private void notify(JSONObject r, long token, boolean alert) throws JSONException {
         if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             error("通知权限未开启，系统闹钟已触发但无法显示通知"); return;
         }
@@ -319,8 +330,9 @@ public final class ReminderEngine {
         PendingIntent content = PendingIntent.getActivity(context, id, open,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         PendingIntent dismiss = intent(r, ACK, token);
-        KeyguardManager keyguard = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
-        boolean locked = !unlocked || keyguard.isKeyguardLocked();
+        // SystemUI switches between the private payload and publicVersion on lock/unlock,
+        // including while our process is dead. Only Direct Boot lacks the decrypted body.
+        boolean bodyAvailable = unlocked && r.has("text");
         Notification publicVersion = new Notification.Builder(context, channelId)
             .setSmallIcon(com.niceday.memo.R.drawable.ic_notification)
             .setContentTitle("定时备忘录").setContentText("有一条待办提醒 · 解锁后查看")
@@ -328,21 +340,22 @@ public final class ReminderEngine {
         Notification.Builder builder = new Notification.Builder(context, channelId)
             .setSmallIcon(com.niceday.memo.R.drawable.ic_notification)
             .setColor(0xFF7252F6).setContentTitle("定时备忘录")
-            // Also redact the actual payload when locked, even if system privacy settings are permissive.
-            .setContentText(locked ? "有一条待办提醒 · 解锁后查看" : r.optString("text", "有一条待办提醒"))
+            .setContentText(bodyAvailable ? r.getString("text") : "有一条待办提醒 · 解锁后查看")
             .setSubText("第" + r.optInt("attempts") + "/" + r.optInt("totalCount") + "次 · 划掉即确认")
             .setVisibility(NotificationStyles.visibility(r)).setPublicVersion(publicVersion)
             .setCategory(Notification.CATEGORY_ALARM).setContentIntent(content)
-            .setDeleteIntent(dismiss).setAutoCancel(false).setOnlyAlertOnce(false);
+            .setDeleteIntent(dismiss).setAutoCancel(false).setOnlyAlertOnce(!alert)
+            .setWhen(r.optLong("lastFired", System.currentTimeMillis()));
         if (Build.VERSION.SDK_INT >= 29) builder.setAllowSystemGeneratedContextualActions(false);
-        if (!locked) builder.setStyle(new Notification.BigTextStyle().bigText(r.optString("text", "有一条待办提醒")));
+        if (bodyAvailable) builder.setStyle(new Notification.BigTextStyle().bigText(r.getString("text")));
         notifications.notify(id, builder.build());
         NotificationChannel actual = notifications.getNotificationChannel(channelId);
-        trace("notified", id, token, "importance=" + actual.getImportance() + ";redacted=" + locked);
+        trace(alert ? "notified" : "notification_refreshed", id, token,
+            "importance=" + actual.getImportance() + ";bodyAvailable=" + bodyAvailable);
         if (actual.getImportance() == NotificationManager.IMPORTANCE_NONE) error("此通知样式已被系统关闭，请打开对应的系统通知设置");
         else if (NotificationStyles.importance(r) == NotificationManager.IMPORTANCE_HIGH && actual.getImportance() < NotificationManager.IMPORTANCE_HIGH)
             error("系统通道未允许横幅，请打开这条提醒的系统通知设置");
-        if (r.optBoolean("wakeScreen", true)) {
+        if (alert && r.optBoolean("wakeScreen", true)) {
             try {
                 PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
                 PowerManager.WakeLock wake = pm.newWakeLock(

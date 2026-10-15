@@ -4,6 +4,8 @@ import android.app.*;
 import android.content.*;
 import android.media.*;
 import android.net.Uri;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import org.json.*;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -63,11 +65,27 @@ final class NotificationStyles {
             + ("hidden".equals(r.optString("lockscreen")) ? "锁屏不显示" : "锁屏隐藏正文") + " · "
             + vibrationName(r.optString("vibration", "three")) + " · " + ringtoneName(r);
     }
-    private long[] pattern(String vibration) {
+    static long[] pattern(String vibration) {
         return switch (vibration) {
             case "once" -> new long[]{0, 250}; case "twice" -> new long[]{0, 250, 200, 250};
             case "strong" -> new long[]{0, 700, 250, 700}; default -> new long[]{0, 200, 200, 200, 200, 200};
         };
+    }
+    static void preview(Context context, String mode) {
+        if (!Arrays.asList("once", "twice", "three", "strong").contains(mode))
+            throw new IllegalArgumentException("系统默认节奏请使用15秒通知测试");
+        Vibrator vibrator = context.getSystemService(Vibrator.class);
+        if (vibrator == null || !vibrator.hasVibrator()) throw new IllegalStateException("此设备没有可用振动器");
+        vibrator.vibrate(VibrationEffect.createWaveform(pattern(mode), -1), new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION).build());
+    }
+    private String actualVibration(NotificationChannel c) {
+        if (!c.shouldVibrate()) return "系统实际：振动已关闭";
+        long[] actual = c.getVibrationPattern();
+        if (actual == null || actual.length == 0) return "系统实际：默认或系统效果（次数由系统决定）";
+        int pulses = 0;
+        for (int i = 1; i < actual.length; i += 2) if (actual[i] > 0) pulses++;
+        return "系统已记录：" + pulses + " 段振动（硬件效果请实测）";
     }
     String ensure(JSONObject r, boolean unlocked) throws JSONException {
         // The mirror carries only the channel ID/hash, not a custom ringtone URI.
@@ -104,8 +122,15 @@ final class NotificationStyles {
         boolean changed = c.getImportance() != importance(r) || (c.getSound() != null) != r.optBoolean("sound", true)
             || c.shouldVibrate() != !"off".equals(r.optString("vibration", "three"))
             || (knownVisibility && actualVisibility != visibility(r));
+        boolean customVibration = !"off".equals(r.optString("vibration")) && !"system".equals(r.optString("vibration"));
+        boolean vibrationMismatch = c.shouldVibrate() != !"off".equals(r.optString("vibration"))
+            || (customVibration && !Arrays.equals(c.getVibrationPattern(), pattern(r.optString("vibration"))));
+        changed |= vibrationMismatch;
+        if (r.optBoolean("sound", true) && !Objects.equals(c.getSound(), ringtone(r))) changed = true;
         return new JSONObject().put("id", id).put("name", name(r)).put("count", 0).put("isDefault", false)
             .put("importance", c.getImportance()).put("systemOverridden", changed)
+            .put("vibrationMismatch", vibrationMismatch).put("actualVibration", actualVibration(c))
+            .put("actualVibrationPattern", c.getVibrationPattern() == null ? JSONObject.NULL : new JSONArray(c.getVibrationPattern()))
             .put("presentation", r.optString("presentation", "banner")).put("lockscreen", r.optString("lockscreen", "private"));
     }
     JSONArray groups(JSONArray rows, JSONObject defaults, boolean unlocked) throws JSONException {

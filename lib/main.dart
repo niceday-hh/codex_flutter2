@@ -263,7 +263,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         child: const Icon(Icons.notifications_rounded, color: Colors.white, size: 32)),
       const SizedBox(width: 16), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('定时备忘录', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-        Text('v0.3.0 · 本地保存 · 离线语音', style: TextStyle(color: muted, fontSize: 12))])),
+        Text('v0.3.1 · 本地保存 · 离线语音', style: TextStyle(color: muted, fontSize: 12))])),
     ]))),
     section('默认提醒', '新提醒使用这些设置'),
     settingsGroup([
@@ -302,7 +302,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       ListTile(leading: const Icon(Icons.notifications_none, color: purple), title: const Text('通知权限'),
         subtitle: Text(store.status['notifications'] == true ? '已开启' : '未开启，请在提醒自检中授权')),
       const ListTile(leading: Icon(Icons.lock_outline, color: purple), title: Text('锁屏内容保护'),
-        subtitle: Text('隐藏正文或完全隐藏，由每条提醒选择；不使用全屏通知')),
+        subtitle: Text('使用系统锁屏隐私保护，解锁自动显示正文；不使用全屏通知')),
       settingRow(Icons.alarm_on_rounded, '精确定时权限', store.status['exact'] == true ? '已开启' : '需开启', () => native.invokeMethod('requestExact')),
       settingRow(Icons.battery_saver_outlined, '后台运行', store.status['battery'] == true ? '不受电池优化' : '检查电池优化', () => native.invokeMethod('batterySettings')),
       settingRow(Icons.phonelink_setup_rounded, '应用系统设置', '荣耀应用启动管理', () => native.invokeMethod('appSettings')),
@@ -375,7 +375,9 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
           child: Text('同一样式共用系统设置，修改会影响关联的所有备忘。', style: TextStyle(color: muted, fontSize: 12))),
         ...styles.map((style) => settingRow(Icons.notifications_outlined, style['name'] as String? ?? '通知样式',
           '${style['isDefault'] == true ? '新建默认 · ' : ''}关联 ${style['count'] ?? 0} 条备忘\n'
-          '${style['systemOverridden'] == true ? '系统设置与应用偏好不同' : channelImportanceLabel(style['importance'] as int? ?? 0)}',
+          '${style['systemOverridden'] == true ? '系统设置与应用偏好不同' : channelImportanceLabel(style['importance'] as int? ?? 0)}'
+          '${style['actualVibration'] is String ? '\n${style['actualVibration']}' : ''}'
+          '${style['vibrationMismatch'] == true ? '\n振动节奏有差异，请打开本组系统设置检查' : ''}',
           () => native.invokeMethod('channelSettings', style['id']))),
         if (hidden > 0) Padding(padding: const EdgeInsets.all(16), child: Text(
           '已隐藏 $hidden 个无引用的历史通道，手机系统中的原设置仍保留。',
@@ -467,18 +469,39 @@ class NotificationDisplayOptions extends StatelessWidget {
         if (v != null && context.mounted) { onLockscreenChanged(v); }
       }),
     const Padding(padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Text('以上为应用展示偏好，实际显示仍受手机系统通知设置影响。', style: TextStyle(color: muted, fontSize: 12))),
+      child: Text('实际显示受系统设置控制。隐藏正文时，请同时在系统通知设置中关闭“显示敏感内容”；解锁后由系统显示正文。', style: TextStyle(color: muted, fontSize: 12))),
   ]);
 }
 const vibrations = {'system': '系统默认', 'off': '关闭', 'once': '振动一次', 'twice': '振动两次', 'three': '振动三次', 'strong': '长振动两次'};
+const vibrationHints = {
+  'system': '节奏和次数由系统决定，不导入“三次”节奏', 'off': '不请求通知振动',
+  'once': '1次250毫秒短振动', 'twice': '2次250毫秒短振动，间隔200毫秒',
+  'three': '3次200毫秒短振动，每次间隔200毫秒', 'strong': '2次700毫秒长振动，间隔250毫秒',
+};
 String vibrationLabel(String value) => vibrations[value] ?? '振动三次';
-Future<String?> chooseVibration(BuildContext context, String current) => showModalBottomSheet<String>(
-  context: context, showDragHandle: true, builder: (c) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
-    const Padding(padding: EdgeInsets.all(12), child: Text('振动模式', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
-    ...vibrations.entries.map((e) => ListTile(title: Text(e.value),
-      trailing: e.key == current ? const Icon(Icons.check_rounded, color: purple) : null,
-      onTap: () => Navigator.pop(c, e.key))),
-  ])));
+Future<String?> chooseVibration(BuildContext context, String current) {
+  var message = '试振只预览应用节奏，不修改选择。实际通知受系统通道、静音、勿扰及硬件影响；系统默认请用15秒通知测试。';
+  return showModalBottomSheet<String>(context: context, showDragHandle: true, isScrollControlled: true,
+    builder: (c) => StatefulBuilder(builder: (c, update) => SafeArea(child: ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(c).height * 0.85),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Padding(padding: EdgeInsets.all(12), child: Text('振动模式', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
+        Flexible(child: SingleChildScrollView(child: Column(children: vibrations.entries.map((e) => ListTile(
+          title: Text(e.value), subtitle: Text(vibrationHints[e.key]!, style: const TextStyle(fontSize: 12)),
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (e.key == current) const Icon(Icons.check_rounded, color: purple),
+            if (e.key != 'system' && e.key != 'off') IconButton(tooltip: '试振${e.value}',
+              icon: const Icon(Icons.vibration, color: purple), onPressed: () async {
+                try {
+                  await native.invokeMethod('previewVibration', e.key);
+                  if (c.mounted) { update(() => message = '已请求${e.value}。若未振动，请检查静音、勿扰及系统触感设置；实际通知请用15秒测试。'); }
+                } catch (error) { if (c.mounted) { update(() => message = niceError(error)); } }
+              }),
+          ]), onTap: () => Navigator.pop(c, e.key))).toList()))),
+        Padding(padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+          child: Text(message, style: const TextStyle(color: muted, fontSize: 12))),
+      ])))));
+}
 Future<int?> numberDialog(BuildContext context, String title, int current, int min, int max) async {
   final controller = TextEditingController(text: '$current');
   String? error;

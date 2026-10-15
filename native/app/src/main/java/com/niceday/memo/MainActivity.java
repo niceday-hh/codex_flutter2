@@ -102,6 +102,7 @@ public final class MainActivity extends FlutterActivity {
                     case "initialReminderId" -> result.success(getIntent().getIntExtra("reminderId", 0));
                     case "restore" -> { store.restore(false); result.success(null); }
                     case "testReminder" -> result.success(store.createTest(15));
+                    case "previewVibration" -> { NotificationStyles.preview(this, (String) call.arguments); result.success(null); }
                     case "notificationStyleSettings" -> {
                         String id = store.channelForStyle((String) call.arguments);
                         startActivity(new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
@@ -147,6 +148,12 @@ public final class MainActivity extends FlutterActivity {
                 } else result.success(granted);
             } catch (Exception e) { result.error("PERMISSION", e.getMessage(), null); }
         }
+    }
+    @Override protected void onResume() {
+        super.onResume();
+        ReminderEngine engine = new ReminderEngine(this);
+        try { engine.refreshNotifications(); }
+        catch (Exception e) { engine.error("更新通知正文失败：" + e.getClass().getSimpleName()); }
     }
     @SuppressWarnings("deprecation")
     @Override protected void onActivityResult(int request, int resultCode, Intent data) {

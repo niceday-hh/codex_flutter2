@@ -79,12 +79,15 @@ public class ReminderEngineTest {
         assertFalse(row().getBoolean("acknowledged"));
         assertTrue(row().getLong("retryAt") > 0);
     }
-    @Test public void lockedNotificationRedactsActualPayloadAndHasNoFullscreen() throws Exception {
+    @Test public void notificationCarriesPrivateBodyAndSafeLockscreenVersionWithoutFullscreen() throws Exception {
         Shadows.shadowOf(context.getSystemService(KeyguardManager.class)).setKeyguardLocked(true);
         engine.fire(intent(ReminderEngine.BASE, token));
         Notification n = Shadows.shadowOf(context.getSystemService(NotificationManager.class)).getNotification(1);
         assertNotNull(n);
-        assertFalse(n.extras.getCharSequence(Notification.EXTRA_TEXT).toString().contains("私人"));
+        assertEquals("私人测试内容", n.extras.getCharSequence(Notification.EXTRA_TEXT).toString());
+        assertNotNull(n.publicVersion);
+        assertFalse(n.publicVersion.extras.getCharSequence(Notification.EXTRA_TEXT).toString().contains("私人"));
+        assertNull(n.publicVersion.extras.getCharSequence(Notification.EXTRA_BIG_TEXT));
         assertNull(n.fullScreenIntent);
         assertEquals(Notification.VISIBILITY_PRIVATE, n.visibility);
         assertNotNull(n.deleteIntent);
@@ -181,7 +184,7 @@ public class ReminderEngineTest {
         Notification n = Shadows.shadowOf(manager).getNotification(1);
         assertEquals(Notification.VISIBILITY_SECRET, n.visibility);
         assertNull(n.fullScreenIntent);
-        assertFalse(n.extras.getCharSequence(Notification.EXTRA_TEXT).toString().contains("私人"));
+        assertFalse(n.publicVersion.extras.getCharSequence(Notification.EXTRA_TEXT).toString().contains("私人"));
         assertEquals(NotificationManager.IMPORTANCE_DEFAULT, manager.getNotificationChannel(n.getChannelId()).getImportance());
         assertEquals("", new JSONObject(engine.state()).getJSONObject("status").getString("lastError"));
     }
@@ -268,5 +271,44 @@ public class ReminderEngineTest {
         String invalid = new JSONObject().put("format", "timed-memo").put("version", 1).put("reminders", rows).toString();
         assertThrows(IllegalArgumentException.class, () -> engine.importBackup(invalid));
         assertEquals(1, new JSONObject(engine.state()).getJSONArray("reminders").length());
+    }
+    @Test public void firstCredentialUnlockRefreshesDirectBootPlaceholderWithoutAnotherAttempt() throws Exception {
+        engine.restore(false);
+        Shadows.shadowOf(context.getSystemService(UserManager.class)).setUserUnlocked(false);
+        new ReminderEngine(context).fire(intent(ReminderEngine.BASE, token));
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        Notification masked = Shadows.shadowOf(manager).getNotification(1);
+        assertFalse(masked.extras.getCharSequence(Notification.EXTRA_TEXT).toString().contains("私人"));
+        Shadows.shadowOf(context.getSystemService(UserManager.class)).setUserUnlocked(true);
+        ReminderEngine afterUnlock = new ReminderEngine(context);
+        afterUnlock.refreshNotifications();
+        Notification full = Shadows.shadowOf(manager).getNotification(1);
+        JSONObject r = new JSONObject(afterUnlock.state()).getJSONArray("reminders").getJSONObject(0);
+        assertEquals("私人测试内容", full.extras.getCharSequence(Notification.EXTRA_TEXT).toString());
+        assertTrue((full.flags & Notification.FLAG_ONLY_ALERT_ONCE) != 0);
+        assertEquals(masked.when, full.when);
+        assertEquals(1, r.getInt("attempts")); assertEquals(token, r.getLong("activeOccurrence"));
+        assertFalse(r.getBoolean("acknowledged")); assertTrue(r.getLong("retryAt") > 0);
+    }
+    @Test public void refreshingNotificationsCannotResurrectDismissedOrAcknowledgedMessages() throws Exception {
+        engine.fire(intent(ReminderEngine.BASE, token));
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        manager.cancel(1); engine.refreshNotifications();
+        assertNull(Shadows.shadowOf(manager).getNotification(1));
+        engine.acknowledge(1, token); engine.refreshNotifications();
+        assertNull(Shadows.shadowOf(manager).getNotification(1));
+    }
+    @Test public void changedSystemVibrationIsReportedAndNotSilentlyOverwritten() throws Exception {
+        JSONObject r = row().put("vibration", "three"); persist(r);
+        String legacy = "memo_v2_" + Integer.toHexString(("false:three:" + android.media.RingtoneManager
+            .getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)).hashCode());
+        NotificationManager manager = context.getSystemService(NotificationManager.class);
+        NotificationChannel channel = new NotificationChannel(legacy, "用户调整的节奏", NotificationManager.IMPORTANCE_HIGH);
+        channel.setVibrationPattern(new long[]{0, 250}); channel.setSound(null, null);
+        manager.createNotificationChannel(channel);
+        JSONObject group = new JSONObject(engine.state()).getJSONObject("status").getJSONArray("notificationStyles").getJSONObject(0);
+        assertTrue(group.getBoolean("vibrationMismatch")); assertTrue(group.getBoolean("systemOverridden"));
+        assertTrue(group.getString("actualVibration").contains("1 段"));
+        assertArrayEquals(new long[]{0, 250}, manager.getNotificationChannel(legacy).getVibrationPattern());
     }
 }
