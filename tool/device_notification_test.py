@@ -94,7 +94,9 @@ try:
     assert posted['visibility'] == 0 and not posted['fullscreen'], snapshot
     assert posted['vibrationEnabled'] and posted['pattern'] == [0, 200, 200, 200, 200, 200], snapshot
     result['channel_three_pulse_pattern'] = True
-    shell('am', 'kill', PACKAGE)
+    pid = shell('pidof', PACKAGE)
+    assert pid and ' ' not in pid, pid
+    shell('run-as', PACKAGE, '/system/bin/kill', '-9', pid)
     time.sleep(2)
     assert not shell('pidof', PACKAGE, check=False), 'App process is still alive'
     shell('input', 'keyevent', 'KEYCODE_WAKEUP')
@@ -103,13 +105,27 @@ try:
     # MENU can bypass the emulator keyguard and leave ENTER focused on a notification.
     # Open and verify the real PIN bouncer before sending any credentials.
     pin_ui = ''
-    for _ in range(3):
-        shell('input', 'swipe', str(width // 2), str(height * 85 // 100),
-              str(width // 2), str(height * 20 // 100), '350')
+    for _ in range(5):
         pin_ui = ui()
         if 'pinEntry' in pin_ui:
             break
+        # Android 15 exposes a clickable device-entry control that can consume
+        # the center swipe. Use its actual UI bounds; never tap a notification.
+        entry = next((n for n in ET.fromstring(pin_ui).iter('node')
+                      if n.get('resource-id', '').endswith(('/device_entry_icon_view', '/lock_icon_view'))
+                      and n.get('clickable') == 'true'), None)
+        if entry is not None:
+            coordinates = list(map(int, re.findall(r'\d+', entry.get('bounds', ''))))
+            assert len(coordinates) == 4, 'Device-entry control has no bounds'
+            shell('input', 'tap', str((coordinates[0] + coordinates[2]) // 2),
+                  str((coordinates[1] + coordinates[3]) // 2))
+        else:
+            shell('input', 'swipe', str(width // 2), str(height * 90 // 100),
+                  str(width // 2), str(height * 20 // 100), '350')
         time.sleep(1)
+        pin_ui = ui()
+        if 'pinEntry' in pin_ui:
+            break
     assert 'pinEntry' in pin_ui, f'PIN entry did not open: {pin_ui}'
     result['credential_ui_verified'] = True
     shell('input', 'text', PIN)

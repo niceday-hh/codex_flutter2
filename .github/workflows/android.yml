@@ -110,9 +110,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -partition-size 2048
           script: |
-            python3 tool/device_alarm_test.py
-            python3 tool/device_notification_test.py
-            python3 tool/device_guardian_test.py
+            python3 tool/device_test_suite.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -43,7 +43,10 @@ print('Scheduled diagnostic:', json.dumps({'planned': planned, 'clock': clock_be
     'trace': json.loads(runtime()['trace'])}, ensure_ascii=False), flush=True)
 start_pid = shell('pidof', PACKAGE)
 shell('input', 'keyevent', 'KEYCODE_HOME')
-shell('am', 'kill', PACKAGE)
+assert runtime().get('reliableMode') == 'false', 'Core test must disable the guardian'
+# am kill can skip a process still temporarily important after an ordered probe broadcast.
+# Terminate only this debug UID, without placing the package in force-stopped state.
+shell('run-as', PACKAGE, '/system/bin/kill', '-9', start_pid)
 time.sleep(2)
 assert not shell('pidof', PACKAGE, check=False), 'Target process did not terminate'
 shell('input', 'keyevent', 'KEYCODE_SLEEP')
