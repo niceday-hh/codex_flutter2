@@ -104,7 +104,9 @@ try:
         time.sleep(1)
     assert 'pinEntry' in pin_ui, f'PIN entry did not open: {pin_ui}'
     shell('input', 'text', PIN)
-    shell('input', 'keyevent', 'KEYCODE_ENTER')
+    # Some builds auto-confirm a completed PIN. Never send ENTER into the unlocked shade.
+    if 'pinEntry' in ui():
+        shell('input', 'keyevent', 'KEYCODE_ENTER')
     unlocked = wait_ui(True)
     result['app_process_after_unlock'] = shell('pidof', PACKAGE, check=False)
     assert not shell('pidof', PACKAGE, check=False), 'Unlock depended on restarting the app'
