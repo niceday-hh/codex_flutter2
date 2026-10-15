@@ -13,7 +13,7 @@ RESULT = Path('notification-device-test-results.json')
 
 
 def adb(*args, check=True):
-    return subprocess.run(['adb', *args], check=check, capture_output=True, text=True).stdout.strip()
+    return subprocess.run(['adb', *args], check=check, capture_output=True, text=True, timeout=45).stdout.strip()
 
 
 def shell(*args, check=True):
@@ -82,6 +82,7 @@ try:
     broadcast('SNAPSHOT')
     snapshot = json.loads(adb('exec-out', 'run-as', PACKAGE, 'cat', 'files/notification-probe.json'))
     posted = next(n for n in snapshot if n['id'] == id)
+    result['notification_snapshot'] = posted
     assert posted['text'] == BODY and BODY not in posted['publicText'], snapshot
     assert posted['visibility'] == 0 and not posted['fullscreen'], snapshot
     assert posted['vibrationEnabled'] and posted['pattern'] == [0, 200, 200, 200, 200, 200], snapshot
@@ -92,11 +93,20 @@ try:
     shell('input', 'keyevent', 'KEYCODE_WAKEUP')
     locked = wait_ui(False)
     shell('cmd', 'statusbar', 'collapse', check=False)
-    shell('input', 'keyevent', 'KEYCODE_MENU')
-    shell('input', 'swipe', '500', '1600', '500', '400', '350')
+    # MENU can bypass the emulator keyguard and leave ENTER focused on a notification.
+    # Open and verify the real PIN bouncer before sending any credentials.
+    pin_ui = ''
+    for _ in range(3):
+        shell('input', 'swipe', '500', '1600', '500', '400', '350')
+        pin_ui = ui()
+        if 'pinEntry' in pin_ui:
+            break
+        time.sleep(1)
+    assert 'pinEntry' in pin_ui, f'PIN entry did not open: {pin_ui}'
     shell('input', 'text', PIN)
     shell('input', 'keyevent', 'KEYCODE_ENTER')
     unlocked = wait_ui(True)
+    result['app_process_after_unlock'] = shell('pidof', PACKAGE, check=False)
     assert not shell('pidof', PACKAGE, check=False), 'Unlock depended on restarting the app'
     assert next(r for r in rows() if r['id'] == id)['attempts'] == 1, 'Unlock consumed another alert attempt'
     shell('cmd', 'statusbar', 'collapse', check=False)
@@ -110,6 +120,13 @@ try:
     print('PASS: SystemUI hides, reveals, and hides the body again while the app process is dead', flush=True)
     print('PASS: channel stores the requested three-pulse waveform; physical motor behavior is unverified', flush=True)
 finally:
+    if not result['lock_unlock_relock_without_app_process']:
+        try:
+            print('Privacy failure diagnostic:', json.dumps(result, ensure_ascii=False), flush=True)
+            log = shell('logcat', '-d', '-t', '1000', check=False)
+            print('\n'.join(line for line in log.splitlines() if PACKAGE in line or 'Keyguard' in line), flush=True)
+        except Exception as error:
+            print('Could not capture privacy diagnostics:', str(error), flush=True)
     if pin_set:
         shell('locksettings', 'clear', '--old', PIN, check=False)
     for key, value in original.items():
