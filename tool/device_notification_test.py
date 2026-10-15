@@ -5,6 +5,7 @@ import subprocess
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from device_preferences import read_runtime
 
 PACKAGE = 'com.niceday.memo.stable'
 RECEIVER = f'{PACKAGE}/com.niceday.memo.DebugAlarmProbe'
@@ -30,9 +31,7 @@ def broadcast(action):
 
 
 def rows():
-    source = adb('exec-out', 'run-as', PACKAGE, 'cat', f'/data/user_de/0/{PACKAGE}/shared_prefs/memo-runtime.xml')
-    root = ET.fromstring(source)
-    return json.loads(next(e.text for e in root if e.attrib.get('name') == 'reminders'))
+    return json.loads(read_runtime(adb, PACKAGE)['reminders'])
 
 
 def ui():

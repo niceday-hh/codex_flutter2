@@ -4,6 +4,7 @@ import subprocess
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from device_preferences import read_runtime
 
 PACKAGE = 'com.niceday.memo.stable'
 RECEIVER = f'{PACKAGE}/com.niceday.memo.DebugAlarmProbe'
@@ -16,9 +17,8 @@ def adb(*args, check=True):
 def shell(*args, check=True):
     return adb('shell', *args, check=check)
 def runtime():
-    xml = adb('exec-out', 'run-as', PACKAGE, 'cat', f'/data/user_de/0/{PACKAGE}/shared_prefs/memo-runtime.xml')
-    tree = ET.fromstring(xml)
-    return {e.attrib['name']: e.text if e.tag == 'string' else e.attrib.get('value') for e in tree}
+    return read_runtime(adb, PACKAGE)
+
 def device_clock():
     return {'epoch_ms': int(shell('date', '+%s')) * 1000,
             'elapsed_ms': int(float(shell('cat', '/proc/uptime').split()[0]) * 1000)}

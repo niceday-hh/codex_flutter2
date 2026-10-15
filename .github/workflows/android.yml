@@ -36,6 +36,8 @@ jobs:
           mkdir -p tool/out
           javac -d tool/out native/app/src/main/java/com/niceday/memo/Schedule.java tool/ScheduleTest.java
           java -cp tool/out ScheduleTest
+      - name: Debug fixture snapshot race checks
+        run: python3 -m unittest discover -s tool -p '*_unit_test.py' -v
       - uses: actions/cache@v4
         with:
           path: model-downloads

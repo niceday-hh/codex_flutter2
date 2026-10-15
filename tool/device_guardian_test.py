@@ -6,6 +6,7 @@ import subprocess
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from device_preferences import read_runtime
 
 PACKAGE = 'com.niceday.memo.stable'
 RECEIVER = f'{PACKAGE}/com.niceday.memo.DebugAlarmProbe'
@@ -29,9 +30,7 @@ def broadcast(action, *extras):
 
 
 def runtime():
-    source = adb('exec-out', 'run-as', PACKAGE, 'cat', f'/data/user_de/0/{PACKAGE}/shared_prefs/memo-runtime.xml')
-    return {e.attrib['name']: e.text if e.tag == 'string' else e.attrib.get('value') for e in ET.fromstring(source)}
-
+    return read_runtime(adb, PACKAGE)
 
 def events():
     return json.loads(runtime().get('trace', '[]'))
