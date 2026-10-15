@@ -25,7 +25,7 @@ def shell(*args, check=True):
 
 
 def broadcast(action, *extras):
-    return shell('am', 'broadcast', '-n', RECEIVER, '-a', action, *extras)
+    return shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', action, *extras)
 
 
 def runtime():

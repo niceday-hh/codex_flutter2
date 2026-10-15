@@ -23,7 +23,7 @@ def device_clock():
     return {'epoch_ms': int(shell('date', '+%s')) * 1000,
             'elapsed_ms': int(float(shell('cat', '/proc/uptime').split()[0]) * 1000)}
 def seed(seconds):
-    shell('am', 'broadcast', '-n', RECEIVER, '-a', 'SEED', '--ei', 'seconds', str(seconds))
+    shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'SEED', '--ei', 'seconds', str(seconds))
     value = runtime()
     rows = json.loads(value['reminders'])
     return rows[-1]['id'], rows[-1]['nextTrigger']
@@ -39,8 +39,8 @@ time.sleep(10)
 shell('am', 'start', '-n', f'{PACKAGE}/com.niceday.memo.MainActivity')
 time.sleep(3)
 shell('input', 'keyevent', 'KEYCODE_HOME')
-shell('am', 'broadcast', '-n', RECEIVER, '-a', 'CLEAR')
-shell('am', 'broadcast', '-n', RECEIVER, '-a', 'CORE_MODE')
+shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'CLEAR')
+shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'CORE_MODE')
 clock_before = device_clock()
 id, planned = seed(25)
 print('Scheduled diagnostic:', json.dumps({'planned': planned, 'clock': clock_before,
@@ -50,7 +50,7 @@ shell('input', 'keyevent', 'KEYCODE_HOME')
 assert runtime().get('reliableMode') == 'false', 'Core test must disable the guardian'
 # am kill can skip a process still temporarily important after an ordered probe broadcast.
 # Terminate only this debug UID, without placing the package in force-stopped state.
-shell('am', 'broadcast', '-n', RECEIVER, '-a', 'KILL_PROCESS')
+shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'KILL_PROCESS')
 time.sleep(2)
 assert not shell('pidof', PACKAGE, check=False), 'Target process did not terminate'
 shell('input', 'keyevent', 'KEYCODE_SLEEP')
@@ -62,9 +62,13 @@ try:
     host_deadline = host_started + 180
     while time.monotonic() < host_deadline:
         time.sleep(1)
-        rows = json.loads(runtime()['reminders'])
+        observed = runtime()
+        rows = json.loads(observed['reminders'])
         fired = next(r for r in rows if r['id'] == id)
-        if fired.get('attempts', 0) == 1:
+        # The engine commits the attempt before calling NotificationManager.
+        # Wait for the completed notify call, not that intermediate storage state.
+        observed_trace = json.loads(observed.get('trace', '[]'))
+        if fired.get('attempts', 0) == 1 and any(e['id'] == id and e['type'] == 'notified' for e in observed_trace):
             break
         # Guest wall time defines the alarm deadline. A slow virtual device must not
         # be declared late solely because 40 host seconds elapsed.
@@ -91,7 +95,9 @@ try:
     assert received['at'] >= planned, 'Alarm fired early'
     assert received['at'] - planned < 15000, 'Alarm delivery was delayed excessively'
     delivery_delay_ms = received['at'] - planned
-    assert any(e['id'] == id and e['type'] == 'notified' for e in trace), 'Notification was not posted'
+    posted = [e for e in trace if e['id'] == id and e['type'] == 'notified']
+    assert posted, 'Notification was not posted'
+    assert 0 <= posted[-1]['at'] - planned < 15000, 'Notification posting missed the delivery deadline'
     print('PASS: system alarm delivered in background after process kill and forced Doze', flush=True)
 finally:
     shell('dumpsys', 'deviceidle', 'unforce', check=False)
@@ -99,7 +105,7 @@ finally:
 
 shell('input', 'keyevent', 'KEYCODE_WAKEUP')
 shell('wm', 'dismiss-keyguard', check=False)
-shell('am', 'broadcast', '-n', RECEIVER, '-a', 'CLEAR')
+shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'CLEAR')
 id, planned = seed(240)
 before_trace = json.loads(runtime()['trace'])
 before_count = len(before_trace)
