@@ -37,7 +37,20 @@ shell('settings', 'put', 'global', 'auto_time_zone', '0')
 assert shell('settings', 'get', 'global', 'auto_time') == '0'
 time.sleep(10)
 shell('am', 'start', '-n', f'{PACKAGE}/com.niceday.memo.MainActivity')
-time.sleep(3)
+# Cold Flutter startup and boot broadcasts may still be queued after am start returns.
+# Wait for the UI's real native bootstrap before sending fixture broadcasts.
+startup_deadline = time.monotonic() + 90
+startup_ready = False
+while time.monotonic() < startup_deadline:
+    try:
+        startup_ready = any(e['type'] == 'restored' and e['detail'] == '恢复排程'
+                            for e in json.loads(runtime().get('trace', '[]')))
+        if startup_ready:
+            break
+    except (subprocess.SubprocessError, ET.ParseError, KeyError, ValueError):
+        pass
+    time.sleep(1)
+assert startup_ready, 'Cold application startup did not reach native bootstrap'
 shell('input', 'keyevent', 'KEYCODE_HOME')
 shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'CLEAR')
 shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'CORE_MODE')
