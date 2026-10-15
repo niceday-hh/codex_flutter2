@@ -14,7 +14,11 @@ RESULT = None
 
 
 def adb(*args, check=True):
-    return subprocess.run(['adb', *args], check=check, capture_output=True, text=True, timeout=45).stdout.strip()
+    result = subprocess.run(['adb', *args], check=False, capture_output=True, text=True, timeout=45)
+    if check and result.returncode:
+        print(f"ADB command {args!r} failed: {result.stderr.strip()} {result.stdout.strip()}", flush=True)
+        raise subprocess.CalledProcessError(result.returncode, result.args, output=result.stdout, stderr=result.stderr)
+    return result.stdout.strip()
 
 
 def shell(*args, check=True):
@@ -96,7 +100,7 @@ try:
     result['channel_three_pulse_pattern'] = True
     pid = shell('pidof', PACKAGE)
     assert pid and ' ' not in pid, pid
-    shell('run-as', PACKAGE, '/system/bin/kill', '-9', pid)
+    broadcast('KILL_PROCESS')
     time.sleep(2)
     assert not shell('pidof', PACKAGE, check=False), 'App process is still alive'
     shell('input', 'keyevent', 'KEYCODE_WAKEUP')
@@ -104,6 +108,9 @@ try:
     shell('cmd', 'statusbar', 'collapse', check=False)
     # MENU can bypass the emulator keyguard and leave ENTER focused on a notification.
     # Open and verify the real PIN bouncer before sending any credentials.
+    # Request the system credential challenge; a secure keyguard still requires the PIN.
+    # The assertion below rejects any image that dismisses it without showing credentials.
+    shell('wm', 'dismiss-keyguard')
     pin_ui = ''
     for _ in range(5):
         pin_ui = ui()

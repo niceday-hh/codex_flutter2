@@ -8,7 +8,11 @@ from pathlib import Path
 PACKAGE = 'com.niceday.memo.stable'
 RECEIVER = f'{PACKAGE}/com.niceday.memo.DebugAlarmProbe'
 def adb(*args, check=True):
-    return subprocess.run(['adb', *args], check=check, capture_output=True, text=True, timeout=45).stdout.strip()
+    result = subprocess.run(['adb', *args], check=False, capture_output=True, text=True, timeout=45)
+    if check and result.returncode:
+        print(f"ADB command {args!r} failed: {result.stderr.strip()} {result.stdout.strip()}", flush=True)
+        raise subprocess.CalledProcessError(result.returncode, result.args, output=result.stdout, stderr=result.stderr)
+    return result.stdout.strip()
 def shell(*args, check=True):
     return adb('shell', *args, check=check)
 def runtime():
@@ -46,7 +50,7 @@ shell('input', 'keyevent', 'KEYCODE_HOME')
 assert runtime().get('reliableMode') == 'false', 'Core test must disable the guardian'
 # am kill can skip a process still temporarily important after an ordered probe broadcast.
 # Terminate only this debug UID, without placing the package in force-stopped state.
-shell('run-as', PACKAGE, '/system/bin/kill', '-9', start_pid)
+shell('am', 'broadcast', '-n', RECEIVER, '-a', 'KILL_PROCESS')
 time.sleep(2)
 assert not shell('pidof', PACKAGE, check=False), 'Target process did not terminate'
 shell('input', 'keyevent', 'KEYCODE_SLEEP')

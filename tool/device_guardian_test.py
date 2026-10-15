@@ -13,7 +13,11 @@ ACTIVITY = f'{PACKAGE}/com.niceday.memo.MainActivity'
 
 
 def adb(*args, check=True):
-    return subprocess.run(['adb', *args], check=check, capture_output=True, text=True, timeout=45).stdout.strip()
+    result = subprocess.run(['adb', *args], check=False, capture_output=True, text=True, timeout=45)
+    if check and result.returncode:
+        print(f"ADB command {args!r} failed: {result.stderr.strip()} {result.stdout.strip()}", flush=True)
+        raise subprocess.CalledProcessError(result.returncode, result.args, output=result.stdout, stderr=result.stderr)
+    return result.stdout.strip()
 
 
 def shell(*args, check=True):
@@ -93,7 +97,7 @@ try:
     old_pid = shell('pidof', PACKAGE)
     assert old_pid and ' ' not in old_pid, old_pid
     # am kill skips foreground services. SIGKILL targets only our debug application's UID.
-    shell('run-as', PACKAGE, '/system/bin/kill', '-9', old_pid)
+    broadcast('KILL_PROCESS')
     def recovered():
         pid = shell('pidof', PACKAGE, check=False)
         restarted = [e for e in events() if e['type'] == 'guardian_started' and str(e['pid']) != old_pid]

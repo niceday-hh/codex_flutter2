@@ -11,6 +11,11 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
             if ("CLEAR".equals(intent.getAction())) {
                 JSONArray rows = new JSONObject(engine.state()).getJSONArray("reminders");
                 for (int i = 0; i < rows.length(); i++) engine.delete(rows.getJSONObject(i).getInt("id"));
+            } else if ("KILL_PROCESS".equals(intent.getAction())) {
+                // Same-UID shell commands can still be denied by SELinux on emulator images.
+                // Finish the ordered broadcast, then send a genuine SIGKILL to this process.
+                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+                    () -> android.os.Process.killProcess(android.os.Process.myPid()), 100);
             } else if ("CORE_MODE".equals(intent.getAction())) {
                 engine.reliableMode(false);
             } else if ("GUARDIAN_MODE".equals(intent.getAction())) {
