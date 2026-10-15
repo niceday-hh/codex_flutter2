@@ -4,7 +4,7 @@ import subprocess
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from device_preferences import read_runtime
+from device_preferences import read_runtime, await_created
 
 PACKAGE = 'com.niceday.memo.stable'
 RECEIVER = f'{PACKAGE}/com.niceday.memo.DebugAlarmProbe'
@@ -23,10 +23,10 @@ def device_clock():
     return {'epoch_ms': int(shell('date', '+%s')) * 1000,
             'elapsed_ms': int(float(shell('cat', '/proc/uptime').split()[0]) * 1000)}
 def seed(seconds):
-    shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'SEED', '--ei', 'seconds', str(seconds))
-    value = runtime()
-    rows = json.loads(value['reminders'])
-    return rows[-1]['id'], rows[-1]['nextTrigger']
+    response = shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'SEED', '--ei', 'seconds', str(seconds))
+    row = await_created(response, runtime)
+    return row['id'], row['nextTrigger']
+
 
 subprocess.run(['adb', 'install', '-r', 'build/app/outputs/flutter-apk/app-debug.apk'], check=True)
 shell('pm', 'grant', PACKAGE, 'android.permission.POST_NOTIFICATIONS')

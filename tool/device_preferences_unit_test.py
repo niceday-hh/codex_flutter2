@@ -2,7 +2,7 @@ import subprocess
 import unittest
 import xml.etree.ElementTree as ET
 from unittest.mock import Mock, patch
-from device_preferences import read_runtime
+from device_preferences import read_runtime, await_created
 
 PACKAGE = 'debug.app'
 PATH = f'/data/user_de/0/{PACKAGE}/shared_prefs/memo-runtime.xml'
@@ -57,6 +57,28 @@ class RuntimeReadTest(unittest.TestCase):
         with self.assertRaises(ET.ParseError):
             read_runtime(adb, PACKAGE, attempts=3)
         self.assertTrue(all(c.args[4].endswith('.bak') for c in adb.call_args_list))
+
+
+class CreatedReminderTest(unittest.TestCase):
+    @patch('device_preferences.time.sleep')
+    def test_waits_for_broadcast_returned_id_instead_of_using_old_last_row(self, sleep):
+        snapshot = Mock(side_effect=[{'reminders': '[]'},
+            {'reminders': '[{"id":4,"nextTrigger":10}]'},
+            {'reminders': '[{"id":4,"nextTrigger":10},{"id":7,"nextTrigger":20}]'}])
+        self.assertEqual(await_created('Broadcast completed: result=7', snapshot), {'id': 7, 'nextTrigger': 20})
+        self.assertEqual(snapshot.call_count, 3)
+
+    def test_failed_broadcast_does_not_select_an_existing_task(self):
+        snapshot = Mock()
+        with self.assertRaises(AssertionError):
+            await_created('Broadcast completed: result=0', snapshot)
+        snapshot.assert_not_called()
+
+    @patch('device_preferences.time.sleep')
+    @patch('device_preferences.time.monotonic', side_effect=[0, 0, 2])
+    def test_unobserved_fixture_id_still_fails(self, clock, sleep):
+        with self.assertRaises(AssertionError):
+            await_created('Broadcast completed: result=7', lambda: {'reminders': '[]'}, timeout=1)
 
 
 if __name__ == '__main__':

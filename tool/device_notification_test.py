@@ -5,7 +5,7 @@ import subprocess
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from device_preferences import read_runtime
+from device_preferences import read_runtime, await_created
 
 PACKAGE = 'com.niceday.memo.stable'
 RECEIVER = f'{PACKAGE}/com.niceday.memo.DebugAlarmProbe'
@@ -76,8 +76,7 @@ try:
     response = shell('locksettings', 'set-pin', PIN)
     assert 'success' in response.lower() or 'set to' in response.lower(), response
     pin_set = True
-    broadcast('PRIVACY_SEED')
-    id = rows()[-1]['id']
+    id = await_created(broadcast('PRIVACY_SEED'), lambda: read_runtime(adb, PACKAGE))['id']
     shell('input', 'keyevent', 'KEYCODE_HOME')
     shell('input', 'keyevent', 'KEYCODE_SLEEP')
     time.sleep(2)

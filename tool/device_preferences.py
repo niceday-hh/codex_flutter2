@@ -22,3 +22,21 @@ def read_runtime(adb, package, attempts=20):
                 raise
             time.sleep(0.1)
     raise ValueError('attempts must be positive')
+
+
+def await_created(response, snapshot, timeout=8):
+    """Observe the exact fixture ID after the ordered broadcast, never an old last row."""
+    import json
+    import re
+    match = re.search(r'\bresult=(-?\d+)\b', response)
+    if match is None or int(match.group(1)) <= 0:
+        raise AssertionError(f'Debug fixture did not return a reminder ID: {response}')
+    reminder_id = int(match.group(1))
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        records = json.loads(snapshot().get('reminders', '[]'))
+        row = next((r for r in records if r['id'] == reminder_id and r.get('nextTrigger', 0) > 0), None)
+        if row is not None:
+            return row
+        time.sleep(0.1)
+    raise AssertionError(f'Created reminder {reminder_id} was not observed in committed storage')

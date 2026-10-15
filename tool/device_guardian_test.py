@@ -6,7 +6,7 @@ import subprocess
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from device_preferences import read_runtime
+from device_preferences import read_runtime, await_created
 
 PACKAGE = 'com.niceday.memo.stable'
 RECEIVER = f'{PACKAGE}/com.niceday.memo.DebugAlarmProbe'
@@ -50,9 +50,8 @@ def wait_for(predicate, timeout, message):
 
 
 def seed(seconds):
-    broadcast('SEED', '--ei', 'seconds', str(seconds))
-    r = json.loads(runtime()['reminders'])[-1]
-    return r['id'], r['nextTrigger']
+    row = await_created(broadcast('SEED', '--ei', 'seconds', str(seconds)), runtime)
+    return row['id'], row['nextTrigger']
 
 
 def delivered(id, planned):
