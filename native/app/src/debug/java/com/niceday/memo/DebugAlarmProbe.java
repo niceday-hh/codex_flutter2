@@ -42,10 +42,17 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
                     output.write(notifications.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 }
             } else {
+                // Configure and create in one process/ordered call, so a cold-start
+                // process transition cannot separate the fixture mode from its task.
+                if ("CORE_SEED".equals(intent.getAction())) engine.reliableMode(false);
                 if ("PRIVACY_SEED".equals(intent.getAction()) || "BANNER_SEED".equals(intent.getAction())) engine.defaults(new JSONObject()
                     .put("sound", false).put("vibration", "three").put("wakeScreen", false)
                     .put("presentation", "BANNER_SEED".equals(intent.getAction()) ? "banner" : "drawer").put("lockscreen", "private").toString());
                 int id = engine.createTest(intent.getIntExtra("seconds", 15), "BANNER_SEED".equals(intent.getAction()) ? 3 : 1);
+                if ("CORE_SEED".equals(intent.getAction())) {
+                    if (engine.reliableMode()) throw new IllegalStateException("Core fixture mode did not persist");
+                    setResultData("reliableMode=false");
+                }
                 setResultCode(id);
             }
         } catch (Exception e) { throw new IllegalStateException(e); }

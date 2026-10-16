@@ -7,6 +7,10 @@ import 'reminder.dart';
 
 final asr = AsrSession();
 Future<String> transcribe(String pcmPath) => asr.transcribe(pcmPath);
+Future<void> discardRecording(String path) async {
+  final pcm = File(path);
+  if (await pcm.exists()) await pcm.delete();
+}
 
 // One model per voice session, confined to a worker isolate. No FFI pointers
 // cross isolates; each utterance gets a fresh stream and reuses the model.
@@ -32,6 +36,7 @@ class AsrSession {
       status.value = '正在准备离线模型…首次使用需要稍等';
       final dir = await native.invokeMethod<String>('prepareAsr');
       if (dir == null) throw StateError('无法打开语音模型目录');
+      if (_releaseRequested && _users == 0) { status.value = '离线模型已释放'; return; }
       status.value = '正在加载识别模型…';
       final ready = Completer<void>();
       final port = _port = ReceivePort();
@@ -78,8 +83,7 @@ class AsrSession {
       return await result.future;
     } finally {
       _users--;
-      final pcm = File(path);
-      if (await pcm.exists()) await pcm.delete();
+      await discardRecording(path);
       if (_pending.isEmpty) {
         status.value = _commands == null ? '离线模型尚未准备' : '离线模型已就绪';
         if (_releaseRequested) { release(); } else { _armIdle(); }

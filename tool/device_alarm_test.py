@@ -23,7 +23,8 @@ def device_clock():
     return {'epoch_ms': int(shell('date', '+%s')) * 1000,
             'elapsed_ms': int(float(shell('cat', '/proc/uptime').split()[0]) * 1000)}
 def seed(seconds):
-    response = shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'SEED', '--ei', 'seconds', str(seconds))
+    response = shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'CORE_SEED', '--ei', 'seconds', str(seconds))
+    assert "reliableMode=false" in response, f"Core fixture mode was not acknowledged: {response}"
     row = await_created(response, runtime)
     return row['id'], row['nextTrigger']
 
@@ -53,11 +54,10 @@ while time.monotonic() < startup_deadline:
 assert startup_ready, 'Cold application startup did not reach native bootstrap'
 shell('input', 'keyevent', 'KEYCODE_HOME')
 shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'CLEAR')
-shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'CORE_MODE')
 clock_before = device_clock()
 id, planned = seed(25)
 print('Scheduled diagnostic:', json.dumps({'planned': planned, 'clock': clock_before,
-    'trace': json.loads(runtime()['trace'])}, ensure_ascii=False), flush=True)
+    'reliableMode': runtime().get('reliableMode'), 'trace': json.loads(runtime()['trace'])}, ensure_ascii=False), flush=True)
 start_pid = shell('pidof', PACKAGE)
 shell('input', 'keyevent', 'KEYCODE_HOME')
 assert runtime().get('reliableMode') == 'false', 'Core test must disable the guardian'

@@ -754,12 +754,17 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
   Future<void> microphone() async {
     if (busy) return;
     if (recording) { await finish(); return; }
+    final ticket = ++session;
     setState(() => busy = true);
     warmup();
     try {
       await native.invokeMethod('startRecording');
-      if (!mounted) return;
-      setState(() { recording = true; busy = false; seconds = 0; warning = null; reference = null; text.clear(); session++; });
+      if (!mounted || !widget.active || ticket != session) {
+        await native.invokeMethod('cancelRecording');
+        if (mounted) setState(() => busy = false);
+        return;
+      }
+      setState(() { recording = true; busy = false; seconds = 0; warning = null; reference = null; text.clear(); });
       timer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (!mounted || !recording) return;
         setState(() => seconds++);
@@ -775,9 +780,10 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
     try {
       final path = await native.invokeMethod<String>('stopRecording');
       if (path == null) throw StateError('没有录音，请重试');
+      if (!mounted || !widget.active || ticket != session) { await discardRecording(path); return; }
       final result = await transcribe(path);
       if (mounted && ticket == session) setState(() { reference = endedAt; text.text = result; warning = result.trim().isEmpty ? '没有听清，请靠近麦克风再试一次' : null; });
-    } catch (e) { if (mounted) setState(() => warning = niceError(e)); }
+    } catch (e) { if (mounted && ticket == session) setState(() => warning = niceError(e)); }
     finally { if (mounted) setState(() => busy = false); }
   }
   Future<void> confirm() async {
