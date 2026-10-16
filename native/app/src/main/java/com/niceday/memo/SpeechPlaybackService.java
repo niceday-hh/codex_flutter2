@@ -52,7 +52,10 @@ public final class SpeechPlaybackService extends Service {
         SpeechPlaybackService value = instance;
         if (value != null) { value.queue.clear(); value.releasePlayer(); value.current = null; value.stopSelf(); }
     }
-    private boolean locked() { return getSystemService(KeyguardManager.class).isKeyguardLocked(); }
+    static boolean privacyLocked(Context context) {
+        return context.getSystemService(KeyguardManager.class).isKeyguardLocked() || !context.getSystemService(PowerManager.class).isInteractive();
+    }
+    private boolean locked() { return privacyLocked(this); }
     @Override public void onCreate() {
         super.onCreate(); instance = this;
         NotificationChannel channel = new NotificationChannel(CHANNEL, "语音播放状态", NotificationManager.IMPORTANCE_LOW);
