@@ -42,7 +42,7 @@ void main() {
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
   testWidgets('inactive records remain visible on home', (tester) async {
-    final record = Reminder(id: 7, text: '迁移后未启用的提醒', enabled: false).toJson();
+    final record = Reminder(id: 7, text: '迁移后未启用的提醒', enabled: false, speechMode: 'inherit').toJson();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('memo/native'), (call) async => call.method == 'getState'
         ? jsonEncode({'reminders': [record], 'defaults': {}, 'status': {'notifications': true, 'exact': true}}) : null);
@@ -51,6 +51,7 @@ void main() {
     await tester.scrollUntilVisible(find.text('迁移后未启用的提醒'), 250, scrollable: find.byType(Scrollable).first);
     expect(find.text('迁移后未启用的提醒'), findsOneWidget);
     expect(find.text('未启用'), findsWidgets);
+    expect(find.text('语音待准备'), findsNothing);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
   testWidgets('editing completed reminder saves an enabled future task', (tester) async {

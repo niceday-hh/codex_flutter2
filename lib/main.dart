@@ -207,7 +207,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         const SizedBox(width: 15), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(r.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: r.completed ? muted : ink, fontWeight: FontWeight.w600)),
           const SizedBox(height: 6), Wrap(spacing: 5, runSpacing: 4, children: [
-            if (r.speechMode != 'off') Tag(r.speechState == 'ready' ? '语音已就绪' : r.speechState == 'preparing' ? '语音准备中' : '语音待准备'),
+            if (r.speechState != 'off') Tag(r.speechState == 'ready' ? '语音已就绪' : r.speechState == 'preparing' ? '语音准备中' : '语音待准备'),
             Tag(r.completed ? '已完成' : !r.enabled ? '未启用' : r.unread ? '未读 ${r.attempts}/${r.totalCount}' : r.repeatLabel),
             Text(dateLabel(r.displayDate), style: const TextStyle(fontSize: 11, color: muted)),
           ]),

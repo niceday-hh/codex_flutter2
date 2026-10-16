@@ -60,7 +60,7 @@ public final class SpeechPlaybackService extends Service {
         getSystemService(NotificationManager.class).createNotificationChannel(channel);
         Notification notification = new Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("定时备忘录").setContentText("正在播放提醒语音")
-            .setVisibility(Notification.VISIBILITY_SECRET).setOngoing(true).setSilent(true).build();
+            .setVisibility(Notification.VISIBILITY_SECRET).setOngoing(true).setOnlyAlertOnce(true).build();
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
         else startForeground(NOTIFICATION, notification);
         IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_USER_PRESENT);
@@ -79,6 +79,9 @@ public final class SpeechPlaybackService extends Service {
         return a.getIntExtra("id", 0) == b.getIntExtra("id", 0) && a.getLongExtra("token", 0) == b.getLongExtra("token", 0);
     }
     private void next() {
+        if (current != null) return;
+        // The notification is immediate; postpone speech while the user records to avoid echo.
+        if (MainActivity.isRecordingAudio() && !queue.isEmpty()) { handler.postDelayed(this::next, 500); return; }
         current = queue.poll();
         if (current == null) { stopSelf(); return; }
         try {
@@ -93,8 +96,9 @@ public final class SpeechPlaybackService extends Service {
             AudioAttributes attributes = new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build();
             AudioManager manager = getSystemService(AudioManager.class);
+            final int ticket = ++playbackGeneration;
             focus = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT).setAudioAttributes(attributes)
-                .setOnAudioFocusChangeListener(change -> { if (change < 0) finishCurrent(); }).build();
+                .setOnAudioFocusChangeListener(change -> { if (change < 0 && ticket == playbackGeneration) finishCurrent(); }).build();
             if (manager.requestAudioFocus(focus) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) { finishCurrent(); return; }
             player = new MediaPlayer(); player.setAudioAttributes(attributes);
             if (SpeechCache.ready(audio)) player.setDataSource(audio.getPath());
@@ -107,7 +111,6 @@ public final class SpeechPlaybackService extends Service {
             }
             player.setOnCompletionListener(p -> finishCurrent());
             player.setOnErrorListener((p, what, extra) -> { finishCurrent(); return true; });
-            final int ticket = ++playbackGeneration;
             player.setOnPreparedListener(p -> {
                 if (ticket != playbackGeneration || current == null || p != player) return;
                 try {

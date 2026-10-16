@@ -67,7 +67,7 @@ class SpeechSession {
       if (value[0] == 'item') {
         failed |= value[2] != '';
         callbacks.add(native.invokeMethod<void>('speechFinished', {'key': value[1], 'error': value[2]})
-          .catchError((Object _) {}));
+          .catchError((Object _) { failed = true; }));
         status.value = value[2] == '' ? '已准备 ${value[3]}/${jobs.length} 段提醒语音' : '部分语音未就绪，将使用备用提醒';
       } else if (value[0] == 'end') {
         ended = true;

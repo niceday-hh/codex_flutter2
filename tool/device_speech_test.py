@@ -61,6 +61,8 @@ def killed():
 
 sdk = shell('getprop', 'ro.build.version.sdk')
 path = Path(f'device-speech-test-results-api{sdk}.json')
+original_timeout = shell('settings', 'get', 'system', 'screen_off_timeout')
+shell('settings', 'put', 'system', 'screen_off_timeout', '600000')
 result = {'sdk': int(sdk), 'reboot_tests_run': False, 'physical_audio_verified': False}
 path.write_text(json.dumps(result, indent=2))
 try:
@@ -93,6 +95,7 @@ try:
     result['unlocked_body_and_manual_stop'] = True
     print('PASS: on-device AISHELL synthesis, process-death cached playback, lock privacy, retry and manual stop', flush=True)
 finally:
+    shell('settings', 'put', 'system', 'screen_off_timeout', original_timeout, check=False)
     path.write_text(json.dumps(result, ensure_ascii=False, indent=2))
     if len(result) < 8:
         print('Speech diagnostics:', json.dumps({'result': result, 'events': events()}, ensure_ascii=False), flush=True)

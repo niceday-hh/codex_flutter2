@@ -42,6 +42,10 @@ public final class MainActivity extends FlutterActivity {
         });
         return true;
     }
+    static boolean isRecordingAudio() {
+        MainActivity activity = foreground.get();
+        return activity != null && activity.recording;
+    }
     static boolean requestSpeechPreparation() {
         MainActivity activity = foreground.get();
         if (activity == null || !activity.resumed || activity.channel == null) return false;
