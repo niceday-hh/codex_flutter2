@@ -17,7 +17,7 @@ class SpeechSession {
   int _previewTicket = 0;
 
   Future<void> _serial(Future<void> Function() job) {
-    final task = _queue.then((_) => asr.withoutModel(job));
+    final task = _queue.then((_) => job());
     _queue = task.catchError((Object _) {});
     return task;
   }
@@ -46,7 +46,9 @@ class SpeechSession {
   }
   void stopPreview() { _previewTicket++; unawaited(native.invokeMethod<void>('stopSpeechPreview').catchError((Object _) {})); }
 
-  Future<void> _generate(List<Map<String, dynamic>> jobs) async {
+  Future<void> _generate(List<Map<String, dynamic>> jobs) => asr.withoutModel(() => _generateIsolated(jobs));
+
+  Future<void> _generateIsolated(List<Map<String, dynamic>> jobs) async {
     final dir = await native.invokeMethod<String>('prepareTts');
     if (dir == null) throw StateError('播报模型尚未准备');
     final events = ReceivePort();
