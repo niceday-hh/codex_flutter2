@@ -16,7 +16,13 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
                 engine.defaults(new JSONObject().put("sound", false).put("vibration", "off").put("wakeScreen", false)
                     .put("presentation", "drawer").put("speechMode", "on").put("speechVoice", "33").put("speechRate", 1)
                     .put("speechHideLocked", intent.getBooleanExtra("hide", true)).toString());
-                setResultCode(engine.createTest(180, 2));
+                int id = engine.createTest(180, 2);
+                JSONArray all = new JSONObject(engine.state()).getJSONArray("reminders");
+                for (int i = 0; i < all.length(); i++) if (all.getJSONObject(i).getInt("id") == id) {
+                    JSONObject row = all.getJSONObject(i).put("text", "请按时完成这条备忘录，记得喝水、整理桌面并准备明天需要的物品。");
+                    engine.save(row.toString());
+                }
+                setResultCode(id);
             } else if ("PREPARE_SPEECH".equals(intent.getAction())) {
                 setResultData("preparing=" + MainActivity.requestSpeechPreparation());
             } else if ("SPEECH_STATUS".equals(intent.getAction())) {

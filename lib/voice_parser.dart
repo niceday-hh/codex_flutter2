@@ -162,7 +162,7 @@ class VoiceControls {
 VoiceControls extractVoiceControls(String source, Reminder r) {
   var body = source.trim().replaceAll(RegExp(r'[。！？.!?\s]+$'), '');
   final settings = <String>[];
-  var foundSpeech = false, foundSound = false;
+  var foundSpeech = false, foundSound = false, foundPrivacy = false;
   String? warning;
   final rules = <(RegExp, void Function(RegExpMatch))>[
     (RegExp(r'(?:不要|不用)(?:开启|打开|启用)?(?:语音提醒|语音播报|朗读提醒|读出来|念出来)$'), (_) { if (!foundSpeech) { r.speechMode = 'off'; foundSpeech = true; settings.add('语音播报：关闭'); } }),
@@ -172,8 +172,8 @@ VoiceControls extractVoiceControls(String source, Reminder r) {
     (RegExp(r'(?:只振动|静音提醒|不发声|不要声音)$'), (_) { if (!foundSound) { r.sound = false; foundSound = true; } if (!foundSpeech) { r.speechMode = 'off'; foundSpeech = true; } settings.add('声音：静音'); }),
     (RegExp(r'(?:开启|打开|使用)(?:系统)?铃声(?:提醒)?$'), (_) { if (!foundSound) { r.sound = true; foundSound = true; settings.add('备用铃声：开启'); } }),
     (RegExp(r'(?:关闭|取消|不要)(?:系统)?铃声(?:提醒)?$'), (_) { if (!foundSound) { r.sound = false; foundSound = true; settings.add('备用铃声：关闭'); } }),
-    (RegExp(r'锁屏(?:时)?(?:隐藏播报正文|隐藏播放内容|隐藏语音内容)$'), (_) { r.speechHideLocked = true; settings.add('锁屏播报：隐藏正文'); }),
-    (RegExp(r'锁屏(?:时)?(?:不隐藏播报正文|不隐藏播放内容|正常播报|朗读正文)$'), (_) { r.speechHideLocked = false; settings.add('锁屏播报：允许正文'); }),
+    (RegExp(r'锁屏(?:时)?(?:隐藏播报正文|隐藏播放内容|隐藏语音内容)$'), (_) { if (!foundPrivacy) { r.speechHideLocked = true; foundPrivacy = true; settings.add('锁屏播报：隐藏正文'); } }),
+    (RegExp(r'锁屏(?:时)?(?:不隐藏播报正文|不隐藏播放内容|正常播报|朗读正文)$'), (_) { if (!foundPrivacy) { r.speechHideLocked = false; foundPrivacy = true; settings.add('锁屏播报：允许正文'); } }),
   ];
   while (true) {
     var consumed = false;

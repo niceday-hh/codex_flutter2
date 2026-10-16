@@ -37,6 +37,7 @@ final class NotificationStyles {
         JSONArray values = new JSONArray().put(sound(r)).put(r.optString("vibration", "three"))
             .put(sound(r) ? String.valueOf(ringtone(r)) : "")
             .put(r.optString("presentation", "banner")).put(r.optString("lockscreen", "private"));
+        if (SpeechSettings.enabled(r, SpeechSettings.defaults(context))) values.put("speech-playback");
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(values.toString().getBytes(StandardCharsets.UTF_8));
             StringBuilder hex = new StringBuilder();
@@ -101,7 +102,7 @@ final class NotificationStyles {
         if (!owned(id) || manager.getNotificationChannel(id) == null) {
             String legacy = legacyId(r);
             // Reuse v0.2 default-display channels so user changes survive upgrading.
-            boolean useLegacy = "banner".equals(r.getString("presentation")) && "private".equals(r.getString("lockscreen"))
+            boolean useLegacy = !SpeechSettings.enabled(r, SpeechSettings.defaults(context)) && "banner".equals(r.getString("presentation")) && "private".equals(r.getString("lockscreen"))
                 && manager.getNotificationChannel(legacy) != null;
             id = useLegacy ? legacy : "memo_v3_" + hash;
         }

@@ -18,7 +18,12 @@ final class SpeechCache {
         if (!file.isFile() || file.length() <= 44) return false;
         try (RandomAccessFile input = new RandomAccessFile(file, "r")) {
             if (input.readInt() != 0x52494646) return false;
-            input.seek(8); return input.readInt() == 0x57415645;
+            if (Integer.reverseBytes(input.readInt()) != file.length() - 8 || input.readInt() != 0x57415645 || input.readInt() != 0x666d7420) return false;
+            if (Integer.reverseBytes(input.readInt()) != 16 || Short.reverseBytes(input.readShort()) != 1 || Short.reverseBytes(input.readShort()) != 1) return false;
+            if (Integer.reverseBytes(input.readInt()) != 8000) return false;
+            input.seek(32);
+            if (Short.reverseBytes(input.readShort()) != 2 || Short.reverseBytes(input.readShort()) != 16 || input.readInt() != 0x64617461) return false;
+            return Integer.reverseBytes(input.readInt()) == file.length() - 44;
         } catch (IOException e) { return false; }
     }
     static String state(Context c, JSONObject row, JSONObject defaults) {
@@ -100,6 +105,6 @@ final class SpeechCache {
     static JSONObject status(Context c) throws JSONException {
         return new JSONObject().put("engine", "AISHELL-3 VITS · 174音色 · 8kHz")
             .put("speakerCount", 174).put("pending", pending.size()).put("cacheBytes", bytes(c))
-            .put("error", c.getSharedPreferences("memo", 0).getString("speechLastError", ""));
+            .put("error", c.getSystemService(android.os.UserManager.class).isUserUnlocked() ? c.getSharedPreferences("memo", 0).getString("speechLastError", "") : "");
     }
 }

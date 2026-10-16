@@ -12,6 +12,7 @@ public final class SpeechSettings {
     public static final String GENERIC = "你有一条待办提醒，请解锁后查看";
     private SpeechSettings() {}
     public static JSONObject defaults(Context c) {
+        if (!c.getSystemService(android.os.UserManager.class).isUserUnlocked()) return new JSONObject();
         try { return new JSONObject(c.getSharedPreferences("memo", 0).getString("defaults", "{}")); }
         catch (JSONException e) { return new JSONObject(); }
     }

@@ -48,6 +48,18 @@ public class ReminderEngineTest {
     Intent intent(String action, long occurrence) {
         return new Intent(action).putExtra("id", 1).putExtra("token", occurrence).putExtra("version", 1L);
     }
+    @Test public void speechNotificationDoesNotRingAndBackupFreezesInheritedVoice() throws Exception {
+        engine.defaults(new JSONObject().put("speechMode", "on").put("speechVoice", "33").put("speechRate", 0.9).toString());
+        JSONObject r = future(row()).put("speechMode", "inherit").put("speechHideLocked", false).put("sound", true);
+        engine.save(r.toString());
+        JSONObject saved = row();
+        NotificationChannel channel = context.getSystemService(NotificationManager.class).getNotificationChannel(saved.getString("notificationChannelId"));
+        assertNull(channel.getSound());
+        JSONObject portable = BackupCodec.decode(engine.exportBackup()).getJSONObject(0);
+        assertEquals("on", portable.getString("speechMode")); assertEquals("33", portable.getString("speechVoice"));
+        assertEquals(0.9, portable.getDouble("speechRate"), 0.001); assertFalse(portable.getBoolean("speechHideLocked"));
+        assertFalse(engine.exportBackup().contains("speech-audio"));
+    }
     @Test public void preciseDateSurvivesSaveMirrorRestoreAndBackup() throws Exception {
         JSONObject r = future(row()).put("second", 43).put("millisecond", 625);
         engine.save(r.toString());

@@ -44,7 +44,7 @@ class SpeechSession {
       if (ticket == _previewTicket) await native.invokeMethod('playSpeechPreview', job['key']);
     });
   }
-  void stopPreview() { _previewTicket++; native.invokeMethod('stopSpeechPreview'); }
+  void stopPreview() { _previewTicket++; unawaited(native.invokeMethod<void>('stopSpeechPreview').catchError((Object _) {})); }
 
   Future<void> _generate(List<Map<String, dynamic>> jobs) async {
     final dir = await native.invokeMethod<String>('prepareTts');
