@@ -169,7 +169,7 @@ VoiceControls extractVoiceControls(String source, Reminder r) {
     (RegExp(r'(?:关闭|取消|禁用)(?:语音提醒|语音播报|朗读提醒)$'), (_) { if (!foundSpeech) { r.speechMode = 'off'; foundSpeech = true; settings.add('语音播报：关闭'); } }),
     (RegExp(r'(?:(?:开启|打开|启用)(?:语音提醒|语音播报|朗读提醒)|到时候(?:读|念)出来)$'), (_) { if (!foundSpeech) { r.speechMode = 'on'; foundSpeech = true; settings.add('语音播报：开启'); } }),
     (RegExp(r'(?:语音提醒|语音播报)(?:跟随默认|使用默认设置)$'), (_) { if (!foundSpeech) { r.speechMode = 'inherit'; foundSpeech = true; settings.add('语音播报：跟随默认'); } }),
-    (RegExp(r'(?:只振动|静音提醒|不发声|不要声音)$'), (_) { if (!foundSound) { r.sound = false; foundSound = true; } if (!foundSpeech) { r.speechMode = 'off'; foundSpeech = true; } settings.add('声音：静音'); }),
+    (RegExp(r'(?:只振动|静音提醒|不发声|不要声音)$'), (match) { if (match.group(0) == '只振动' && r.vibration == 'off') r.vibration = 'three'; if (!foundSound) { r.sound = false; foundSound = true; } if (!foundSpeech) { r.speechMode = 'off'; foundSpeech = true; } settings.add('声音：静音'); }),
     (RegExp(r'(?:开启|打开|使用)(?:系统)?铃声(?:提醒)?$'), (_) { if (!foundSound) { r.sound = true; foundSound = true; settings.add('备用铃声：开启'); } }),
     (RegExp(r'(?:关闭|取消|不要)(?:系统)?铃声(?:提醒)?$'), (_) { if (!foundSound) { r.sound = false; foundSound = true; settings.add('备用铃声：关闭'); } }),
     (RegExp(r'锁屏(?:时)?(?:隐藏播报正文|隐藏播放内容|隐藏语音内容)$'), (_) { if (!foundPrivacy) { r.speechHideLocked = true; foundPrivacy = true; settings.add('锁屏播报：隐藏正文'); } }),

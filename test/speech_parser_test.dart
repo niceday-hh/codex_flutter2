@@ -28,6 +28,7 @@ void main() {
     final p = parseVoice('五分钟后提醒我喝水，开启语音提醒，锁屏时正常播报，关闭铃声', now: now);
     expect(p.reminder.text, '喝水'); expect(p.reminder.speechMode, 'on');
     expect(p.reminder.speechHideLocked, isFalse); expect(p.reminder.sound, isFalse);
+    expect(parseVoice('五分钟后提醒我喝水，只振动', now: now, defaults: Reminder(vibration: 'off')).reminder.vibration, 'three');
     expect(parseVoice('五分钟后提醒我喝水，静音提醒', now: now, defaults: Reminder(speechMode: 'on')).reminder.speechMode, 'off');
   });
   test('speech data roundtrips and old reminders keep speech disabled', () {
