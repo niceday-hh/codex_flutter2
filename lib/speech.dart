@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 import 'asr.dart';
@@ -113,7 +112,7 @@ void _speechWorker(List<dynamic> request) {
         for (var offset = 0; offset < text.length; offset += 48) {
           final stop = (offset + 48).clamp(0, text.length);
           final audio = engine.generate(text: text.substring(offset, stop), sid: job['sid'] as int, speed: (job['rate'] as num).toDouble());
-          if (audio.samples.isEmpty || audio.samples.any((v) => !v.isFinite())) throw StateError('未生成有效语音');
+          if (audio.samples.isEmpty || audio.samples.any((v) => !v.isFinite)) throw StateError('未生成有效语音');
           samples.add(audio.samples); count += audio.samples.length;
           if (count > 8000 * 900) throw StateError('播报超过15分钟');
         }

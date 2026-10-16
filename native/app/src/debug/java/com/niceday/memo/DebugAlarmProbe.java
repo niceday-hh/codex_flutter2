@@ -11,6 +11,31 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
             if ("CLEAR".equals(intent.getAction())) {
                 JSONArray rows = new JSONObject(engine.state()).getJSONArray("reminders");
                 for (int i = 0; i < rows.length(); i++) engine.delete(rows.getJSONObject(i).getInt("id"));
+            } else if ("SPEECH_SEED".equals(intent.getAction())) {
+                engine.reliableMode(false);
+                engine.defaults(new JSONObject().put("sound", false).put("vibration", "off").put("wakeScreen", false)
+                    .put("presentation", "drawer").put("speechMode", "on").put("speechVoice", "33").put("speechRate", 1)
+                    .put("speechHideLocked", intent.getBooleanExtra("hide", true)).toString());
+                setResultCode(engine.createTest(180, 2));
+            } else if ("PREPARE_SPEECH".equals(intent.getAction())) {
+                setResultData("preparing=" + MainActivity.requestSpeechPreparation());
+            } else if ("SPEECH_STATUS".equals(intent.getAction())) {
+                try (java.io.FileOutputStream out = context.openFileOutput("speech-probe.json", Context.MODE_PRIVATE)) {
+                    out.write(engine.state().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                }
+            } else if ("RETIME_SPEECH".equals(intent.getAction())) {
+                JSONArray rows = new JSONObject(engine.state()).getJSONArray("reminders");
+                JSONObject row = null;
+                for (int i = 0; i < rows.length(); i++) if (rows.getJSONObject(i).getInt("id") == intent.getIntExtra("id", 0)) row = rows.getJSONObject(i);
+                if (row == null) throw new IllegalArgumentException("Unknown fixture");
+                java.util.Calendar date = java.util.Calendar.getInstance(); date.add(java.util.Calendar.SECOND, 25);
+                row.put("year", date.get(java.util.Calendar.YEAR)).put("month", date.get(java.util.Calendar.MONTH) + 1)
+                    .put("day", date.get(java.util.Calendar.DAY_OF_MONTH)).put("hour", date.get(java.util.Calendar.HOUR_OF_DAY))
+                    .put("minute", date.get(java.util.Calendar.MINUTE)).put("second", date.get(java.util.Calendar.SECOND))
+                    .put("millisecond", date.get(java.util.Calendar.MILLISECOND)).put("intervalMinutes", 1).put("totalCount", 2);
+                engine.save(row.toString()); setResultCode(row.getInt("id"));
+            } else if ("SPEECH_ACK".equals(intent.getAction())) {
+                engine.acknowledge(intent.getIntExtra("id", 0), intent.getLongExtra("token", 0));
             } else if ("KILL_PROCESS".equals(intent.getAction())) {
                 // Same-UID shell commands can still be denied by SELinux on emulator images.
                 // Finish the ordered broadcast, then send a genuine SIGKILL to this process.

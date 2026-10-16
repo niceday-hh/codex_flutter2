@@ -518,6 +518,9 @@ public final class ReminderEngine {
             .put("enabled", true).put("sound", defaults.getBoolean("sound")).put("vibration", defaults.getString("vibration"))
             .put("wakeScreen", defaults.getBoolean("wakeScreen")).put("ringtone", defaults.getString("ringtone"))
             .put("presentation", defaults.getString("presentation")).put("lockscreen", defaults.getString("lockscreen"))
+            .put("speechMode", defaults.optString("speechMode", "off")).put("speechVoice", defaults.optString("speechVoice", "0"))
+            .put("speechRate", defaults.optDouble("speechRate", 1)).put("speechHideLocked", defaults.optBoolean("speechHideLocked", true))
+            .put("speechRepeat", defaults.optBoolean("speechRepeat", true))
             .put("intervalMinutes", 5).put("totalCount", Math.max(1, Math.min(20, totalCount)));
         save(config.toString());
         int id = prefs.getInt("nextId", 1) - 1;

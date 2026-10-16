@@ -42,7 +42,10 @@ public final class SpeechPlaybackService extends Service {
         SpeechPlaybackService value = instance;
         if (value != null) value.handler.post(() -> {
             value.queue.removeIf(i -> i.getIntExtra("id", 0) == id);
-            if (value.current != null && value.current.getIntExtra("id", 0) == id) value.finishCurrent();
+            if (value.current != null && value.current.getIntExtra("id", 0) == id) {
+                new ReminderEngine(value).event("speech_stopped", id, value.current.getLongExtra("token", 0), "手动确认或记录变更");
+                value.finishCurrent();
+            }
         });
     }
     static void pauseForRecording() {
@@ -52,7 +55,9 @@ public final class SpeechPlaybackService extends Service {
     private boolean locked() { return getSystemService(KeyguardManager.class).isKeyguardLocked(); }
     @Override public void onCreate() {
         super.onCreate(); instance = this;
-        getSystemService(NotificationManager.class).createNotificationChannel(new NotificationChannel(CHANNEL, "语音播放状态", NotificationManager.IMPORTANCE_LOW));
+        NotificationChannel channel = new NotificationChannel(CHANNEL, "语音播放状态", NotificationManager.IMPORTANCE_LOW);
+        channel.setSound(null, null); channel.enableVibration(false);
+        getSystemService(NotificationManager.class).createNotificationChannel(channel);
         Notification notification = new Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("定时备忘录").setContentText("正在播放提醒语音")
             .setVisibility(Notification.VISIBILITY_SECRET).setOngoing(true).setSilent(true).build();

@@ -42,6 +42,11 @@ public final class MainActivity extends FlutterActivity {
         });
         return true;
     }
+    static boolean requestSpeechPreparation() {
+        MainActivity activity = foreground.get();
+        if (activity == null || !activity.resumed || activity.channel == null) return false;
+        activity.channel.invokeMethod("prepareSpeech", null); return true;
+    }
     private MethodChannel channel;
     private SharedPreferences memoPreferences;
     private SharedPreferences.OnSharedPreferenceChangeListener memoListener;
