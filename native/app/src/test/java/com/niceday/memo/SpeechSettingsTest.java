@@ -12,7 +12,7 @@ import static org.junit.Assert.*;
 public class SpeechSettingsTest {
     @Test public void screenOffProtectsBodyBeforeKeyguardFinishesLocking() {
         android.content.Context c = org.robolectric.RuntimeEnvironment.getApplication();
-        org.robolectric.Shadows.shadowOf(c.getSystemService(android.app.KeyguardManager.class)).setIsKeyguardLocked(false);
+        org.robolectric.Shadows.shadowOf(c.getSystemService(android.app.KeyguardManager.class)).setKeyguardLocked(false);
         org.robolectric.Shadows.shadowOf(c.getSystemService(android.os.PowerManager.class)).setIsInteractive(false);
         assertTrue(SpeechPlaybackService.privacyLocked(c));
         org.robolectric.Shadows.shadowOf(c.getSystemService(android.os.PowerManager.class)).setIsInteractive(true);
