@@ -31,7 +31,8 @@ class ParsedVoice {
   final String? warning;
   final Duration? relativeDelay;
   final DateTime reference;
-  const ParsedVoice(this.reminder, this.hasTime, this.warning, this.reference, {this.relativeDelay});
+  final List<String> settings;
+  const ParsedVoice(this.reminder, this.hasTime, this.warning, this.reference, {this.relativeDelay, this.settings = const []});
 }
 
 // Only the instruction before “提醒我” controls scheduling. The reminder body
@@ -54,6 +55,12 @@ ParsedVoice parseVoice(String source, {DateTime? now, Reminder? defaults}) {
       if (absolute != null) { instruction = absolute.group(1)!; body = body.substring(absolute.end); }
     }
   }
+  final controls = extractVoiceControls(body, r);
+  body = controls.body;
+  ParsedVoice result(bool hasTime, String? warning, {Duration? delay}) => ParsedVoice(
+    r, hasTime, [if (warning != null) warning, if (controls.warning != null) controls.warning].join(' ').isEmpty
+      ? null : [if (warning != null) warning, if (controls.warning != null) controls.warning].join(' '),
+    current, relativeDelay: delay, settings: controls.settings);
   final s = instruction.replaceAll(RegExp(r'[\s，,。]'), '');
   r.text = body.replaceAll(RegExp(r'^[，,、\s]+|[，。！？、,.!?\s]+$'), '').trim();
   final durationMatch = RegExp(r'^(.*?)(?:以后|之后|后)$').firstMatch(s);
@@ -80,10 +87,10 @@ ParsedVoice parseVoice(String source, {DateTime? now, Reminder? defaults}) {
     if (valid) {
       final delay = Duration(milliseconds: millis);
       r.date = current.add(delay);
-      return ParsedVoice(r, true, null, current, relativeDelay: delay);
+      return result(true, null, delay: delay);
     }
     r.date = current; r.timeConfirmed = false;
-    return ParsedVoice(r, false, '未能确定倒计时时长，请手动选择日期和时间。', current);
+    return result(false, '未能确定倒计时时长，请手动选择日期和时间。');
   }
   final clock = RegExp('($n)[点时](半|一刻|三刻|($n)分?)?').firstMatch(s);
   final colon = RegExp(r'(\d{1,2})[:：](\d{1,2})(?:[:：](\d{1,2}))?').firstMatch(s);
@@ -140,5 +147,52 @@ ParsedVoice parseVoice(String source, {DateTime? now, Reminder? defaults}) {
   if (hasTime && r.repeat == 'none' && r.dateConfirmed && !date.isAfter(current)) {
     warning = '这个时间已经过去，请手动修改日期或时间；不会自动顺延。';
   }
-  return ParsedVoice(r, hasTime, warning, current);
+  return result(hasTime, warning);
+}
+
+
+class VoiceControls {
+  final String body;
+  final List<String> settings;
+  final String? warning;
+  const VoiceControls(this.body, this.settings, this.warning);
+}
+
+// Consume only a suffix of explicit commands. A phrase inside a task remains content.
+VoiceControls extractVoiceControls(String source, Reminder r) {
+  var body = source.trim().replaceAll(RegExp(r'[。！？.!?\s]+$'), '');
+  final settings = <String>[];
+  var foundSpeech = false, foundSound = false;
+  String? warning;
+  final rules = <(RegExp, void Function(RegExpMatch))>[
+    (RegExp(r'(?:不要|不用)(?:开启|打开|启用)?(?:语音提醒|语音播报|朗读提醒|读出来|念出来)$'), (_) { if (!foundSpeech) { r.speechMode = 'off'; foundSpeech = true; settings.add('语音播报：关闭'); } }),
+    (RegExp(r'(?:关闭|取消|禁用)(?:语音提醒|语音播报|朗读提醒)$'), (_) { if (!foundSpeech) { r.speechMode = 'off'; foundSpeech = true; settings.add('语音播报：关闭'); } }),
+    (RegExp(r'(?:(?:开启|打开|启用)(?:语音提醒|语音播报|朗读提醒)|到时候(?:读|念)出来)$'), (_) { if (!foundSpeech) { r.speechMode = 'on'; foundSpeech = true; settings.add('语音播报：开启'); } }),
+    (RegExp(r'(?:语音提醒|语音播报)(?:跟随默认|使用默认设置)$'), (_) { if (!foundSpeech) { r.speechMode = 'inherit'; foundSpeech = true; settings.add('语音播报：跟随默认'); } }),
+    (RegExp(r'(?:只振动|静音提醒|不发声|不要声音)$'), (_) { if (!foundSound) { r.sound = false; foundSound = true; } if (!foundSpeech) { r.speechMode = 'off'; foundSpeech = true; } settings.add('声音：静音'); }),
+    (RegExp(r'(?:开启|打开|使用)(?:系统)?铃声(?:提醒)?$'), (_) { if (!foundSound) { r.sound = true; foundSound = true; settings.add('备用铃声：开启'); } }),
+    (RegExp(r'(?:关闭|取消|不要)(?:系统)?铃声(?:提醒)?$'), (_) { if (!foundSound) { r.sound = false; foundSound = true; settings.add('备用铃声：关闭'); } }),
+    (RegExp(r'锁屏(?:时)?(?:隐藏播报正文|隐藏播放内容|隐藏语音内容)$'), (_) { r.speechHideLocked = true; settings.add('锁屏播报：隐藏正文'); }),
+    (RegExp(r'锁屏(?:时)?(?:不隐藏播报正文|不隐藏播放内容|正常播报|朗读正文)$'), (_) { r.speechHideLocked = false; settings.add('锁屏播报：允许正文'); }),
+  ];
+  while (true) {
+    var consumed = false;
+    for (final rule in rules) {
+      final match = rule.$1.firstMatch(body);
+      if (match == null) continue;
+      final prefix = body.substring(0, match.start);
+      if (RegExp(r'(?:如何|怎么|怎样|是否|能否|学习|研究|教程|方法)(?:去)?$').hasMatch(prefix.trim())) {
+        warning = '末尾可能属于待办正文，已保留；请确认语音播报开关。';
+        return VoiceControls(body, settings, warning);
+      }
+      // No reminder body means this could be the task itself, not a setting.
+      if (prefix.replaceAll(RegExp(r'[，,；;。\s]'), '').isEmpty) continue;
+      rule.$2(match);
+      body = prefix.replaceAll(RegExp(r'[，,；;。\s]+$'), '');
+      consumed = true;
+      break;
+    }
+    if (!consumed) break;
+  }
+  return VoiceControls(body, settings.reversed.toList(), warning);
 }

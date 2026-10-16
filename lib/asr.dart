@@ -24,8 +24,30 @@ class AsrSession {
   Timer? _idle;
   int _serial = 0, _users = 0;
   bool _releaseRequested = false;
+  Future<void>? _suspension;
+  Completer<void>? _drained, _closed;
 
-  Future<void> prepare() {
+  Future<T> withoutModel<T>(Future<T> Function() work) async {
+    final previous = _suspension;
+    final paused = Completer<void>();
+    _suspension = paused.future;
+    try {
+      if (previous != null) await previous;
+      release();
+      if (_preparing != null) await _preparing!.catchError((Object _) {});
+      if (_users > 0) { _drained ??= Completer<void>(); await _drained!.future; }
+      release();
+      if (_closed != null) await _closed!.future;
+      return await work();
+    } finally {
+      paused.complete();
+      if (identical(_suspension, paused.future)) _suspension = null;
+    }
+  }
+
+
+  Future<void> prepare() async {
+    if (_suspension != null) await _suspension;
     _releaseRequested = false;
     _idle?.cancel();
     if (_commands != null) { _armIdle(); return Future.value(); }
@@ -62,15 +84,20 @@ class AsrSession {
         for (final c in _pending.values) { if (!c.isCompleted) c.completeError(failure); }
         _pending.clear(); _close();
       });
-      _worker = await Isolate.spawn(_recognizerWorker, [port.sendPort, dir], onError: errors.sendPort, errorsAreFatal: true);
+      final exited = ReceivePort();
+      final closed = _closed = Completer<void>();
+      exited.listen((_) { if (!closed.isCompleted) closed.complete(); exited.close(); });
+      _worker = await Isolate.spawn(_recognizerWorker, [port.sendPort, dir], onError: errors.sendPort, onExit: exited.sendPort, errorsAreFatal: true);
       await ready.future;
       status.value = '离线模型已就绪';
       if (_releaseRequested) { release(); } else { _armIdle(); }
     } catch (_) {
+      if (_worker == null && _closed != null && !_closed!.isCompleted) _closed!.complete();
       _close(); status.value = '模型准备失败，点击录音可重试'; rethrow;
     }
   }
   Future<String> transcribe(String path) async {
+    if (_suspension != null) await _suspension;
     _users++;
     try {
       await prepare();
@@ -83,6 +110,7 @@ class AsrSession {
       return await result.future;
     } finally {
       _users--;
+      if (_users == 0 && _drained != null) { _drained!.complete(); _drained = null; }
       await discardRecording(path);
       if (_pending.isEmpty) {
         status.value = _commands == null ? '离线模型尚未准备' : '离线模型已就绪';

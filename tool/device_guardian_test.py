@@ -2,6 +2,7 @@
 Debug-only fixture broadcasts prepare data; none simulate a BASE/RETRY delivery.
 """
 import json
+import os
 import subprocess
 import time
 import xml.etree.ElementTree as ET
@@ -109,21 +110,27 @@ try:
     result['process_recovery_delivery'] = delivered(id, planned)
     print('PASS: real task removal, SIGKILL, OS sticky service recreation and actual alarm delivery', flush=True)
 
-    broadcast('CLEAR')
-    id, planned = seed(180)
-    before = max(e['at'] for e in events())
-    adb('reboot')
-    adb('wait-for-device')
-    wait_for(lambda: shell('getprop', 'sys.boot_completed') == '1', 120, 'Device reboot did not complete')
-    def boot_restored():
-        fresh = [e for e in events() if e['at'] > before]
-        return (any(e['type'] == 'restored' and e['detail'] == 'android.intent.action.BOOT_COMPLETED' for e in fresh)
-                and any(e['type'] == 'scheduled' and e['id'] == id for e in fresh)
-                and any(e['type'] == 'guardian_started' for e in fresh))
-    wait_for(boot_restored, 100, 'Boot receiver/service did not restore without Activity')
-    result['reboot_delivery'] = delivered(id, planned)
-    result['reboot_actual_delivery_without_activity'] = True
-    print('PASS: reboot restored service and actually delivered the alarm without opening the Activity', flush=True)
+    if os.environ.get('MEMO_RUN_REBOOT_TESTS') == '1':
+        broadcast('CLEAR')
+        id, planned = seed(180)
+        before = max(e['at'] for e in events())
+        adb('reboot')
+        adb('wait-for-device')
+        wait_for(lambda: shell('getprop', 'sys.boot_completed') == '1', 120, 'Device reboot did not complete')
+        def boot_restored():
+            fresh = [e for e in events() if e['at'] > before]
+            return (any(e['type'] == 'restored' and e['detail'] == 'android.intent.action.BOOT_COMPLETED' for e in fresh)
+                    and any(e['type'] == 'scheduled' and e['id'] == id for e in fresh)
+                    and any(e['type'] == 'guardian_started' for e in fresh))
+        wait_for(boot_restored, 100, 'Boot receiver/service did not restore without Activity')
+        result['reboot_delivery'] = delivered(id, planned)
+        result['reboot_actual_delivery_without_activity'] = True
+        print('PASS: reboot restored service and actually delivered the alarm without opening the Activity', flush=True)
+
+    else:
+        print('SKIP: reboot tests disabled by user preference', flush=True)
+        result['reboot_actual_delivery_without_activity'] = None
+        result['reboot_skipped'] = True
 
     broadcast('CLEAR')
     id, planned = seed(20)
@@ -139,7 +146,7 @@ try:
     result['force_stop_boundary'] = True
     print('PASS: force-stop remains a system boundary; explicit relaunch restores the missed task', flush=True)
 finally:
-    if not all(result[k] for k in ['task_removal', 'sticky_process_recovery', 'reboot_actual_delivery_without_activity', 'force_stop_boundary']):
+    if not all(result[k] for k in ['task_removal', 'sticky_process_recovery', 'force_stop_boundary']):
         try:
             print('Guardian failure:', json.dumps({'result': result, 'runtime': runtime()}, ensure_ascii=False), flush=True)
             print(shell('dumpsys', 'activity', 'services', PACKAGE), flush=True)

@@ -6,6 +6,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'asr.dart';
 import 'reminder.dart';
 import 'voice_parser.dart';
+import 'speech.dart';
+import 'speech_options.dart';
 
 const purple = Color(0xFF7252F6);
 const ink = Color(0xFF25213A);
@@ -67,12 +69,14 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     native.setMethodCallHandler((call) async {
       if (call.method == 'openReminder') { await reload(); if (mounted) openById(call.arguments as int); }
       if (call.method == 'stateChanged') { await reload(); }
+      if (call.method == 'prepareSpeech') { await speech.preparePending(retry: true); }
     });
     initialize();
   }
   Future<void> initialize() async {
     try { await native.invokeMethod('restore'); } catch (_) {}
     await reload();
+    unawaited(speech.preparePending());
     try {
       final id = await native.invokeMethod<int>('initialReminderId');
       if (mounted && id != null && id > 0) openById(id);
@@ -135,7 +139,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
           foregroundColor: Colors.white, tooltip: '新建提醒', child: const Icon(Icons.add_rounded, size: 32)) : null,
     bottomNavigationBar: NavigationBar(backgroundColor: Colors.white,
       selectedIndex: tab, indicatorColor: const Color(0xFFECE5FF),
-      onDestinationSelected: (i) => setState(() => tab = i), destinations: const [
+      onDestinationSelected: (i) { speech.stopPreview(); setState(() => tab = i); }, destinations: const [
         NavigationDestination(icon: Icon(Icons.description_outlined), selectedIcon: Icon(Icons.description_rounded), label: '备忘录'),
         NavigationDestination(icon: Icon(Icons.calendar_month_outlined), label: '日历'),
         NavigationDestination(icon: Icon(Icons.mic_none_rounded), selectedIcon: Icon(Icons.mic_rounded), label: '语音'),
@@ -203,6 +207,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         const SizedBox(width: 15), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(r.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: r.completed ? muted : ink, fontWeight: FontWeight.w600)),
           const SizedBox(height: 6), Wrap(spacing: 5, runSpacing: 4, children: [
+            if (r.speechMode != 'off') Tag(r.speechState == 'ready' ? '语音已就绪' : r.speechState == 'preparing' ? '语音准备中' : '语音待准备'),
             Tag(r.completed ? '已完成' : !r.enabled ? '未启用' : r.unread ? '未读 ${r.attempts}/${r.totalCount}' : r.repeatLabel),
             Text(dateLabel(r.displayDate), style: const TextStyle(fontSize: 11, color: muted)),
           ]),
@@ -263,7 +268,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         child: const Icon(Icons.notifications_rounded, color: Colors.white, size: 32)),
       const SizedBox(width: 16), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('定时备忘录', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-        Text('v0.5.0 · 本地保存 · 离线语音', style: TextStyle(color: muted, fontSize: 12))])),
+        Text('v0.6.0 · 本地保存 · 离线语音', style: TextStyle(color: muted, fontSize: 12))])),
     ]))),
     section('后台可靠性', '增强最近任务关闭后的提醒维护'),
     settingsGroup([
@@ -353,7 +358,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         if (proceed != true) { return; }
         await native.invokeMethod('requestNotifications');
         final count = await native.invokeMethod<int>('importBackup');
-        if (count != null) { toast('已合并导入 $count 条提醒'); }
+        if (count != null) { unawaited(speech.preparePending()); toast('已合并导入 $count 条提醒'); }
       }),
     ]),
     section('提醒自检', ''), settingsGroup([
@@ -380,9 +385,17 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       const ListTile(leading: Icon(Icons.security, color: purple), title: Text('固定发布签名'),
         subtitle: Text('新版之间支持覆盖更新；首次与旧版并存，保留旧数据')),
     ]),
-    section('语音', ''), settingsGroup([
+    section('语音识别', ''), settingsGroup([
       const ListTile(leading: Icon(Icons.mic_none_rounded, color: purple), title: Text('离线语音识别'),
         subtitle: Text('中文 Paraformer int8 · 录音不上传'), trailing: Tag('已内置')),
+    ]),
+    section('离线语音播报', 'AISHELL-3 VITS · 174个音色'), settingsGroup([
+      defaultSpeechOptions(),
+      ValueListenableBuilder<String>(valueListenable: speech.status, builder: (_, value, child) => ListTile(
+        leading: const Icon(Icons.graphic_eq, color: purple), title: const Text('语音准备状态'), subtitle: Text(value))),
+      settingRow(Icons.refresh, '重新准备提醒语音', '补齐未完成的音频，不改变提醒时间', () => speech.preparePending(retry: true)),
+      if (((store.status['speech'] as Map?)?['error'] as String? ?? '').isNotEmpty)
+        ListTile(subtitle: Text((store.status['speech'] as Map)['error'] as String)),
     ]),
     section('使用提示', ''), Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Surface(child: const Text(
       '• 手动划掉系统通知，或在 App 中滑动确认，才算已读。点开通知、横幅自动收起不算已读。\n\n'
@@ -394,6 +407,19 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     if ((store.status['lastError'] as String? ?? '').isNotEmpty) Padding(padding: const EdgeInsets.all(24),
       child: Text('最近的系统提示：${store.status['lastError']}', style: const TextStyle(color: muted, fontSize: 12))),
   ]);
+  Widget defaultSpeechOptions() {
+    final config = Reminder(
+      speechMode: store.defaults['speechMode'] as String? ?? 'off',
+      speechVoice: store.defaults['speechVoice'] as String? ?? '0',
+      speechRate: (store.defaults['speechRate'] as num?)?.toDouble() ?? 1.0,
+      speechHideLocked: store.defaults['speechHideLocked'] as bool? ?? true,
+      speechRepeat: store.defaults['speechRepeat'] as bool? ?? true);
+    return SpeechOptions(defaultSettings: true, reminder: config, defaults: store.defaults, onChanged: () async {
+      store.defaults.addAll({'speechMode': config.speechMode, 'speechVoice': config.speechVoice,
+        'speechRate': config.speechRate, 'speechHideLocked': config.speechHideLocked, 'speechRepeat': config.speechRepeat});
+      await persistDefaults();
+    });
+  }
   Future<void> persistDefaults() async {
     try { await store.saveDefaults(); await reload(); }
     catch (e) { await reload(); toast(niceError(e)); }
@@ -644,6 +670,7 @@ class _ReminderEditorState extends State<ReminderEditor> {
       if (widget.voice != null) ...[
         Surface(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(!r.dateConfirmed ? '日期无效，请手动选择日期' : !r.timeConfirmed ? '请手动选择有效时间' : r.repeat == 'none' && !r.date.isAfter(DateTime.now()) ? '目标时间已过期，请修改或明确重新计时' : '请确认识别出的时间和内容', style: const TextStyle(color: purple)),
+          if (widget.voice!.settings.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(widget.voice!.settings.join(' · '))),
           if (widget.voice!.relativeDelay != null) ...[
             Text(manualTime ? '已手动修改，按下方日期和时间提醒' : '以 ${countdownReference!.hour}:${countdownReference!.minute.toString().padLeft(2, '0')}:${countdownReference!.second.toString().padLeft(2, '0')} 为基准计时，目标为 ${r.date.year}年${r.date.month}月${r.date.day}日 ${r.preciseTime}'),
             TextButton(onPressed: () => setState(() { countdownReference = DateTime.fromMillisecondsSinceEpoch(DateTime.now().millisecondsSinceEpoch); r.date = countdownReference!.add(widget.voice!.relativeDelay!); r.dateConfirmed = true; r.timeConfirmed = true; manualTime = false; }), child: const Text('从现在起重新计时')),
@@ -690,6 +717,10 @@ class _ReminderEditorState extends State<ReminderEditor> {
             try { final v = await native.invokeMethod<String>('pickRingtone', r.ringtone); if (v != null && mounted) setState(() => r.ringtone = v); }
             catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(niceError(e)))); }
           }),
+      ])), const SizedBox(height: 14),
+      Surface(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
+        const ListTile(title: Text('语音播报', style: TextStyle(fontWeight: FontWeight.w700))),
+        SpeechOptions(reminder: r, defaults: widget.store.defaults, onChanged: () async { if (mounted) setState(() {}); }),
       ])), const SizedBox(height: 14),
       Surface(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
         const ListTile(title: Text('未读再次提醒', style: TextStyle(fontWeight: FontWeight.w700)), subtitle: Text('手动划掉通知或滑动确认后停止')),
@@ -814,11 +845,11 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
     const SizedBox(height: 18), AnimatedBuilder(animation: animation, builder: (_, child) => SizedBox(height: 38,
       child: CustomPaint(painter: WavePainter(recording ? animation.value : 0, recording)))),
     const SizedBox(height: 24), Surface(child: TextField(controller: text, enabled: !busy && !recording, minLines: 3, maxLines: 6,
-      onChanged: (value) => setState(() { reference = value.trim().isEmpty ? null : reference ?? DateTime.now(); }), decoration: const InputDecoration(hintText: '例如：五分钟后提醒我喝水', border: InputBorder.none, filled: false))),
+      onChanged: (value) => setState(() { reference = value.trim().isEmpty ? null : reference ?? DateTime.now(); }), decoration: const InputDecoration(hintText: '例如：二十分钟后提醒我做饭，开启语音提醒', border: InputBorder.none, filled: false))),
     const SizedBox(height: 16), if (warning != null) Padding(padding: const EdgeInsets.only(bottom: 16), child: Text(warning!, style: const TextStyle(color: muted))),
     FilledButton(onPressed: text.text.trim().isEmpty || busy || recording ? null : confirm, child: const Text('确认并设置提醒')),
     const SizedBox(height: 12), OutlinedButton(onPressed: busy ? null : microphone, child: Text(recording ? '结束录音' : '重新录音')),
-    const SizedBox(height: 20), const Text('识别后请确认日期、时间和内容。支持五分钟后、半小时后、明天、几月几号、每天、工作日及每周几。倒计时从录音结束或开始输入时计时，保存前可明确重新计时。录音最长45秒，识别后自动删除。',
+    const SizedBox(height: 20), const Text('可在句末说“开启语音提醒”“不要语音播报”“锁屏时正常播报”。未说明时跟随默认设置。识别后请确认日期、时间和内容。支持五分钟后、半小时后、明天、几月几号、每天、工作日及每周几。倒计时从录音结束或开始输入时计时，保存前可明确重新计时。录音最长45秒，识别后自动删除。',
       textAlign: TextAlign.center, style: TextStyle(color: muted, fontSize: 12, height: 1.6)),
   ]);
 }

@@ -26,13 +26,16 @@ final class NotificationStyles {
     static int visibility(JSONObject r) {
         return "hidden".equals(r.optString("lockscreen")) ? Notification.VISIBILITY_SECRET : Notification.VISIBILITY_PRIVATE;
     }
+    private boolean sound(JSONObject r) {
+        return r.optBoolean("sound", true) && !SpeechSettings.enabled(r, SpeechSettings.defaults(context));
+    }
     private Uri ringtone(JSONObject r) {
         return r.optString("ringtone").isEmpty() ? RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
             : Uri.parse(r.optString("ringtone"));
     }
     private String key(JSONObject r) throws JSONException {
-        JSONArray values = new JSONArray().put(r.optBoolean("sound", true)).put(r.optString("vibration", "three"))
-            .put(r.optBoolean("sound", true) ? String.valueOf(ringtone(r)) : "")
+        JSONArray values = new JSONArray().put(sound(r)).put(r.optString("vibration", "three"))
+            .put(sound(r) ? String.valueOf(ringtone(r)) : "")
             .put(r.optString("presentation", "banner")).put(r.optString("lockscreen", "private"));
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(values.toString().getBytes(StandardCharsets.UTF_8));
@@ -43,7 +46,7 @@ final class NotificationStyles {
     }
     private boolean owned(String id) { return id.startsWith("memo_v2_") || id.startsWith("memo_v3_"); }
     private String legacyId(JSONObject r) {
-        return "memo_v2_" + Integer.toHexString((r.optBoolean("sound", true) + ":" + r.optString("vibration", "three") + ":" + ringtone(r)).hashCode());
+        return "memo_v2_" + Integer.toHexString((sound(r) + ":" + r.optString("vibration", "three") + ":" + ringtone(r)).hashCode());
     }
     static String vibrationName(String value) {
         return switch (value) {
@@ -52,7 +55,8 @@ final class NotificationStyles {
         };
     }
     private String ringtoneName(JSONObject r) {
-        if (!r.optBoolean("sound", true)) return "静音";
+        if (SpeechSettings.enabled(r, SpeechSettings.defaults(context))) return "语音播报";
+        if (!sound(r)) return "静音";
         if (r.optString("ringtone").isEmpty()) return "默认铃声";
         try {
             Ringtone tone = RingtoneManager.getRingtone(context, ringtone(r));
@@ -107,7 +111,7 @@ final class NotificationStyles {
         channel.setLockscreenVisibility(visibility(r));
         channel.enableVibration(!"off".equals(vibration));
         if (!"off".equals(vibration) && !"system".equals(vibration)) channel.setVibrationPattern(pattern(vibration));
-        channel.setSound(r.optBoolean("sound", true) ? ringtone(r) : null, new AudioAttributes.Builder()
+        channel.setSound(sound(r) ? ringtone(r) : null, new AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
         // Recreating a channel updates its name, but does not overwrite user-owned behavior.
         manager.createNotificationChannel(channel);
@@ -119,14 +123,14 @@ final class NotificationStyles {
         NotificationChannel c = manager.getNotificationChannel(id);
         int actualVisibility = c.getLockscreenVisibility();
         boolean knownVisibility = actualVisibility == Notification.VISIBILITY_PRIVATE || actualVisibility == Notification.VISIBILITY_PUBLIC || actualVisibility == Notification.VISIBILITY_SECRET;
-        boolean changed = c.getImportance() != importance(r) || (c.getSound() != null) != r.optBoolean("sound", true)
+        boolean changed = c.getImportance() != importance(r) || (c.getSound() != null) != sound(r)
             || c.shouldVibrate() != !"off".equals(r.optString("vibration", "three"))
             || (knownVisibility && actualVisibility != visibility(r));
         boolean customVibration = !"off".equals(r.optString("vibration")) && !"system".equals(r.optString("vibration"));
         boolean vibrationMismatch = c.shouldVibrate() != !"off".equals(r.optString("vibration"))
             || (customVibration && !Arrays.equals(c.getVibrationPattern(), pattern(r.optString("vibration"))));
         changed |= vibrationMismatch;
-        if (r.optBoolean("sound", true) && !Objects.equals(c.getSound(), ringtone(r))) changed = true;
+        if (sound(r) && !Objects.equals(c.getSound(), ringtone(r))) changed = true;
         return new JSONObject().put("id", id).put("name", name(r)).put("count", 0).put("isDefault", false)
             .put("importance", c.getImportance()).put("systemOverridden", changed)
             .put("vibrationMismatch", vibrationMismatch).put("actualVibration", actualVibration(c))

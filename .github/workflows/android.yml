@@ -1,7 +1,7 @@
 name: Android build and release
 on:
   push:
-    branches: [main]
+    branches: [main, speech-aishell3]
   workflow_dispatch:
 permissions:
   contents: write
@@ -44,6 +44,8 @@ jobs:
           key: paraformer-zh-int8-a071ee5419e14adb
       - name: Prepare embedded offline model
         run: python3 tool/fetch_model.py
+      - name: Prepare AISHELL-3 offline speech model
+        run: python3 tool/fetch_tts.py
       - name: Prepare fixed release signing
         id: sign
         env:
@@ -54,7 +56,7 @@ jobs:
         run: python3 tool/prepare_signing.py
       - name: Build arm64 APK
         run: flutter build apk --release --target-platform android-arm64
-      - name: Native notification, boot, state and backup tests
+      - name: Native notification, speech, state and backup tests
         run: cd android && ./gradlew :app:testReleaseUnitTest --no-daemon
       - name: Verify embedded model and fixed certificate
         run: python3 tool/verify_apk.py
@@ -94,6 +96,7 @@ jobs:
       - name: Build CI-only debug probe APK
         run: |
           bash tool/bootstrap.sh
+          python3 tool/fetch_tts.py
           flutter build apk --debug --target-platform android-x64
       - name: Free space for Android system image
         run: |
@@ -103,7 +106,9 @@ jobs:
           df -h /
       - name: Enable emulator acceleration
         run: sudo chmod 666 /dev/kvm
-      - name: Real Android process-death, Doze and reboot checks
+      - name: Android process-death, Doze, privacy and speech checks (no reboot)
+        env:
+          MEMO_RUN_REBOOT_TESTS: "0"
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api }}

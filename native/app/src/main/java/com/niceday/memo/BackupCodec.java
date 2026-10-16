@@ -30,6 +30,7 @@ public final class BackupCodec {
         if (interval < 1 || interval > 1440 || total < 1 || total > 20) throw new IllegalArgumentException("重提醒设置无效");
         r.put("intervalMinutes", interval).put("totalCount", total);
         validateStyle(r);
+        SpeechSettings.validate(r, false);
     }
     public static void validateStyle(JSONObject r) throws JSONException {
         if (!Arrays.asList("system", "off", "once", "twice", "three", "strong").contains(r.optString("vibration", "three")))

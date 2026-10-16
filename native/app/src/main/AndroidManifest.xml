@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -38,6 +39,8 @@
             android:directBootAware="true" android:stopWithTask="false" android:foregroundServiceType="systemExempted" />
         <service android:name="com.niceday.memo.ReminderPopupService" android:exported="false"
             android:stopWithTask="false" android:foregroundServiceType="systemExempted" />
+        <service android:name="com.niceday.memo.SpeechPlaybackService" android:exported="false"
+            android:stopWithTask="false" android:foregroundServiceType="mediaPlayback" />
         <meta-data android:name="flutterEmbedding" android:value="2" />
     </application>
     <queries>

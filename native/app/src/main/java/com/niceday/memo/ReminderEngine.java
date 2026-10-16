@@ -143,6 +143,11 @@ public final class ReminderEngine {
         JSONObject defaults = new JSONObject(prefs.getString("defaults", "{}"));
         BackupCodec.validateStyle(defaults);
         JSONArray groups = styles.groups(rows, new JSONObject(defaults.toString()), unlocked);
+        JSONObject speechDefaults = SpeechSettings.defaults(context);
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.getJSONObject(i);
+            row.put("speechState", SpeechCache.state(context, row, speechDefaults));
+        }
         result.put("reminders", rows);
         result.put("defaults", defaults);
         JSONObject status = new JSONObject();
@@ -155,7 +160,8 @@ public final class ReminderEngine {
         status.put("lastReceived", runtime.getLong("lastReceived", 0));
         status.put("lastRestored", runtime.getLong("lastRestored", 0));
         status.put("package", context.getPackageName());
-        status.put("version", "0.5.0");
+        status.put("version", "0.6.0");
+        status.put("speech", SpeechCache.status(context));
         status.put("popupEnabled", popupEnabled());
         status.put("popupPermission", Settings.canDrawOverlays(context));
         status.put("popupError", runtime.getString("popupError", ""));
@@ -172,6 +178,7 @@ public final class ReminderEngine {
     public void defaults(String json) throws JSONException {
         JSONObject values = new JSONObject(json);
         BackupCodec.validateStyle(values);
+        SpeechSettings.validate(values, true);
         values.remove("notificationChannelId"); values.remove("notificationStyle");
         ensureChannel(new JSONObject(values.toString()));
         if (!prefs.edit().putString("defaults", values.toString()).commit()) throw new IllegalStateException("保存失败");
@@ -219,6 +226,7 @@ public final class ReminderEngine {
         // Persist the new generation before cancelling old alarms: stale delivery is rejected.
         ensureChannel(r);
         write(replacement);
+        SpeechPlaybackService.cancel(id);
         cancel(id, BASE);
         cancel(id, RETRY);
         notifications.cancel(id);
@@ -232,7 +240,9 @@ public final class ReminderEngine {
             if (r.getInt("id") != id) replacement.put(r);
         }
         write(replacement);
+        SpeechPlaybackService.cancel(id);
         cancel(id, BASE); cancel(id, RETRY); notifications.cancel(id);
+        SpeechCache.prune(context);
         syncGuardian();
     }
     public void acknowledge(int id, long token) throws JSONException {
@@ -251,6 +261,7 @@ public final class ReminderEngine {
         write(rows);
         cancel(id, RETRY);
         notifications.cancel(id);
+        SpeechPlaybackService.cancel(id);
         trace("acknowledged", id, token, source); syncGuardian();
     }
     private long next(JSONObject r, long after) throws JSONException {
@@ -439,6 +450,8 @@ public final class ReminderEngine {
         if (actual.getImportance() == NotificationManager.IMPORTANCE_NONE) error("此通知样式已被系统关闭，请打开对应的系统通知设置");
         else if (NotificationStyles.importance(r) == NotificationManager.IMPORTANCE_HIGH && actual.getImportance() < NotificationManager.IMPORTANCE_HIGH)
             error("系统通道未允许横幅，请打开这条提醒的系统通知设置");
+        if (alert && bodyAvailable && actual.getImportance() != NotificationManager.IMPORTANCE_NONE &&
+            SpeechSettings.enabled(r, SpeechSettings.defaults(context))) SpeechPlaybackService.start(context, id, token);
         if (alert && r.optBoolean("wakeScreen", true)) {
             try {
                 PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
@@ -454,6 +467,9 @@ public final class ReminderEngine {
         JSONArray portable = new JSONArray(), rows = read();
         for (int i = 0; i < rows.length(); i++) {
             JSONObject r = new JSONObject(rows.getJSONObject(i).toString());
+            JSONObject defaults = SpeechSettings.defaults(context);
+            r.put("speechMode", SpeechSettings.enabled(r, defaults) ? "on" : "off")
+                .put("speechVoice", SpeechSettings.voice(r, defaults)).put("speechRate", SpeechSettings.rate(r, defaults));
             r.remove("notificationChannelId"); r.remove("notificationStyle"); portable.put(r);
         }
         return new JSONObject().put("format", "timed-memo").put("version", 1)

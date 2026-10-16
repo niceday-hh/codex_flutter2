@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/services.dart';
+import 'dart:async';
+import 'speech.dart';
 
 const native = MethodChannel('memo/native');
 const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
@@ -12,6 +14,9 @@ class Reminder {
   List<int> days;
   bool enabled, sound, wakeScreen;
   String vibration, ringtone, presentation, lockscreen;
+  String speechMode, speechVoice, speechState;
+  double speechRate;
+  bool speechHideLocked, speechRepeat;
   int intervalMinutes, totalCount;
   int attempts, activeOccurrence, nextTrigger;
   bool acknowledged, completed;
@@ -23,6 +28,8 @@ class Reminder {
     this.sound = true, this.wakeScreen = true, this.vibration = 'three',
     this.ringtone = '', this.intervalMinutes = 5, this.totalCount = 3,
     this.presentation = 'banner', this.lockscreen = 'private',
+    this.speechMode = 'off', this.speechVoice = '', this.speechRate = 0,
+    this.speechHideLocked = true, this.speechRepeat = true, this.speechState = 'off',
     this.attempts = 0, this.activeOccurrence = 0, this.nextTrigger = 0,
     this.acknowledged = false, this.completed = false})
       : date = date ?? DateTime.now().add(const Duration(hours: 1)),
@@ -41,6 +48,12 @@ class Reminder {
     ringtone: j['ringtone'] as String? ?? '',
     presentation: j['presentation'] as String? ?? 'banner',
     lockscreen: j['lockscreen'] as String? ?? 'private',
+    speechMode: j['speechMode'] as String? ?? 'off',
+    speechVoice: j['speechVoice'] as String? ?? '',
+    speechRate: (j['speechRate'] as num?)?.toDouble() ?? 0,
+    speechHideLocked: j['speechHideLocked'] as bool? ?? true,
+    speechRepeat: j['speechRepeat'] as bool? ?? true,
+    speechState: j['speechState'] as String? ?? 'off',
     intervalMinutes: j['intervalMinutes'] as int? ?? 5,
     totalCount: j['totalCount'] as int? ?? 3,
     attempts: j['attempts'] as int? ?? 0,
@@ -58,10 +71,14 @@ class Reminder {
     'ringtone': ringtone, 'intervalMinutes': intervalMinutes,
     'totalCount': totalCount,
     'presentation': presentation, 'lockscreen': lockscreen,
+    'speechMode': speechMode, 'speechVoice': speechVoice, 'speechRate': speechRate,
+    'speechHideLocked': speechHideLocked, 'speechRepeat': speechRepeat,
   };
   Map<String, dynamic> get notificationConfig => {
     'sound': sound, 'vibration': vibration, 'ringtone': ringtone,
     'presentation': presentation, 'lockscreen': lockscreen,
+    'speechMode': speechMode, 'speechVoice': speechVoice, 'speechRate': speechRate,
+    'speechHideLocked': speechHideLocked, 'speechRepeat': speechRepeat,
   };
   String get time => '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   String get preciseTime => '$time:${date.second.toString().padLeft(2, '0')}';
@@ -88,6 +105,9 @@ class MemoStore {
     status = Map<String, dynamic>.from(j['status'] as Map? ?? {});
   }
   Reminder draft() => Reminder(
+    speechMode: 'inherit',
+    speechHideLocked: defaults['speechHideLocked'] as bool? ?? true,
+    speechRepeat: defaults['speechRepeat'] as bool? ?? true,
     intervalMinutes: defaults['intervalMinutes'] as int? ?? 5,
     totalCount: defaults['totalCount'] as int? ?? 3,
     vibration: defaults['vibration'] as String? ?? 'three',
@@ -99,6 +119,7 @@ class MemoStore {
   );
   Future<void> save(Reminder r) async {
     await native.invokeMethod('save', jsonEncode(r.toJson()));
+    unawaited(speech.preparePending());
     await load();
   }
   Future<void> ack(Reminder r) async {
@@ -111,6 +132,7 @@ class MemoStore {
   }
   Future<void> saveDefaults() async {
     await native.invokeMethod('saveDefaults', jsonEncode(defaults));
+    unawaited(speech.preparePending());
   }
   Future<void> openNotificationSettings(Reminder r) async {
     await native.invokeMethod('notificationStyleSettings', jsonEncode(r.notificationConfig));

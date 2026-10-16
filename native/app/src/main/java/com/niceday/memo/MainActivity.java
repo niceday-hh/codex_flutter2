@@ -49,6 +49,7 @@ public final class MainActivity extends FlutterActivity {
     private MethodChannel.Result documentResult;
     private String exportDocument;
     private final java.util.concurrent.ExecutorService documents = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private MediaPlayer speechPreview;
     private AudioRecord recorder;
     private Thread audioThread;
     private volatile boolean recording;
@@ -66,7 +67,7 @@ public final class MainActivity extends FlutterActivity {
         channel = new MethodChannel(engine.getDartExecutor().getBinaryMessenger(), "memo/native");
         memoPreferences = getSharedPreferences("memo", Context.MODE_PRIVATE);
         memoListener = (preferences, key) -> {
-            if ("reminders".equals(key) && channel != null) channel.invokeMethod("stateChanged", null);
+            if (("reminders".equals(key) || "speechChanged".equals(key)) && channel != null) channel.invokeMethod("stateChanged", null);
         };
         memoPreferences.registerOnSharedPreferenceChangeListener(memoListener);
         channel.setMethodCallHandler((call, result) -> {
@@ -78,6 +79,35 @@ public final class MainActivity extends FlutterActivity {
                         try { String path = AsrAssets.prepare(getApplicationContext()); runOnUiThread(() -> result.success(path)); }
                         catch (Exception e) { runOnUiThread(() -> result.error("ASR", "模型准备失败：" + e.getMessage(), null)); }
                     });
+                    case "prepareTts" -> documents.execute(() -> {
+                        try { String path = TtsAssets.prepare(getApplicationContext()); runOnUiThread(() -> result.success(path)); }
+                        catch (Exception e) { runOnUiThread(() -> result.error("TTS", "播报模型准备失败", null)); }
+                    });
+                    case "speechJobs" -> result.success(SpeechCache.jobs(this, Boolean.TRUE.equals(call.arguments)).toString());
+                    case "speechFinished" -> {
+                        String key = call.argument("key"), failure = call.argument("error");
+                        SpeechCache.finish(this, key, failure == null ? "" : failure); result.success(null);
+                    }
+                    case "speechPreviewJob" -> {
+                        JSONObject config = new JSONObject((String) call.arguments);
+                        SpeechSettings.validate(config, false);
+                        result.success(SpeechCache.previewJob(this, config).toString());
+                    }
+                    case "playSpeechPreview" -> {
+                        stopSpeechPreview();
+                        String key = (String)call.arguments;
+                        if (!key.matches("[0-9a-f]{64}\\.wav") || !resumed || getSystemService(KeyguardManager.class).isKeyguardLocked())
+                            throw new IllegalStateException("请解锁并保持试听页面打开");
+                        File audio = new File(SpeechCache.directory(this), key);
+                        if (!SpeechCache.ready(audio)) throw new IllegalStateException("试听语音尚未准备");
+                        speechPreview = new MediaPlayer();
+                        speechPreview.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
+                        speechPreview.setDataSource(audio.getPath());
+                        speechPreview.setOnCompletionListener(p -> stopSpeechPreview());
+                        speechPreview.setOnErrorListener((p, a, b) -> { stopSpeechPreview(); return true; });
+                        speechPreview.setOnPreparedListener(MediaPlayer::start); speechPreview.prepareAsync(); result.success(null);
+                    }
+                    case "stopSpeechPreview" -> { stopSpeechPreview(); result.success(null); }
                     case "filesDir" -> result.success(getFilesDir().getAbsolutePath());
                     case "save" -> { store.save((String) call.arguments); result.success(null); }
                     case "saveDefaults" -> { store.defaults((String) call.arguments); result.success(null); }
@@ -194,6 +224,9 @@ public final class MainActivity extends FlutterActivity {
             } catch (Exception e) { result.error("PERMISSION", e.getMessage(), null); }
         }
     }
+    private void stopSpeechPreview() {
+        if (speechPreview != null) { speechPreview.release(); speechPreview = null; }
+    }
     @Override protected void onResume() {
         super.onResume(); resumed = true; foreground = new java.lang.ref.WeakReference<>(this);
         ReminderEngine engine = new ReminderEngine(this);
@@ -245,6 +278,8 @@ public final class MainActivity extends FlutterActivity {
         }
     }
     private void startRecording() throws IOException {
+        stopSpeechPreview();
+        SpeechPlaybackService.pauseForRecording();
         if (recording) throw new IllegalStateException("已在录音");
         int buffer = Math.max(6400, AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT));
         recorder = new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, 16000,
@@ -290,7 +325,7 @@ public final class MainActivity extends FlutterActivity {
     }
     @Override protected void onPause() {
         resumed = false; if (reminderDialog != null) { reminderDialog.dismiss(); reminderDialog = null; }
-        super.onPause();
+        super.onPause(); stopSpeechPreview();
     }
     @Override protected void onStop() {
         super.onStop();

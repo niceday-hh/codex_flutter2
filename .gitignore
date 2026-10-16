@@ -10,3 +10,9 @@ assets/models/*.onnx
 assets/models/tokens.txt
 model-downloads/
 tool/out/
+
+assets/tts/*
+!assets/tts/.keep
+
+__pycache__/
+*.pyc
