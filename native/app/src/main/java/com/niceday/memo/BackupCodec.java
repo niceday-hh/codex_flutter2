@@ -12,7 +12,8 @@ public final class BackupCodec {
         String text = r.optString("text").trim();
         if (text.isEmpty() || text.length() > 2000) throw new IllegalArgumentException("提醒内容须为1至2000字");
         Calendar date = Calendar.getInstance(); date.clear(); date.setLenient(false);
-        date.set(r.getInt("year"), r.getInt("month") - 1, r.getInt("day"), r.getInt("hour"), r.getInt("minute"), 0);
+        date.set(r.getInt("year"), r.getInt("month") - 1, r.getInt("day"), r.getInt("hour"), r.getInt("minute"), r.optInt("second", 0));
+        date.set(Calendar.MILLISECOND, r.optInt("millisecond", 0));
         date.getTimeInMillis();
         if (r.getInt("year") < 1970 || r.getInt("year") > 2200) throw new IllegalArgumentException("日期超出支持范围");
         String repeat = r.optString("repeat", "none");

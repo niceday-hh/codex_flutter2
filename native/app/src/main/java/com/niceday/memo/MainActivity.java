@@ -2,6 +2,9 @@ package com.niceday.memo;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.KeyguardManager;
+import org.json.JSONObject;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.media.*;
@@ -16,6 +19,29 @@ import java.io.*;
 
 public final class MainActivity extends FlutterActivity {
     private static boolean capturedLaunch;
+    private static java.lang.ref.WeakReference<MainActivity> foreground = new java.lang.ref.WeakReference<>(null);
+    private AlertDialog reminderDialog;
+    private boolean resumed;
+    static boolean showReminder(JSONObject reminder, long token) {
+        MainActivity activity = foreground.get();
+        if (activity == null || !activity.resumed || activity.isFinishing()
+            || activity.getSystemService(KeyguardManager.class).isKeyguardLocked()
+            || !activity.getSystemService(PowerManager.class).isInteractive()) return false;
+        activity.runOnUiThread(() -> {
+            if (!activity.resumed || activity.getSystemService(KeyguardManager.class).isKeyguardLocked()) return;
+            if (activity.reminderDialog != null) activity.reminderDialog.dismiss();
+            AlertDialog dialog = new AlertDialog.Builder(activity).setTitle("定时备忘录")
+                .setMessage(reminder.optString("text"))
+                .setNegativeButton("收起", null).setPositiveButton("已读", (d, which) -> {
+                    try { new ReminderEngine(activity).acknowledge(reminder.optInt("id"), token); }
+                    catch (Exception e) { new ReminderEngine(activity).error("确认已读失败，请在通知栏重试"); }
+                }).create();
+            activity.reminderDialog = dialog; dialog.show();
+            dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+            new Handler(Looper.getMainLooper()).postDelayed(dialog::dismiss, 10000);
+        });
+        return true;
+    }
     private MethodChannel channel;
     private SharedPreferences memoPreferences;
     private SharedPreferences.OnSharedPreferenceChangeListener memoListener;
@@ -48,6 +74,10 @@ public final class MainActivity extends FlutterActivity {
                 ReminderEngine store = new ReminderEngine(this);
                 switch (call.method) {
                     case "getState" -> result.success(store.state());
+                    case "prepareAsr" -> documents.execute(() -> {
+                        try { String path = AsrAssets.prepare(getApplicationContext()); runOnUiThread(() -> result.success(path)); }
+                        catch (Exception e) { runOnUiThread(() -> result.error("ASR", "模型准备失败：" + e.getMessage(), null)); }
+                    });
                     case "filesDir" -> result.success(getFilesDir().getAbsolutePath());
                     case "save" -> { store.save((String) call.arguments); result.success(null); }
                     case "saveDefaults" -> { store.defaults((String) call.arguments); result.success(null); }
@@ -104,6 +134,12 @@ public final class MainActivity extends FlutterActivity {
                     case "initialReminderId" -> result.success(getIntent().getIntExtra("reminderId", 0));
                     case "restore" -> { store.restore(false); result.success(null); }
                     case "testReminder" -> result.success(store.createTest(15));
+                    case "popupMode" -> {
+                        boolean enabled = (Boolean) call.arguments;
+                        store.popupMode(enabled);
+                        if (enabled && !Settings.canDrawOverlays(this)) startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
+                        result.success(null);
+                    }
                     case "reliableMode" -> { store.reliableMode((Boolean) call.arguments); result.success(null); }
                     case "previewVibration" -> { NotificationStyles.preview(this, (String) call.arguments); result.success(null); }
                     case "notificationStyleSettings" -> {
@@ -159,7 +195,7 @@ public final class MainActivity extends FlutterActivity {
         }
     }
     @Override protected void onResume() {
-        super.onResume();
+        super.onResume(); resumed = true; foreground = new java.lang.ref.WeakReference<>(this);
         ReminderEngine engine = new ReminderEngine(this);
         try { engine.refreshNotifications(); }
         catch (Exception e) { engine.error("更新通知正文失败：" + e.getClass().getSimpleName()); }
@@ -251,6 +287,10 @@ public final class MainActivity extends FlutterActivity {
         if (discard) { if (audioFile != null) audioFile.delete(); return null; }
         if (audioError != null) { if (audioFile != null) audioFile.delete(); throw new IOException(audioError); }
         return path;
+    }
+    @Override protected void onPause() {
+        resumed = false; if (reminderDialog != null) { reminderDialog.dismiss(); reminderDialog = null; }
+        super.onPause();
     }
     @Override protected void onStop() {
         super.onStop();

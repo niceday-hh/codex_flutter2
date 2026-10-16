@@ -9,17 +9,22 @@ public final class Schedule {
     private Schedule() {}
     public static long next(int year, int month, int day, int hour, int minute,
                             String repeat, Set<Integer> days, long after, TimeZone zone) {
+        return next(year, month, day, hour, minute, 0, 0, repeat, days, after, zone);
+    }
+    public static long next(int year, int month, int day, int hour, int minute, int second, int millisecond,
+                            String repeat, Set<Integer> days, long after, TimeZone zone) {
         Calendar anchor = Calendar.getInstance(zone);
         anchor.clear();
-        anchor.set(year, month - 1, day, hour, minute, 0);
+        anchor.set(year, month - 1, day, hour, minute, second);
+        anchor.set(Calendar.MILLISECOND, millisecond);
         long base = anchor.getTimeInMillis();
         if ("none".equals(repeat)) return base > after ? base : 0;
         Calendar candidate = Calendar.getInstance(zone);
         candidate.setTimeInMillis(Math.max(base, after));
         candidate.set(Calendar.HOUR_OF_DAY, hour);
         candidate.set(Calendar.MINUTE, minute);
-        candidate.set(Calendar.SECOND, 0);
-        candidate.set(Calendar.MILLISECOND, 0);
+        candidate.set(Calendar.SECOND, second);
+        candidate.set(Calendar.MILLISECOND, millisecond);
         for (int i = 0; i < 9; i++) {
             long stamp = candidate.getTimeInMillis();
             int isoDay = (candidate.get(Calendar.DAY_OF_WEEK) + 5) % 7 + 1;

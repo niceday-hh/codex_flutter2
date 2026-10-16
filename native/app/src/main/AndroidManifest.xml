@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <application android:label="定时备忘录·新版" android:name="${applicationName}"
@@ -35,6 +36,8 @@
         </receiver>
         <service android:name="com.niceday.memo.ReminderGuardianService" android:exported="false"
             android:directBootAware="true" android:stopWithTask="false" android:foregroundServiceType="systemExempted" />
+        <service android:name="com.niceday.memo.ReminderPopupService" android:exported="false"
+            android:stopWithTask="false" android:foregroundServiceType="systemExempted" />
         <meta-data android:name="flutterEmbedding" android:value="2" />
     </application>
     <queries>

@@ -48,6 +48,30 @@ public class ReminderEngineTest {
     Intent intent(String action, long occurrence) {
         return new Intent(action).putExtra("id", 1).putExtra("token", occurrence).putExtra("version", 1L);
     }
+    @Test public void preciseDateSurvivesSaveMirrorRestoreAndBackup() throws Exception {
+        JSONObject r = future(row()).put("second", 43).put("millisecond", 625);
+        engine.save(r.toString());
+        long planned = row().getLong("nextTrigger");
+        Calendar c = Calendar.getInstance(); c.setTimeInMillis(planned);
+        assertEquals(43, c.get(Calendar.SECOND)); assertEquals(625, c.get(Calendar.MILLISECOND));
+        engine.restore(false); assertEquals(planned, row().getLong("nextTrigger"));
+        JSONArray mirror = new JSONArray(context.createDeviceProtectedStorageContext().getSharedPreferences("memo-runtime", Context.MODE_PRIVATE).getString("reminders", "[]"));
+        assertEquals(43, mirror.getJSONObject(0).getInt("second"));
+        assertEquals(625, mirror.getJSONObject(0).getInt("millisecond"));
+        JSONArray decoded = BackupCodec.decode(engine.exportBackup());
+        assertEquals(43, decoded.getJSONObject(0).getInt("second"));
+        assertEquals(625, decoded.getJSONObject(0).getInt("millisecond"));
+        r.put("second", 60);
+        try { BackupCodec.validateReminder(r); fail("invalid seconds accepted"); } catch (IllegalArgumentException expected) {}
+    }
+    @Test public void popupDefaultsOffAndOnlyCurrentUnreadOccurrenceSuppliesBody() throws Exception {
+        assertFalse(engine.popupEnabled()); engine.popupMode(true); assertTrue(engine.popupEnabled());
+        assertNull(engine.popupPayload(1, token));
+        engine.fire(intent(ReminderEngine.BASE, token));
+        assertNotNull(engine.popupPayload(1, token)); assertNull(engine.popupPayload(1, token - 1));
+        engine.acknowledge(1, token); assertNull(engine.popupPayload(1, token));
+        engine.popupMode(false); assertFalse(engine.popupEnabled());
+    }
     @Test public void noAcknowledgementRetriesOnlyToTotalCount() throws Exception {
         engine.fire(intent(ReminderEngine.BASE, token));
         assertEquals(1, row().getInt("attempts"));

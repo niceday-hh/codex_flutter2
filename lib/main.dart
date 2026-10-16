@@ -263,7 +263,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         child: const Icon(Icons.notifications_rounded, color: Colors.white, size: 32)),
       const SizedBox(width: 16), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('定时备忘录', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-        Text('v0.4.0 · 本地保存 · 离线语音', style: TextStyle(color: muted, fontSize: 12))])),
+        Text('v0.5.0 · 本地保存 · 离线语音', style: TextStyle(color: muted, fontSize: 12))])),
     ]))),
     section('后台可靠性', '增强最近任务关闭后的提醒维护'),
     settingsGroup([
@@ -281,6 +281,21 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
           : '尚未检测到运行，请检查下方系统提示')),
       if ((store.status['guardianError'] as String? ?? '').isNotEmpty) Padding(padding: const EdgeInsets.all(16),
         child: Text(store.status['guardianError'] as String, style: const TextStyle(color: muted, fontSize: 12))),
+    ]),
+    section('亮屏弹窗', '在其他应用或桌面也显示提醒小卡片'),
+    settingsGroup([
+      SwitchListTile(title: const Text('亮屏弹窗增强'),
+        subtitle: Text(store.status['popupEnabled'] == true
+          ? store.status['popupPermission'] == true ? '已授权：仅解锁亮屏显示，10秒自动收起，未读仍会重试' : '等待悬浮窗授权：请重新开启并在系统页面允许'
+          : '开启后需允许“显示在其他应用上层”；锁屏不显示浮窗正文'),
+        value: store.status['popupEnabled'] as bool? ?? false,
+        onChanged: (enabled) async {
+          try { await native.invokeMethod('popupMode', enabled); await reload(); }
+          catch (e) { await reload(); toast(niceError(e)); }
+        }),
+      const ListTile(subtitle: Text('适用于“横幅和通知栏”提醒。点击已读或横向滑动确认；收起及自动消失均保持未读。系统横幅仍需在对应通知样式中允许，部分应用可限制悬浮窗。')),
+      if ((store.status['popupError'] as String? ?? '').isNotEmpty)
+        Padding(padding: const EdgeInsets.all(16), child: Text(store.status['popupError'] as String)),
     ]),
     section('默认提醒', '新提醒使用这些设置'),
     settingsGroup([
@@ -578,7 +593,8 @@ class _ReminderDetailState extends State<ReminderDetail> {
 class ReminderEditor extends StatefulWidget {
   final Reminder reminder;
   final MemoStore store;
-  const ReminderEditor({super.key, required this.reminder, required this.store});
+  final ParsedVoice? voice;
+  const ReminderEditor({super.key, required this.reminder, required this.store, this.voice});
   @override State<ReminderEditor> createState() => _ReminderEditorState();
 }
 class _ReminderEditorState extends State<ReminderEditor> {
@@ -594,12 +610,15 @@ class _ReminderEditorState extends State<ReminderEditor> {
     r.completed = false;
     String? error;
     if (r.text.isEmpty) { error = '请输入提醒内容'; }
+    else if (!r.dateConfirmed) { error = '识别的日期无效，请点选日期确认'; }
+    else if (!r.timeConfirmed) { error = '请点选时间确认，系统不会替你设置默认时间'; }
     else if (r.repeat == 'weekly' && r.days.isEmpty) { error = '请选择重复星期'; }
     else if (r.repeat == 'none' && !r.date.isAfter(DateTime.now())) { error = '请选择未来的日期和时间'; }
     if (error != null) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error))); return; }
     setState(() => saving = true);
     try {
       await native.invokeMethod('requestNotifications');
+      if (r.repeat == 'none' && !r.date.isAfter(DateTime.now())) { throw StateError('确认期间时间已到，请重新选择时间或明确重新计时'); }
       await widget.store.save(r);
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -611,16 +630,25 @@ class _ReminderEditorState extends State<ReminderEditor> {
     final d = await showDatePicker(context: context,
       initialDate: r.date.isBefore(now) ? now : r.date,
       firstDate: DateTime(now.year, now.month, now.day), lastDate: DateTime(now.year + 10, 12, 31));
-    if (d != null && mounted) setState(() => r.date = DateTime(d.year, d.month, d.day, r.date.hour, r.date.minute));
+    if (d != null && mounted) setState(() { r.date = DateTime(d.year, d.month, d.day, r.date.hour, r.date.minute, r.date.second, r.date.millisecond); r.dateConfirmed = true; });
   }
   Future<void> pickTime() async {
     final t = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(r.date),
       builder: (c, child) => MediaQuery(data: MediaQuery.of(c).copyWith(alwaysUse24HourFormat: true), child: child!));
-    if (t != null && mounted) setState(() => r.date = DateTime(r.date.year, r.date.month, r.date.day, t.hour, t.minute));
+    if (t != null && mounted) setState(() { r.date = DateTime(r.date.year, r.date.month, r.date.day, t.hour, t.minute); r.timeConfirmed = true; });
   }
   @override Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text(r.id == 0 ? '新建提醒' : '编辑提醒'), actions: [TextButton(onPressed: saving ? null : save, child: const Text('保存'))]),
     body: ListView(padding: const EdgeInsets.fromLTRB(20, 16, 20, 24), children: [
+      if (widget.voice != null) ...[
+        Surface(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(widget.voice!.warning ?? '请确认识别出的时间和内容', style: const TextStyle(color: purple)),
+          if (widget.voice!.relativeDelay != null) ...[
+            Text('以录音结束／输入开始时刻 ${widget.voice!.reference.hour}:${widget.voice!.reference.minute.toString().padLeft(2, '0')}:${widget.voice!.reference.second.toString().padLeft(2, '0')} 计时，目标为 ${r.date.month}月${r.date.day}日 ${r.preciseTime}'),
+            TextButton(onPressed: () => setState(() { r.date = DateTime.now().add(widget.voice!.relativeDelay!); r.dateConfirmed = true; r.timeConfirmed = true; }), child: const Text('从现在起重新计时')),
+          ],
+        ])), const SizedBox(height: 14),
+      ],
       Surface(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('提醒内容', style: TextStyle(fontWeight: FontWeight.w600)), const SizedBox(height: 12),
         TextField(controller: text, minLines: 2, maxLines: 5, maxLength: 2000,
@@ -628,8 +656,8 @@ class _ReminderEditorState extends State<ReminderEditor> {
       ])), const SizedBox(height: 14),
       Surface(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
         ListTile(leading: const Icon(Icons.calendar_today_outlined, color: purple), title: const Text('日期'),
-          trailing: Text('${r.date.year}年${r.date.month}月${r.date.day}日'), onTap: pickDate),
-        ListTile(leading: const Icon(Icons.schedule_rounded, color: purple), title: const Text('时间'), trailing: Text(r.time), onTap: pickTime),
+          trailing: Text(r.dateConfirmed ? '${r.date.year}年${r.date.month}月${r.date.day}日' : '请选择有效日期'), onTap: pickDate),
+        ListTile(leading: const Icon(Icons.schedule_rounded, color: purple), title: const Text('时间'), trailing: Text(r.timeConfirmed ? r.preciseTime : '请选择时间'), onTap: pickTime),
       ])), const SizedBox(height: 14),
       Surface(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('重复', style: TextStyle(fontWeight: FontWeight.w600)), const SizedBox(height: 14),
@@ -645,7 +673,7 @@ class _ReminderEditorState extends State<ReminderEditor> {
           onPresentationChanged: (v) => setState(() => r.presentation = v),
           onLockscreenChanged: (v) => setState(() => r.lockscreen = v)),
         ListTile(leading: const Icon(Icons.tune_rounded, color: purple), title: const Text('这条提醒的系统通知设置'),
-          subtitle: const Text('管理所选样式；相同样式的备忘共用此设置'), trailing: const Icon(Icons.open_in_new_rounded),
+          subtitle: const Text('请选择允许横幅／悬浮通知；相同样式共用系统设置。亮屏卡片增强可在设置开启'), trailing: const Icon(Icons.open_in_new_rounded),
           onTap: () async {
             try { await widget.store.openNotificationSettings(r); }
             catch (e) { if (context.mounted) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(niceError(e)))); } }
@@ -692,23 +720,31 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
   bool recording = false, busy = false;
   Timer? timer;
   int seconds = 0;
+  DateTime? reference;
+  int session = 0;
   String? warning;
+  void warmup() { asr.prepare().catchError((Object e) { if (mounted) setState(() => warning = niceError(e)); }); }
   @override void initState() {
     super.initState(); WidgetsBinding.instance.addObserver(this);
     animation = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))..repeat();
+    if (widget.active) warmup();
   }
   @override void dispose() {
     timer?.cancel(); animation.dispose(); text.dispose(); WidgetsBinding.instance.removeObserver(this);
-    native.invokeMethod('cancelRecording'); super.dispose();
+    session++; asr.release(); native.invokeMethod('cancelRecording'); super.dispose();
   }
   @override void didUpdateWidget(VoicePage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!oldWidget.active && widget.active) warmup();
+    if (oldWidget.active && !widget.active) { session++; asr.release(); }
     if (oldWidget.active && !widget.active && recording) {
       timer?.cancel(); native.invokeMethod('cancelRecording');
       recording = false; warning = '录音已停止，请重新录音';
     }
   }
   @override void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && widget.active) warmup();
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) { session++; asr.release(); }
     if ((state == AppLifecycleState.paused || state == AppLifecycleState.detached) && recording) {
       timer?.cancel(); native.invokeMethod('cancelRecording');
       if (mounted) setState(() { recording = false; warning = '录音已暂停，请重新录音'; });
@@ -718,10 +754,11 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
     if (busy) return;
     if (recording) { await finish(); return; }
     setState(() => busy = true);
+    warmup();
     try {
       await native.invokeMethod('startRecording');
       if (!mounted) return;
-      setState(() { recording = true; busy = false; seconds = 0; warning = null; });
+      setState(() { recording = true; busy = false; seconds = 0; warning = null; reference = null; session++; });
       timer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (!mounted || !recording) return;
         setState(() => seconds++);
@@ -731,22 +768,24 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
   }
   Future<void> finish() async {
     if (!recording) return;
+    reference = DateTime.now();
+    final ticket = session;
     timer?.cancel(); setState(() { recording = false; busy = true; });
     try {
       final path = await native.invokeMethod<String>('stopRecording');
       if (path == null) throw StateError('没有录音，请重试');
       final result = await transcribe(path);
-      if (mounted) setState(() { text.text = result; warning = result.trim().isEmpty ? '没有听清，请靠近麦克风再试一次' : null; });
+      if (mounted && ticket == session) setState(() { text.text = result; warning = result.trim().isEmpty ? '没有听清，请靠近麦克风再试一次' : null; });
     } catch (e) { if (mounted) setState(() => warning = niceError(e)); }
     finally { if (mounted) setState(() => busy = false); }
   }
   Future<void> confirm() async {
-    final parsed = parseVoice(text.text, defaults: widget.store.draft());
+    final parsed = parseVoice(text.text, now: reference ??= DateTime.now(), defaults: widget.store.draft());
     if (parsed.warning != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(parsed.warning!)));
     }
-    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => ReminderEditor(reminder: parsed.reminder, store: widget.store)));
-    if (saved == true) { await widget.onSaved(); if (mounted) setState(() { text.clear(); warning = '提醒已保存'; }); }
+    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => ReminderEditor(reminder: parsed.reminder, store: widget.store, voice: parsed)));
+    if (saved == true) { await widget.onSaved(); if (mounted) setState(() { text.clear(); reference = null; warning = '提醒已保存'; }); }
   }
   @override Widget build(BuildContext context) => ListView(padding: const EdgeInsets.fromLTRB(24, 26, 24, 30), children: [
     Row(children: [Expanded(child: Text('语音新建', style: Theme.of(context).textTheme.headlineLarge)), const Tag('离线识别')]),
@@ -761,16 +800,18 @@ class _VoicePageState extends State<VoicePage> with SingleTickerProviderStateMix
           child: busy ? const Padding(padding: EdgeInsets.all(37), child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
             : Icon(recording ? Icons.stop_rounded : Icons.mic_rounded, color: Colors.white, size: 48)))),
     ])))),
-    Text(busy ? '正在本地识别…' : recording ? '正在聆听… ${seconds}s' : '点击开始说话', textAlign: TextAlign.center,
-      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+    ValueListenableBuilder<String>(valueListenable: asr.status, builder: (_, status, child) => Column(children: [
+      Text(busy ? status : recording ? '正在聆听… ${seconds}s' : '点击开始说话', textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+      if (!busy && !recording) Text(status, style: const TextStyle(color: muted, fontSize: 12)),
+    ])),
     const SizedBox(height: 18), AnimatedBuilder(animation: animation, builder: (_, child) => SizedBox(height: 38,
       child: CustomPaint(painter: WavePainter(recording ? animation.value : 0, recording)))),
-    const SizedBox(height: 24), Surface(child: TextField(controller: text, minLines: 3, maxLines: 6,
-      onChanged: (_) => setState(() {}), decoration: const InputDecoration(hintText: '例如：每周三上午九点，提醒我参加项目例会', border: InputBorder.none, filled: false))),
+    const SizedBox(height: 24), Surface(child: TextField(controller: text, enabled: !busy && !recording, minLines: 3, maxLines: 6,
+      onChanged: (value) => setState(() { reference = value.trim().isEmpty ? null : reference ?? DateTime.now(); }), decoration: const InputDecoration(hintText: '例如：五分钟后提醒我喝水', border: InputBorder.none, filled: false))),
     const SizedBox(height: 16), if (warning != null) Padding(padding: const EdgeInsets.only(bottom: 16), child: Text(warning!, style: const TextStyle(color: muted))),
     FilledButton(onPressed: text.text.trim().isEmpty || busy || recording ? null : confirm, child: const Text('确认并设置提醒')),
     const SizedBox(height: 12), OutlinedButton(onPressed: busy ? null : microphone, child: Text(recording ? '结束录音' : '重新录音')),
-    const SizedBox(height: 20), const Text('识别后请确认日期、时间和内容。支持明天、几月几号、每天、工作日及每周几。录音最长45秒，识别后自动删除。',
+    const SizedBox(height: 20), const Text('识别后请确认日期、时间和内容。支持五分钟后、半小时后、明天、几月几号、每天、工作日及每周几。倒计时从录音结束或开始输入时计时，保存前可明确重新计时。录音最长45秒，识别后自动删除。',
       textAlign: TextAlign.center, style: TextStyle(color: muted, fontSize: 12, height: 1.6)),
   ]);
 }

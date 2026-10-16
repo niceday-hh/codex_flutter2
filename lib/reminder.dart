@@ -15,6 +15,8 @@ class Reminder {
   int intervalMinutes, totalCount;
   int attempts, activeOccurrence, nextTrigger;
   bool acknowledged, completed;
+  // Draft-only validation flags; never written to a backup or native schedule.
+  bool dateConfirmed = true, timeConfirmed = true;
 
   Reminder({this.id = 0, this.text = '', DateTime? date,
     this.repeat = 'none', List<int>? days, this.enabled = true,
@@ -29,7 +31,7 @@ class Reminder {
   factory Reminder.fromJson(Map<String, dynamic> j) => Reminder(
     id: j['id'] as int? ?? 0, text: j['text'] as String? ?? '',
     date: DateTime(j['year'] as int, j['month'] as int, j['day'] as int,
-      j['hour'] as int, j['minute'] as int),
+      j['hour'] as int, j['minute'] as int, j['second'] as int? ?? 0, j['millisecond'] as int? ?? 0),
     repeat: j['repeat'] as String? ?? 'none',
     days: (j['days'] as List? ?? []).cast<int>(),
     enabled: j['enabled'] as bool? ?? true,
@@ -50,6 +52,7 @@ class Reminder {
   Map<String, dynamic> toJson() => {
     'id': id, 'text': text, 'year': date.year, 'month': date.month,
     'day': date.day, 'hour': date.hour, 'minute': date.minute,
+    'second': date.second, 'millisecond': date.millisecond,
     'repeat': repeat, 'days': days, 'enabled': enabled,
     'sound': sound, 'wakeScreen': wakeScreen, 'vibration': vibration,
     'ringtone': ringtone, 'intervalMinutes': intervalMinutes,
@@ -61,6 +64,7 @@ class Reminder {
     'presentation': presentation, 'lockscreen': lockscreen,
   };
   String get time => '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  String get preciseTime => '$time:${date.second.toString().padLeft(2, '0')}';
   String get repeatLabel => switch (repeat) {
     'daily' => '每天',
     'weekly' => '每周${(List<int>.of(days)..sort()).map((d) => weekdays[d - 1]).join('、')}',

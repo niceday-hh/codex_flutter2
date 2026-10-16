@@ -15,12 +15,15 @@ public class ScheduleTest {
         equal(Schedule.next(2026, 10, 14, 9, 0, "daily", Set.of(), time("2026-10-14T09:00:00", zone), tz), time("2026-10-15T09:00:00", zone), "daily");
         equal(Schedule.next(2026, 10, 14, 9, 0, "weekly", Set.of(1,2,3,4,5), time("2026-10-16T12:00:00", zone), tz), time("2026-10-19T09:00:00", zone), "skip weekend");
         equal(Schedule.next(2026, 12, 31, 9, 0, "daily", Set.of(), time("2026-12-31T12:00:00", zone), tz), time("2027-01-01T09:00:00", zone), "year rollover");
+        equal(Schedule.next(2026, 10, 14, 8, 5, 43, 625, "none", Set.of(), now, tz), time("2026-10-14T08:05:43.625", zone), "relative seconds and milliseconds");
+        equal(Schedule.next(2026, 10, 14, 8, 5, 43, 625, "none", Set.of(), time("2026-10-14T08:05:43.625", zone), tz), 0, "expired precise one-off");
+        equal(Schedule.next(2026, 10, 14, 9, 0, 43, 625, "daily", Set.of(), time("2026-10-14T09:00:43.625", zone), tz), time("2026-10-15T09:00:43.625", zone), "recurring precise time");
         String dst = "America/New_York";
         equal(Schedule.next(2026, 3, 7, 9, 0, "daily", Set.of(), time("2026-03-07T12:00:00", dst), TimeZone.getTimeZone(dst)), time("2026-03-08T09:00:00", dst), "DST wall clock");
         if (!Schedule.mayRetry(false, 1, 3)) throw new AssertionError("first reminder permits retry");
         if (Schedule.mayRetry(false, 3, 3)) throw new AssertionError("total count includes first");
         if (Schedule.mayRetry(true, 1, 3)) throw new AssertionError("ack cancels retries");
         if (Schedule.mayRetry(false, 1, 1)) throw new AssertionError("one total means no retries");
-        System.out.println("11 scheduling/retry checks passed");
+        System.out.println("14 scheduling/retry checks passed");
     }
 }

@@ -75,6 +75,18 @@ public final class ReminderEngine {
         } catch (JSONException ignored) {}
     }
     void event(String type, int id, long at, String detail) { trace(type, id, at, detail); }
+    public boolean popupEnabled() { return runtime.getBoolean("popupEnabled", false); }
+    public void popupMode(boolean enabled) {
+        if (!runtime.edit().putBoolean("popupEnabled", enabled).commit()) throw new IllegalStateException("保存失败");
+        if (!enabled) context.stopService(new Intent(context, ReminderPopupService.class));
+    }
+    void popupError(String value) { runtime.edit().putString("popupError", value).commit(); }
+    JSONObject popupPayload(int id, long token) throws JSONException {
+        if (!unlocked) return null;
+        JSONObject row = find(read(), id);
+        if (row == null || token <= 0 || row.optLong("activeOccurrence") != token || row.optBoolean("acknowledged") || !row.has("text")) return null;
+        return row;
+    }
     public boolean reliableMode() { return runtime.getBoolean("reliableMode", true); }
     public JSONObject pendingSummary() throws JSONException {
         JSONArray rows = read(); int count = 0; long earliest = 0;
@@ -143,7 +155,10 @@ public final class ReminderEngine {
         status.put("lastReceived", runtime.getLong("lastReceived", 0));
         status.put("lastRestored", runtime.getLong("lastRestored", 0));
         status.put("package", context.getPackageName());
-        status.put("version", "0.4.0");
+        status.put("version", "0.5.0");
+        status.put("popupEnabled", popupEnabled());
+        status.put("popupPermission", Settings.canDrawOverlays(context));
+        status.put("popupError", runtime.getString("popupError", ""));
         status.put("reliableMode", reliableMode());
         status.put("guardianRunning", ReminderGuardianService.running(context));
         status.put("guardianError", runtime.getString("guardianError", ""));
@@ -243,7 +258,7 @@ public final class ReminderEngine {
         JSONArray array = r.optJSONArray("days");
         if (array != null) for (int i = 0; i < array.length(); i++) days.add(array.getInt(i));
         return Schedule.next(r.getInt("year"), r.getInt("month"), r.getInt("day"),
-            r.getInt("hour"), r.getInt("minute"), r.optString("repeat", "none"), days,
+            r.getInt("hour"), r.getInt("minute"), r.optInt("second", 0), r.optInt("millisecond", 0), r.optString("repeat", "none"), days,
             after, TimeZone.getDefault());
     }
     private PendingIntent intent(JSONObject r, String action, long token) throws JSONException {
@@ -405,12 +420,19 @@ public final class ReminderEngine {
             .setContentText(bodyAvailable ? r.getString("text") : "有一条待办提醒 · 解锁后查看")
             .setSubText("第" + r.optInt("attempts") + "/" + r.optInt("totalCount") + "次 · 划掉即确认")
             .setVisibility(NotificationStyles.visibility(r)).setPublicVersion(publicVersion)
+            .setPriority(NotificationStyles.importance(r) >= NotificationManager.IMPORTANCE_HIGH ? Notification.PRIORITY_MAX : Notification.PRIORITY_DEFAULT)
             .setCategory(Notification.CATEGORY_ALARM).setContentIntent(content)
             .setDeleteIntent(dismiss).setAutoCancel(false).setOnlyAlertOnce(!alert)
             .setWhen(r.optLong("lastFired", System.currentTimeMillis()));
         if (Build.VERSION.SDK_INT >= 29) builder.setAllowSystemGeneratedContextualActions(false);
         if (bodyAvailable) builder.setStyle(new Notification.BigTextStyle().bigText(r.getString("text")));
         notifications.notify(id, builder.build());
+        if (alert && bodyAvailable && "banner".equals(r.optString("presentation", "banner"))) {
+            if (!MainActivity.showReminder(r, token) && popupEnabled() && ReminderPopupService.mayDisplay(context)) {
+                try { context.startForegroundService(new Intent(context, ReminderPopupService.class).putExtra("id", id).putExtra("token", token)); }
+                catch (RuntimeException e) { popupError("系统限制亮屏卡片，请检查悬浮窗权限：" + e.getClass().getSimpleName()); }
+            }
+        }
         NotificationChannel actual = notifications.getNotificationChannel(channelId);
         trace(alert ? "notified" : "notification_refreshed", id, token,
             "importance=" + actual.getImportance() + ";bodyAvailable=" + bodyAvailable);

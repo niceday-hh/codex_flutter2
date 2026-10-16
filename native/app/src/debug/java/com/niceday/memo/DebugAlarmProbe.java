@@ -16,6 +16,8 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
                 // Finish the ordered broadcast, then send a genuine SIGKILL to this process.
                 new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
                     () -> android.os.Process.killProcess(android.os.Process.myPid()), 100);
+            } else if ("POPUP_MODE".equals(intent.getAction())) {
+                engine.popupMode(intent.getBooleanExtra("enabled", true));
             } else if ("CORE_MODE".equals(intent.getAction())) {
                 engine.reliableMode(false);
             } else if ("GUARDIAN_MODE".equals(intent.getAction())) {
@@ -40,9 +42,9 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
                     output.write(notifications.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 }
             } else {
-                if ("PRIVACY_SEED".equals(intent.getAction())) engine.defaults(new JSONObject()
+                if ("PRIVACY_SEED".equals(intent.getAction()) || "BANNER_SEED".equals(intent.getAction())) engine.defaults(new JSONObject()
                     .put("sound", false).put("vibration", "three").put("wakeScreen", false)
-                    .put("presentation", "drawer").put("lockscreen", "private").toString());
+                    .put("presentation", "BANNER_SEED".equals(intent.getAction()) ? "banner" : "drawer").put("lockscreen", "private").toString());
                 int id = engine.createTest(intent.getIntExtra("seconds", 15));
                 setResultCode(id);
             }
