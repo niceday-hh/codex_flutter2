@@ -55,6 +55,18 @@ while time.monotonic() < startup_deadline:
     time.sleep(1)
 assert startup_ready, 'Cold application startup did not reach native bootstrap'
 shell('input', 'keyevent', 'KEYCODE_HOME')
+# HOME can overlap the first Flutter frame/activity pause on a cold virtual device.
+# Confirm that the background process handles ordered broadcasts before creating
+# the timed fixture. A dropped readiness probe must never select an old reminder.
+probe_deadline = time.monotonic() + 60
+while time.monotonic() < probe_deadline:
+    response = shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'PING')
+    if 'probeReady=true' in response:
+        break
+    time.sleep(1)
+else:
+    print(shell('logcat', '-d', '-t', '500', check=False), flush=True)
+    raise AssertionError(f'Background debug probe did not become ready: {response}')
 shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'CLEAR')
 clock_before = device_clock()
 id, planned = seed(45)

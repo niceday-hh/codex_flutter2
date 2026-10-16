@@ -102,7 +102,6 @@ public final class SpeechPlaybackService extends Service {
             final int ticket = ++playbackGeneration;
             focus = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT).setAudioAttributes(attributes)
                 .setOnAudioFocusChangeListener(change -> { if (change < 0 && ticket == playbackGeneration) finishCurrent(); }).build();
-            if (manager.requestAudioFocus(focus) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) { finishCurrent(); return; }
             player = new MediaPlayer(); player.setAudioAttributes(attributes);
             if (SpeechCache.ready(audio)) player.setDataSource(audio.getPath());
             else {
@@ -120,7 +119,16 @@ public final class SpeechPlaybackService extends Service {
                     // A dismissal or lock may happen during asynchronous preparation.
                     JSONObject fresh = new ReminderEngine(this).popupPayload(current.getIntExtra("id", 0), current.getLongExtra("token", 0));
                     if (fresh == null || (readingBody && locked() && SpeechSettings.hideLocked(fresh, SpeechSettings.defaults(this)))) { finishCurrent(); return; }
+                    if (manager.getMode() != AudioManager.MODE_NORMAL) { finishCurrent(); return; }
+                    // Request immediately before playback, after the FGS and player are ready.
+                    // Some Android 15 builds deny focus to an alarm-started FGS even though
+                    // alarm playback is allowed. Like AOSP DeskClock's AsyncRingtonePlayer,
+                    // keep the user-scheduled USAGE_ALARM alert in that case; do not change
+                    // volume, app-ops or another app's playback. Calls still stop this alert.
+                    if (manager.requestAudioFocus(focus) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
+                        new ReminderEngine(this).event("speech_focus_limited", fresh.getInt("id"), current.getLongExtra("token", 0), "系统未授予音频焦点，保留闹钟播放");
                     p.start();
+                    watchCallMode(ticket);
                     new ReminderEngine(this).event("speech_played", fresh.getInt("id"), current.getLongExtra("token", 0), readingBody ? "正文" : "通用提示或备用铃声");
                 } catch (Exception e) { finishCurrent(); }
             });
@@ -128,6 +136,13 @@ public final class SpeechPlaybackService extends Service {
             wake.acquire(15 * 60 * 1000L); handler.postDelayed(this::finishCurrent, 15 * 60 * 1000L);
             player.prepareAsync();
         } catch (Exception e) { new ReminderEngine(this).error("语音播放失败，请检查音量及铃声设置"); finishCurrent(); }
+    }
+    private void watchCallMode(int ticket) {
+        handler.postDelayed(() -> {
+            if (ticket != playbackGeneration || current == null) return;
+            if (getSystemService(AudioManager.class).getMode() != AudioManager.MODE_NORMAL) finishCurrent();
+            else watchCallMode(ticket);
+        }, 250);
     }
     private void releasePlayer() {
         playbackGeneration++;

@@ -8,7 +8,9 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
     @Override public void onReceive(Context context, Intent intent) {
         try {
             ReminderEngine engine = new ReminderEngine(context);
-            if ("CLEAR".equals(intent.getAction())) {
+            if ("PING".equals(intent.getAction())) {
+                setResultCode(1); setResultData("probeReady=true");
+            } else if ("CLEAR".equals(intent.getAction())) {
                 JSONArray rows = new JSONObject(engine.state()).getJSONArray("reminders");
                 for (int i = 0; i < rows.length(); i++) engine.delete(rows.getJSONObject(i).getInt("id"));
             } else if ("SPEECH_SEED".equals(intent.getAction())) {
