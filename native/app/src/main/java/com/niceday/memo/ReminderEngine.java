@@ -489,7 +489,8 @@ public final class ReminderEngine {
         syncGuardian();
         return imported.length();
     }
-    public int createTest(int seconds) throws JSONException {
+    public int createTest(int seconds) throws JSONException { return createTest(seconds, 1); }
+    public int createTest(int seconds, int totalCount) throws JSONException {
         seconds = Math.max(15, Math.min(300, seconds));
         JSONObject defaults = new JSONObject(prefs.getString("defaults", "{}"));
         BackupCodec.validateStyle(defaults);
@@ -501,7 +502,7 @@ public final class ReminderEngine {
             .put("enabled", true).put("sound", defaults.getBoolean("sound")).put("vibration", defaults.getString("vibration"))
             .put("wakeScreen", defaults.getBoolean("wakeScreen")).put("ringtone", defaults.getString("ringtone"))
             .put("presentation", defaults.getString("presentation")).put("lockscreen", defaults.getString("lockscreen"))
-            .put("intervalMinutes", 5).put("totalCount", 1);
+            .put("intervalMinutes", 5).put("totalCount", Math.max(1, Math.min(20, totalCount)));
         save(config.toString());
         int id = prefs.getInt("nextId", 1) - 1;
         JSONArray rows = read(); JSONObject r = find(rows, id);
@@ -509,7 +510,8 @@ public final class ReminderEngine {
         Calendar actual = Calendar.getInstance(); actual.setTimeInMillis(stamp);
         r.put("year", actual.get(Calendar.YEAR)).put("month", actual.get(Calendar.MONTH) + 1)
             .put("day", actual.get(Calendar.DAY_OF_MONTH)).put("hour", actual.get(Calendar.HOUR_OF_DAY))
-            .put("minute", actual.get(Calendar.MINUTE)).put("nextTrigger", stamp);
+            .put("minute", actual.get(Calendar.MINUTE)).put("second", actual.get(Calendar.SECOND))
+            .put("millisecond", actual.get(Calendar.MILLISECOND)).put("nextTrigger", stamp);
         write(rows); cancel(id, BASE); scheduleBase(r); return id;
     }
 }

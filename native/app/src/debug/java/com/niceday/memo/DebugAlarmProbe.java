@@ -45,7 +45,7 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
                 if ("PRIVACY_SEED".equals(intent.getAction()) || "BANNER_SEED".equals(intent.getAction())) engine.defaults(new JSONObject()
                     .put("sound", false).put("vibration", "three").put("wakeScreen", false)
                     .put("presentation", "BANNER_SEED".equals(intent.getAction()) ? "banner" : "drawer").put("lockscreen", "private").toString());
-                int id = engine.createTest(intent.getIntExtra("seconds", 15));
+                int id = engine.createTest(intent.getIntExtra("seconds", 15), "BANNER_SEED".equals(intent.getAction()) ? 3 : 1);
                 setResultCode(id);
             }
         } catch (Exception e) { throw new IllegalStateException(e); }
