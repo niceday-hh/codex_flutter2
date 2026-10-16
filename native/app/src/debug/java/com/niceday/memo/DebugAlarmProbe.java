@@ -14,8 +14,14 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
             } else if ("KILL_PROCESS".equals(intent.getAction())) {
                 // Same-UID shell commands can still be denied by SELinux on emulator images.
                 // Finish the ordered broadcast, then send a genuine SIGKILL to this process.
-                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
-                    () -> android.os.Process.killProcess(android.os.Process.myPid()), 100);
+                final int pid = android.os.Process.myPid();
+                setResultCode(1); setResultData("killPid=" + pid);
+                // A cold Flutter frame can stall the main looper beyond the host's
+                // wait. Kill on a separate debug-only thread after the ordered reply.
+                new Thread(() -> {
+                    android.os.SystemClock.sleep(200);
+                    android.os.Process.killProcess(pid);
+                }, "ci-process-kill").start();
             } else if ("POPUP_MODE".equals(intent.getAction())) {
                 engine.popupMode(intent.getBooleanExtra("enabled", true));
             } else if ("CORE_MODE".equals(intent.getAction())) {

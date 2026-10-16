@@ -1,5 +1,6 @@
 """ADB integration checks: real alarm delivery after process death/Doze and reboot restoration."""
 import json
+import re
 import subprocess
 import time
 import xml.etree.ElementTree as ET
@@ -55,17 +56,29 @@ assert startup_ready, 'Cold application startup did not reach native bootstrap'
 shell('input', 'keyevent', 'KEYCODE_HOME')
 shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'CLEAR')
 clock_before = device_clock()
-id, planned = seed(25)
+id, planned = seed(45)
 print('Scheduled diagnostic:', json.dumps({'planned': planned, 'clock': clock_before,
     'reliableMode': runtime().get('reliableMode'), 'trace': json.loads(runtime()['trace'])}, ensure_ascii=False), flush=True)
-start_pid = shell('pidof', PACKAGE)
-shell('input', 'keyevent', 'KEYCODE_HOME')
+# Remove the UI task so Android has no Activity to relaunch after SIGKILL.
+# Keep the scheduled alarm and never put the package in force-stopped state.
+shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'REMOVE_TASK')
+shell('am', 'start', '-W', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.HOME')
 assert runtime().get('reliableMode') == 'false', 'Core test must disable the guardian'
-# am kill can skip a process still temporarily important after an ordered probe broadcast.
-# Terminate only this debug UID, without placing the package in force-stopped state.
-shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'KILL_PROCESS')
-time.sleep(2)
-assert not shell('pidof', PACKAGE, check=False), 'Target process did not terminate'
+response = shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'KILL_PROCESS')
+match = re.search(r'killPid=(\d+)', response)
+assert match, f'Kill probe did not acknowledge its target PID: {response}'
+start_pid = match.group(1)
+exit_deadline = time.monotonic() + 10
+remaining_pid = shell('pidof', PACKAGE, check=False)
+while remaining_pid and time.monotonic() < exit_deadline:
+    time.sleep(0.25)
+    remaining_pid = shell('pidof', PACKAGE, check=False)
+if remaining_pid:
+    print('Kill diagnostic:', json.dumps({'kill_response': response, 'remaining_pid': remaining_pid,
+        'runtime': runtime(), 'services': shell('dumpsys', 'activity', 'services', PACKAGE),
+        'activities': shell('dumpsys', 'activity', 'activities')}, ensure_ascii=False), flush=True)
+assert not remaining_pid, 'Target process did not terminate, or was restarted before the alarm'
+assert int(shell('date', '+%s')) * 1000 < planned, 'Fixture setup exceeded the alarm deadline'
 shell('input', 'keyevent', 'KEYCODE_SLEEP')
 shell('dumpsys', 'battery', 'unplug')
 shell('dumpsys', 'deviceidle', 'force-idle')
