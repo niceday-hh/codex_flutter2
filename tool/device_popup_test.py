@@ -67,7 +67,8 @@ try:
     probe('CLEAR')
     id = seed()
     wait(lambda: shown(id), 'Second overlay not shown')
-    shell('uiautomator', 'dump', '/sdcard/popup-window.xml')
+    # The card deliberately does not take focus: query all interactive windows.
+    shell('uiautomator', 'dump', '--windows', '/sdcard/popup-window.xml')
     xml = shell('cat', '/sdcard/popup-window.xml')
     root = ET.fromstring(xml)
     nodes = [n for n in root.iter('node') if n.attrib.get('text') == '已读']
