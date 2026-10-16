@@ -25,6 +25,11 @@ void main() {
     expect(p.reminder.date, end.add(const Duration(minutes: 5)));
     expect(p.reminder.text, '喝水');
   });
+  test('leading absolute instruction after 提醒我 preserves the body', () {
+    final p = parseVoice('提醒我明天上午九点整理每天的报表', now: end);
+    expect(p.reminder.date, DateTime(2026, 10, 17, 9));
+    expect(p.reminder.repeat, 'none'); expect(p.reminder.text, '整理每天的报表');
+  });
   test('body dates and recurrence words never modify the instruction', () {
     for (final body in ['整理每天的报表', '看《后天》', '核对每周三的数据']) {
       final p = parseVoice('明天九点提醒我$body', now: end);

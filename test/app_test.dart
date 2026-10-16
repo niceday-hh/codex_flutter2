@@ -89,10 +89,10 @@ void main() {
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
     await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置'))); await tester.pumpAndSettle();
     final settingsScroll = find.descendant(of: find.byType(IndexedStack), matching: find.byType(Scrollable)).last;
-    await tester.scrollUntilVisible(find.text('默认展示方式'), 200, scrollable: settingsScroll);
+    await revealByDragging(tester, find.text('默认展示方式'), settingsScroll);
     await tester.tap(find.text('默认展示方式')); await tester.pumpAndSettle();
     await tester.tap(find.text('仅通知栏').last); await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('默认锁屏显示'), 150, scrollable: settingsScroll);
+    await revealByDragging(tester, find.text('默认锁屏显示'), settingsScroll);
     await tester.tap(find.text('默认锁屏显示')); await tester.pumpAndSettle();
     await tester.tap(find.text('不在锁屏显示').last); await tester.pumpAndSettle();
     expect(defaults['presentation'], 'drawer'); expect(defaults['lockscreen'], 'hidden');

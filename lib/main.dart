@@ -599,9 +599,10 @@ class ReminderEditor extends StatefulWidget {
 }
 class _ReminderEditorState extends State<ReminderEditor> {
   late final TextEditingController text;
-  bool saving = false;
+  bool saving = false, manualTime = false;
+  DateTime? countdownReference;
   Reminder get r => widget.reminder;
-  @override void initState() { super.initState(); text = TextEditingController(text: r.text); }
+  @override void initState() { super.initState(); text = TextEditingController(text: r.text); countdownReference = widget.voice?.reference; }
   @override void dispose() { text.dispose(); super.dispose(); }
   Future<void> save() async {
     if (saving) return;
@@ -630,22 +631,22 @@ class _ReminderEditorState extends State<ReminderEditor> {
     final d = await showDatePicker(context: context,
       initialDate: r.date.isBefore(now) ? now : r.date,
       firstDate: DateTime(now.year, now.month, now.day), lastDate: DateTime(now.year + 10, 12, 31));
-    if (d != null && mounted) setState(() { r.date = DateTime(d.year, d.month, d.day, r.date.hour, r.date.minute, r.date.second, r.date.millisecond); r.dateConfirmed = true; });
+    if (d != null && mounted) setState(() { r.date = DateTime(d.year, d.month, d.day, r.date.hour, r.date.minute, r.date.second, r.date.millisecond); r.dateConfirmed = true; manualTime = true; });
   }
   Future<void> pickTime() async {
     final t = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(r.date),
       builder: (c, child) => MediaQuery(data: MediaQuery.of(c).copyWith(alwaysUse24HourFormat: true), child: child!));
-    if (t != null && mounted) setState(() { r.date = DateTime(r.date.year, r.date.month, r.date.day, t.hour, t.minute); r.timeConfirmed = true; });
+    if (t != null && mounted) setState(() { r.date = DateTime(r.date.year, r.date.month, r.date.day, t.hour, t.minute); r.timeConfirmed = true; manualTime = true; });
   }
   @override Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text(r.id == 0 ? '新建提醒' : '编辑提醒'), actions: [TextButton(onPressed: saving ? null : save, child: const Text('保存'))]),
     body: ListView(padding: const EdgeInsets.fromLTRB(20, 16, 20, 24), children: [
       if (widget.voice != null) ...[
         Surface(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(widget.voice!.warning ?? '请确认识别出的时间和内容', style: const TextStyle(color: purple)),
+          Text(!r.dateConfirmed ? '日期无效，请手动选择日期' : !r.timeConfirmed ? '请手动选择有效时间' : r.repeat == 'none' && !r.date.isAfter(DateTime.now()) ? '目标时间已过期，请修改或明确重新计时' : '请确认识别出的时间和内容', style: const TextStyle(color: purple)),
           if (widget.voice!.relativeDelay != null) ...[
-            Text('以录音结束／输入开始时刻 ${widget.voice!.reference.hour}:${widget.voice!.reference.minute.toString().padLeft(2, '0')}:${widget.voice!.reference.second.toString().padLeft(2, '0')} 计时，目标为 ${r.date.month}月${r.date.day}日 ${r.preciseTime}'),
-            TextButton(onPressed: () => setState(() { r.date = DateTime.now().add(widget.voice!.relativeDelay!); r.dateConfirmed = true; r.timeConfirmed = true; }), child: const Text('从现在起重新计时')),
+            Text(manualTime ? '已手动修改，按下方日期和时间提醒' : '以 ${countdownReference!.hour}:${countdownReference!.minute.toString().padLeft(2, '0')}:${countdownReference!.second.toString().padLeft(2, '0')} 为基准计时，目标为 ${r.date.year}年${r.date.month}月${r.date.day}日 ${r.preciseTime}'),
+            TextButton(onPressed: () => setState(() { countdownReference = DateTime.fromMillisecondsSinceEpoch(DateTime.now().millisecondsSinceEpoch); r.date = countdownReference!.add(widget.voice!.relativeDelay!); r.dateConfirmed = true; r.timeConfirmed = true; manualTime = false; }), child: const Text('从现在起重新计时')),
           ],
         ])), const SizedBox(height: 14),
       ],

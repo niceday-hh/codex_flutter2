@@ -37,7 +37,7 @@ class ParsedVoice {
 // Only the instruction before “提醒我” controls scheduling. The reminder body
 // may contain dates, book titles, or words such as 每天 without changing it.
 ParsedVoice parseVoice(String source, {DateTime? now, Reminder? defaults}) {
-  final current = now ?? DateTime.now();
+  final current = DateTime.fromMillisecondsSinceEpoch((now ?? DateTime.now()).millisecondsSinceEpoch);
   final r = defaults ?? Reminder();
   r.repeat = 'none'; r.days = [];
   r.dateConfirmed = true; r.timeConfirmed = true;
@@ -49,6 +49,10 @@ ParsedVoice parseVoice(String source, {DateTime? now, Reminder? defaults}) {
   if (instruction.trim().isEmpty && marker != null) {
     final leading = RegExp('^\\s*((?:(?:$n|半|一个半|$n个半)(?:个)?(?:天|小时|分钟|分|秒钟|秒))+[以之]?后)[，,、\\s]*').firstMatch(body);
     if (leading != null) { instruction = leading.group(1)!; body = body.substring(leading.end); }
+    else {
+      final absolute = RegExp('^\\s*((?:(?:$n年)?(?:$n月)?$n[号日]|今天|明天|后天|每天|每日|工作日|(?:每周|每星期|周|星期)[一二三四五六日天1-7])?(?:凌晨|午夜|早上|上午|中午|下午|傍晚|晚上)?(?:$n[点时](?:半|一刻|三刻|$n分?)?|\\d{1,2}[:：]\\d{1,2}(?:[:：]\\d{1,2})?))[，,、\\s]*').firstMatch(body);
+      if (absolute != null) { instruction = absolute.group(1)!; body = body.substring(absolute.end); }
+    }
   }
   final s = instruction.replaceAll(RegExp(r'[\s，,。]'), '');
   r.text = body.replaceAll(RegExp(r'^[，,、\s]+|[，。！？、,.!?\s]+$'), '').trim();
