@@ -151,6 +151,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   }
   Future<void> edit([Reminder? existing]) async {
     await voice.pause(keepDraft: false);
+    if (!mounted) return;
     final draft = existing == null ? store.draft() : Reminder.fromJson({...existing.toJson()});
     draft.enabled = true;
     draft.completed = false;
@@ -173,6 +174,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   }
   Future<void> viewReminder(Reminder r) async {
     await voice.pause(keepDraft: false);
+    if (!mounted) return;
     await showModalBottomSheet<void>(context: context, isScrollControlled: true,
       backgroundColor: Colors.white, showDragHandle: true,
       builder: (sheetContext) => ReminderDetail(reminder: r, onAck: () async {
@@ -208,6 +210,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   }
   Future<void> taskLibrary() async {
     await voice.pause(keepDraft: false);
+    if (!mounted) return;
     await Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => TaskLibraryPage(
       store: store, card: reminderCard)));
     await reload();

@@ -156,7 +156,7 @@ class VoiceFlow extends ChangeNotifier {
     _captureMode = mode;
     await capture.start(silence, (end) {
       if (!_current(ticket)) return;
-      if (end < 0) { unawaited(_failure(StateError('人声检测中断，请重试或使用手动录音'), ticket)); return; }
+      if (end < 0) { unawaited(pause(keepDraft: true, notice: '人声检测中断，请重试或使用手动录音')); return; }
       if (mode == VoicePhase.recording && store.defaults['voiceAutoStop'] == false) return;
       unawaited(finish(endSample: end));
     }, meter.accept);
@@ -186,6 +186,7 @@ class VoiceFlow extends ChangeNotifier {
     _stopTimers(); phase = VoicePhase.processing; message = '正在本地识别…'; _notify();
     return _queue(() async {
       try {
+        if (!_current(ticket)) return;
         final result = await capture.stop(endSample: endSample);
         if (!_current(ticket)) return;
         final utterance = result.text.trim();
@@ -282,6 +283,7 @@ class VoiceFlow extends ChangeNotifier {
   }
   Future<void> _failure(Object error, int ticket) async {
     if (!_current(ticket)) return;
+    ++_epoch;
     await _closeInside(niceError(error));
   }
   @override void dispose() {

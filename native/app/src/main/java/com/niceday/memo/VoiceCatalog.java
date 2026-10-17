@@ -29,7 +29,11 @@ public final class VoiceCatalog {
         }
         return result;
     }
-    static void resolve(Context c, JSONObject row) throws JSONException { resolve(c,row,VoiceGroups.read(c)); }
+    static void resolve(Context c, JSONObject row) throws JSONException {
+        String chosen=row.optString("speechVoice","");
+        if(!row.optBoolean("speechRandom") || chosen.matches("[0-9]{1,3}") && Integer.parseInt(chosen)<=803) return;
+        resolve(c,row,VoiceGroups.read(c));
+    }
     static void resolve(Context c, JSONObject row, JSONArray groups) throws JSONException {
         try {
         if (!row.optBoolean("speechRandom")) return;

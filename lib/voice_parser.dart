@@ -143,7 +143,7 @@ ParsedVoice parseVoice(String source, {DateTime? now, Reminder? defaults}) {
   }
   if (!explicitDate && hasTime && !date.isAfter(current)) date = DateTime(date.year, date.month, date.day + 1, date.hour, date.minute, date.second);
   r.date = date;
-  if (!hasTime) warning = '未识别到有效时间，请在下一页手动选择时间。';
+  if (!hasTime) warning = '未识别到有效时间，请重新录音或手动选择时间。';
   if (hasTime && r.repeat == 'none' && r.dateConfirmed && !date.isAfter(current)) {
     warning = '这个时间已经过去，请手动修改日期或时间；不会自动顺延。';
   }
