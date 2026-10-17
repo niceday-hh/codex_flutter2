@@ -6,7 +6,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: android-release-${{ github.ref }}
+  group: android-release-v080-${{ github.ref }}
   cancel-in-progress: true
 env:
   CI_ASSET_TAG: ci-${{ github.run_id }}
@@ -72,20 +72,20 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: python3 tool/prepare_signing.py
+      - name: Native notification, speech, state and backup tests
+        run: cd android && ./gradlew :app:testReleaseUnitTest --no-daemon -Ptarget-platform=android-arm64
       - uses: actions/cache/restore@v4
         id: nativecache
         with:
-          path: android/app/.cxx
-          key: mnn-cxx-arm64-release-${{ hashFiles('native/app/src/main/cpp/**', 'native/app/build.gradle.kts', 'tool/fetch_mnn.py') }}
+          path: build/.cxx
+          key: mnn-cxx-v2-arm64-release-${{ hashFiles('native/app/src/main/cpp/**', 'native/app/build.gradle.kts', 'tool/fetch_mnn.py') }}
       - name: Build arm64 APK
         run: flutter build apk --release --target-platform android-arm64
       - uses: actions/cache/save@v4
         if: steps.nativecache.outputs.cache-hit != 'true'
         with:
-          path: android/app/.cxx
+          path: build/.cxx
           key: ${{ steps.nativecache.outputs.cache-primary-key }}
-      - name: Native notification, speech, state and backup tests
-        run: cd android && ./gradlew :app:testReleaseUnitTest --no-daemon
       - name: Verify embedded model and fixed certificate
         run: python3 tool/verify_apk.py
       - name: Stage verified signed build
@@ -141,8 +141,8 @@ jobs:
       - uses: actions/cache/restore@v4
         id: nativecache
         with:
-          path: android/app/.cxx
-          key: mnn-cxx-x64-api${{ matrix.api }}-${{ hashFiles('native/app/src/main/cpp/**', 'native/app/build.gradle.kts', 'tool/fetch_mnn.py') }}
+          path: build/.cxx
+          key: mnn-cxx-v2-x64-api${{ matrix.api }}-${{ hashFiles('native/app/src/main/cpp/**', 'native/app/build.gradle.kts', 'tool/fetch_mnn.py') }}
       - name: Build CI-only debug probe APK
         run: |
           bash tool/bootstrap.sh
@@ -151,7 +151,7 @@ jobs:
       - uses: actions/cache/save@v4
         if: steps.nativecache.outputs.cache-hit != 'true'
         with:
-          path: android/app/.cxx
+          path: build/.cxx
           key: ${{ steps.nativecache.outputs.cache-primary-key }}
       - name: Free space for Android system image
         run: |

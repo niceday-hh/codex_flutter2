@@ -478,14 +478,23 @@ public class ReminderEngineTest {
     @Test public void markedSelfTestIsDeletedOnDismissalWithoutCleanupChooser() throws Exception {
         int id=engine.createSelfTest(15);
         JSONArray rows=new JSONObject(engine.state()).getJSONArray("reminders");
-        JSONObject test=rows.getJSONObject(rows.length()-1); long due=test.getLong("nextTrigger");
+        JSONObject test=rows.getJSONObject(rows.length()-1);
         assertTrue(test.getBoolean("testReminder")); assertTrue(test.getBoolean("testAutoDelete"));
+        // Alarm delivery uses epoch time. Moving the paused looper's uptime does not
+        // advance that wall clock in every Robolectric mode; use an actually due fixture.
+        long due=System.currentTimeMillis()-1;
+        Calendar firedAt=Calendar.getInstance(); firedAt.setTimeInMillis(due);
+        test.put("year",firedAt.get(Calendar.YEAR)).put("month",firedAt.get(Calendar.MONTH)+1)
+            .put("day",firedAt.get(Calendar.DAY_OF_MONTH)).put("hour",firedAt.get(Calendar.HOUR_OF_DAY))
+            .put("minute",firedAt.get(Calendar.MINUTE)).put("second",firedAt.get(Calendar.SECOND))
+            .put("millisecond",firedAt.get(Calendar.MILLISECOND)).put("nextTrigger",due);
+        context.getSharedPreferences("memo",0).edit().putString("reminders",rows.toString()).commit();
         Shadows.shadowOf(context.getSystemService(KeyguardManager.class)).setKeyguardLocked(false);
-        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(16));
         engine.fire(new Intent(ReminderEngine.BASE).putExtra("id",id).putExtra("token",due).putExtra("version",test.getLong("version")));
+        assertNotNull("Self-test fixture must actually post a notification",Shadows.shadowOf(context.getSystemService(NotificationManager.class)).getNotification(id));
         engine.dismissed(id,due);
         rows=new JSONObject(engine.state()).getJSONArray("reminders");
-        assertEquals(1,rows.length()); assertEquals(1,rows.getJSONObject(0).getInt("id"));
+        assertEquals("Only the marked self-test may be removed: "+rows,1,rows.length()); assertEquals(1,rows.getJSONObject(0).getInt("id"));
         assertNull(Shadows.shadowOf(context.getSystemService(NotificationManager.class)).getNotification(-id));
     }
     @Test public void selfTestCleanupCanBeDisabledAndOrdinarySameTextIsNeverDeleted() throws Exception {
