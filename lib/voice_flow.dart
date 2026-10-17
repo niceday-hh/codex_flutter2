@@ -263,7 +263,7 @@ class VoiceFlow extends ChangeNotifier {
     try {
       await store.save(draft);
       // The save itself has completed: never retry it automatically on UI reload failure.
-      pending = null; phase = VoicePhase.idle; message = '提醒已创建';
+      pending = null; text = ''; reference = null; phase = VoicePhase.idle; message = '提醒已创建';
       _confirmDeadline = null; _notify();
       try { await onSaved(); } catch (_) {}
     } catch (e) {

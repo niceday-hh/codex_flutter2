@@ -37,7 +37,7 @@ class _VoicePageState extends State<VoicePage> {
     const SizedBox(height: 24),
     Card(elevation: 0, color: Colors.white, child: Padding(padding: const EdgeInsets.all(16), child:
       TextField(controller: text, enabled: !flow.busy && !flow.capturing, minLines: 3, maxLines: 6,
-        onChanged: (v) { flow.text = v; flow.reference ??= DateTime.now(); setState(() {}); },
+        onChanged: (v) { flow.text = v; flow.reference = v.trim().isEmpty ? null : flow.reference ?? DateTime.now(); setState(() {}); },
         decoration: const InputDecoration(hintText: '例如：二十分钟后提醒我做饭，开启语音提醒', border: InputBorder.none, filled: false)))),
     const SizedBox(height: 16),
     FilledButton(onPressed: text.text.trim().isEmpty || flow.busy || flow.capturing ? null : () => flow.reviewText(text.text),

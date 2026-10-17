@@ -205,4 +205,22 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
+  testWidgets('cold entry retries voice readiness after inactive-to-resumed transition', (tester) async {
+    var readinessChecks = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+      if (call.method == 'getState') return jsonEncode({'reminders': [], 'defaults': {'handsFree': true}, 'status': {}});
+      if (call.method == 'voiceEntryAllowed') { readinessChecks++; return false; }
+      if (call.method == 'initialReminderId') return 0;
+      return null;
+    });
+    await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
+    expect(readinessChecks, greaterThanOrEqualTo(1));
+    final before = readinessChecks;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(readinessChecks, greaterThan(before));
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  });
+
 }

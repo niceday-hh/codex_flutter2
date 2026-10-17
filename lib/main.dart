@@ -68,7 +68,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   late final voice = VoiceFlow(capture: OfflineVoiceCapture(asr), store: store,
     openVoicePage: () { if (mounted) setState(() => tab = 2); }, onSaved: reload);
   DialogRoute<void>? _voiceDialog;
-  bool _dialogScheduled = false, _wasPaused = false;
+  bool _dialogScheduled = false, _wasPaused = false, _entryPending = true;
   DateTime selectedDate = DateTime.now();
   DateTime calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
 
@@ -77,7 +77,11 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     voice.addListener(_voiceChanged);
     native.setMethodCallHandler((call) async {
       if (call.method == 'openReminder') { await voice.cancel(); await reload(); if (mounted) openById(call.arguments as int); }
-      if (call.method == 'voiceEntry') { await _maybeStartHandsFree(); }
+      if (call.method == 'voiceEntry') {
+        _entryPending = true;
+        if (mounted && !Navigator.of(context).canPop()) setState(() => tab = 0);
+        await _maybeStartHandsFree();
+      }
       if (call.method == 'stateChanged') { await reload(); }
       if (call.method == 'prepareSpeech') { await speech.preparePending(retry: true); }
     });
@@ -95,7 +99,9 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   }
   Future<void> _maybeStartHandsFree() async {
     if (!mounted || tab != 0 || voice.active || voice.pending != null || store.defaults['handsFree'] != true || Navigator.of(context).canPop()) return;
-    try { if (await native.invokeMethod<bool>('voiceEntryAllowed') == true && mounted && !voice.active) await voice.startCommands(); } catch (e) { toast(niceError(e)); }
+    try { if (await native.invokeMethod<bool>('voiceEntryAllowed') == true && mounted && !voice.active) {
+      _entryPending = false; await voice.startCommands();
+    } } catch (e) { toast(niceError(e)); }
   }
   @override void dispose() {
     voice.removeListener(_voiceChanged); voice.dispose();
@@ -106,7 +112,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       _wasPaused = true; unawaited(voice.pause());
     }
     if (state == AppLifecycleState.resumed) {
-      unawaited(reload().then((_) async { if (_wasPaused) { _wasPaused = false; await _maybeStartHandsFree(); } }));
+      unawaited(reload().then((_) async { if (_wasPaused || _entryPending) { _wasPaused = false; await _maybeStartHandsFree(); } }));
     }
   }
   void _voiceChanged() {

@@ -49,6 +49,7 @@ void main() {
     await flow.finish();
     await flow.confirm();
     expect(store.saved.length, 1); expect(flow.pending, isNull);
+    expect(flow.text, isEmpty); expect(flow.reference, isNull);
     flow.dispose(); await tester.pump();
   });
   testWidgets('a start command may contain its memo in the same utterance', (tester) async {
