@@ -27,7 +27,7 @@ final class VitsSynthesizer {
         int speaker = job.getInt("sid"); float rate = (float)job.getDouble("rate");
         File temporary = new File(SpeechCache.directory(c), key+".part");
         try (RandomAccessFile output = new RandomAccessFile(temporary,"rw")) {
-            output.setLength(0); output.write(new byte[44]); long samples=0;
+            output.setLength(0); output.write(new byte[44]); long samples=0; double peak=0;
             for (int start=0;start<text.length();) {
                 int end=text.offsetByCodePoints(start,Math.min(24,text.codePointCount(start,text.length())));
                 String chunk=text.substring(start,end); start=end;
@@ -39,13 +39,14 @@ final class VitsSynthesizer {
                     ByteBuffer pcm=ByteBuffer.allocate(8192).order(ByteOrder.LITTLE_ENDIAN);
                     for(float value:audio) {
                         if(!Float.isFinite(value)) throw new IOException("无效的音频采样");
+                        peak=Math.max(peak,Math.abs(value));
                         pcm.putShort((short)Math.round(Math.max(-1,Math.min(1,value))*32767));
                         if(!pcm.hasRemaining()) { output.write(pcm.array()); pcm.clear(); }
                     }
                     if(pcm.position()>0) output.write(pcm.array(),0,pcm.position());
                 }
             }
-            if(samples==0) throw new IOException("正文没有可朗读的文字");
+            if(samples==0 || peak<0.0001) throw new IOException("没有生成有效的朗读声音");
             int bytes=(int)(samples*2);
             ByteBuffer header=ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN);
             header.put("RIFF".getBytes(StandardCharsets.US_ASCII)).putInt(bytes+36).put("WAVEfmt ".getBytes(StandardCharsets.US_ASCII))

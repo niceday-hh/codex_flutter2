@@ -86,6 +86,8 @@ public class ReminderEngineTest {
         engine.save(future(row()).toString()); engine.archive(1);
         JSONObject portable=BackupCodec.decode(engine.exportBackup()).getJSONObject(0);
         assertTrue(portable.getBoolean("archived"));
+        try { BackupCodec.validateReminder(new JSONObject(portable.toString()).put("archivedAt","invalid")); fail("Invalid archive time accepted"); }
+        catch(IllegalArgumentException expected) {}
         engine.importBackup(engine.exportBackup()); JSONArray rows=new JSONObject(engine.state()).getJSONArray("reminders");
         assertEquals(2,rows.length()); assertTrue(rows.getJSONObject(1).getBoolean("archived")); assertFalse(rows.getJSONObject(1).getBoolean("enabled"));
         engine.save(future(row()).toString());

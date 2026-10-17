@@ -1,7 +1,10 @@
 """Actual Android TTS synthesis and native cached playback; never reboot a device."""
 import json
+import array
+import io
 import subprocess
 import time
+import wave
 from pathlib import Path
 from device_preferences import read_runtime, await_created
 
@@ -43,6 +46,21 @@ def state():
 def current(id):
     return next(r for r in json.loads(runtime()['reminders']) if r['id'] == id)
 
+def wave_stats():
+    names=adb('exec-out','run-as',PACKAGE,'ls','files/speech-audio').splitlines()
+    values=[]
+    for name in names:
+        if not name.endswith('.wav'): continue
+        raw=subprocess.run(['adb','exec-out','run-as',PACKAGE,'cat','files/speech-audio/'+name],capture_output=True,check=True,timeout=45).stdout
+        with wave.open(io.BytesIO(raw),'rb') as wav:
+            assert wav.getframerate()==22050 and wav.getnchannels()==1 and wav.getsampwidth()==2
+            samples=array.array('h',wav.readframes(wav.getnframes()))
+            peak=max(abs(v) for v in samples)
+            assert wav.getnframes()>2205 and peak>3, 'Synthesized fixture has no speech signal'
+            values.append({'sample_rate':wav.getframerate(),'frames':wav.getnframes(),'peak_pcm16':peak})
+    assert len(values)>=2, 'Generic and body audio must both be synthesized'
+    return values
+
 def prepare(hide):
     probe('CLEAR')
     shell('input', 'keyevent', 'KEYCODE_WAKEUP')
@@ -68,6 +86,7 @@ path.write_text(json.dumps(result, indent=2))
 try:
     id, token = prepare(True)
     assert state()['status']['speech']['speakerCount'] == 804
+    result['generated_waveforms']=wave_stats()
     result['on_device_synthesis'] = True
     killed(); shell('input', 'keyevent', 'KEYCODE_SLEEP')
     first = wait(lambda: next((e for e in events() if e['type'] == 'speech_played' and e['id'] == id), None), 90, 'Locked generic speech did not start')
@@ -97,7 +116,7 @@ try:
 finally:
     shell('settings', 'put', 'system', 'screen_off_timeout', original_timeout, check=False)
     path.write_text(json.dumps(result, ensure_ascii=False, indent=2))
-    if len(result) < 8:
+    if not result.get('unlocked_body_and_manual_stop'):
         print('Speech diagnostics:', json.dumps({'result': result, 'events': events()}, ensure_ascii=False), flush=True)
         print(shell('logcat', '-d', '-t', '600', check=False), flush=True)
     probe('CLEAR')

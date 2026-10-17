@@ -25,6 +25,10 @@ jobs:
           flutter-version: '3.35.7'
           channel: stable
           cache: true
+      - uses: actions/cache@v4
+        with:
+          path: model-downloads
+          key: offline-models-${{ github.job }}-${{ hashFiles('tool/fetch_model.py', 'tool/fetch_mnn.py', 'tool/vits_model.lock.json') }}
       - name: Bootstrap Android platform
         run: bash tool/bootstrap.sh
       - name: Analyze Flutter code
@@ -38,10 +42,6 @@ jobs:
           java -cp tool/out ScheduleTest
       - name: Debug fixture snapshot race checks
         run: python3 -m unittest discover -s tool -p '*_unit_test.py' -v
-      - uses: actions/cache@v4
-        with:
-          path: model-downloads
-          key: paraformer-zh-int8-a071ee5419e14adb
       - name: Prepare embedded offline model
         run: python3 tool/fetch_model.py
       - name: Prepare VITS-MNN offline speech model
@@ -54,8 +54,18 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: python3 tool/prepare_signing.py
+      - uses: actions/cache/restore@v4
+        id: nativecache
+        with:
+          path: android/app/.cxx
+          key: mnn-cxx-arm64-release-${{ hashFiles('native/app/src/main/cpp/**', 'native/app/build.gradle.kts', 'tool/fetch_mnn.py') }}
       - name: Build arm64 APK
         run: flutter build apk --release --target-platform android-arm64
+      - uses: actions/cache/save@v4
+        if: steps.nativecache.outputs.cache-hit != 'true'
+        with:
+          path: android/app/.cxx
+          key: ${{ steps.nativecache.outputs.cache-primary-key }}
       - name: Native notification, speech, state and backup tests
         run: cd android && ./gradlew :app:testReleaseUnitTest --no-daemon
       - name: Verify embedded model and fixed certificate
@@ -93,11 +103,25 @@ jobs:
           flutter-version: '3.35.7'
           channel: stable
           cache: true
+      - uses: actions/cache@v4
+        with:
+          path: model-downloads
+          key: offline-models-${{ github.job }}-${{ hashFiles('tool/fetch_model.py', 'tool/fetch_mnn.py', 'tool/vits_model.lock.json') }}
+      - uses: actions/cache/restore@v4
+        id: nativecache
+        with:
+          path: android/app/.cxx
+          key: mnn-cxx-x64-api${{ matrix.api }}-${{ hashFiles('native/app/src/main/cpp/**', 'native/app/build.gradle.kts', 'tool/fetch_mnn.py') }}
       - name: Build CI-only debug probe APK
         run: |
           bash tool/bootstrap.sh
           python3 tool/fetch_tts.py
           flutter build apk --debug --target-platform android-x64
+      - uses: actions/cache/save@v4
+        if: steps.nativecache.outputs.cache-hit != 'true'
+        with:
+          path: android/app/.cxx
+          key: ${{ steps.nativecache.outputs.cache-primary-key }}
       - name: Free space for Android system image
         run: |
           (cd android && ./gradlew --stop)

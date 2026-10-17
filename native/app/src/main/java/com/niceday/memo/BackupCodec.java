@@ -32,6 +32,12 @@ public final class BackupCodec {
         validateStyle(r);
         SpeechSettings.validate(r, false);
         if(r.has("archived") && !(r.get("archived") instanceof Boolean)) throw new IllegalArgumentException("归档状态无效");
+        for (String field : Arrays.asList("archivedAt","lastAck")) {
+            if (!r.has(field)) continue;
+            Object value=r.get(field);
+            if (!(value instanceof Integer || value instanceof Long) || ((Number)value).longValue()<0 || ((Number)value).longValue()>8640000000000000L)
+                throw new IllegalArgumentException("整理时间无效");
+        }
     }
     public static void validateStyle(JSONObject r) throws JSONException {
         if (!Arrays.asList("system", "off", "once", "twice", "three", "strong").contains(r.optString("vibration", "three")))
