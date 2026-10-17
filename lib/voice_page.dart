@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'asr.dart';
 import 'recording_waveform.dart';
 import 'voice_flow.dart';
 
@@ -32,6 +33,8 @@ class _VoicePageState extends State<VoicePage> {
     const SizedBox(height: 20),
     Text(flow.message.isEmpty ? '点击开始说话' : flow.message, textAlign: TextAlign.center,
       style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+    ValueListenableBuilder<String>(valueListenable: asr.status, builder: (_, status, _) =>
+      Text(status, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Color(0xFF8A859C)))),
     if (flow.capturing) Text('剩余 ${flow.secondsLeft} 秒', textAlign: TextAlign.center),
     const SizedBox(height: 18), RecordingWaveform(meter: flow.meter),
     const SizedBox(height: 24),

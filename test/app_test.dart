@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -220,6 +221,97 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
     expect(readinessChecks, greaterThan(before));
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  });
+
+  testWidgets('external returns start home prelisten from every previously selected tab', (tester) async {
+    var allowed = false, checks = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+      if (call.method == 'getState') return jsonEncode({'reminders': [], 'defaults': {'handsFree': true}, 'status': {}});
+      if (call.method == 'voiceEntryAllowed') { checks++; return allowed; }
+      if (call.method == 'initialReminderId') return 0;
+      return null; // Intentionally fail model preparation; this test concerns entry routing.
+    });
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
+    for (final label in ['日历', '语音', '设置']) {
+      await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text(label)));
+      await tester.pumpAndSettle();
+      final before = checks; allowed = true;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(checks, greaterThan(before));
+      expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 0);
+      expect(tester.takeException(), isNull);
+      allowed = false;
+    }
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  });
+
+  testWidgets('a late foreground check cannot override a manual voice tab selection', (tester) async {
+    final readiness = Completer<bool>(); var checks = 0, microphones = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+      if (call.method == 'getState') return jsonEncode({'reminders': [], 'defaults': {'handsFree': true}, 'status': {}});
+      if (call.method == 'voiceEntryAllowed') { checks++; return readiness.future; }
+      if (call.method == 'initialReminderId') return 0;
+      if (call.method == 'startRecording') microphones++;
+      return null;
+    });
+    await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle(); expect(checks, 1);
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('语音')));
+    await tester.pumpAndSettle(); readiness.complete(true); await tester.pumpAndSettle();
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 2);
+    expect(microphones, 0); expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  });
+
+  testWidgets('notification entry is quiet but the next ordinary foreground return can prelisten', (tester) async {
+    var checks = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+      if (call.method == 'getState') return jsonEncode({'reminders': [], 'defaults': {'handsFree': true}, 'status': {}});
+      if (call.method == 'voiceEntryAllowed') { checks++; return false; }
+      if (call.method == 'initialReminderId') return 7;
+      return null;
+    });
+    await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle(); expect(checks, 0);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle(); expect(checks, 1);
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  });
+
+  testWidgets('selecting home explicitly retries the opted-in command listener', (tester) async {
+    var checks = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+      if (call.method == 'getState') return jsonEncode({'reminders': [], 'defaults': {'handsFree': true}, 'status': {}});
+      if (call.method == 'voiceEntryAllowed') { checks++; return false; }
+      if (call.method == 'initialReminderId') return 0;
+      return null;
+    });
+    await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('日历'))); await tester.pumpAndSettle();
+    final before = checks;
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('备忘录'))); await tester.pumpAndSettle();
+    expect(checks, greaterThan(before));
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  });
+
+  testWidgets('manual voice tab prewarms without opening a microphone', (tester) async {
+    var preparations = 0, microphones = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+      if (call.method == 'getState') return jsonEncode({'reminders': [], 'defaults': {'handsFree': false}, 'status': {}});
+      if (call.method == 'prepareAsr') preparations++;
+      if (call.method == 'startRecording') microphones++;
+      if (call.method == 'initialReminderId') return 0;
+      return null;
+    });
+    await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
+    expect(preparations, 0);
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('语音'))); await tester.pumpAndSettle();
+    expect(preparations, 1); expect(microphones, 0); expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
 

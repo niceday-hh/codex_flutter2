@@ -182,7 +182,7 @@ public final class ReminderEngine {
         status.put("lastReceived", runtime.getLong("lastReceived", 0));
         status.put("lastRestored", runtime.getLong("lastRestored", 0));
         status.put("package", context.getPackageName());
-        status.put("version", "0.9.0");
+        status.put("version", "0.9.1");
         status.put("testAutoDelete",prefs.getBoolean("testAutoDelete",true));
         status.put("cleanupPrompts", prefs.getBoolean("cleanupPrompts",true));
         status.put("speech", SpeechCache.status(context));

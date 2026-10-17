@@ -99,7 +99,7 @@ public final class MainActivity extends FlutterActivity {
                     case "getState" -> result.success(store.state());
                     case "saveVoiceGroups" -> { VoiceGroups.save(this,(String)call.arguments); result.success(null); }
                     case "microphoneReady" -> result.success(resumed && !getSystemService(KeyguardManager.class).isKeyguardLocked() && recorder!=null && recorder.getRecordingState()==AudioRecord.RECORDSTATE_RECORDING && (Build.VERSION.SDK_INT<29 || recorder.getActiveRecordingConfiguration()!=null && !recorder.getActiveRecordingConfiguration().isClientSilenced()));
-                    case "voiceEntryAllowed" -> result.success(resumed && !getSystemService(KeyguardManager.class).isKeyguardLocked() && !getIntent().hasExtra("reminderId"));
+                    case "voiceEntryAllowed" -> result.success(resumed && !getSystemService(KeyguardManager.class).isKeyguardLocked());
                     case "prepareAsr" -> documents.execute(() -> {
                         try { String path = AsrAssets.prepare(getApplicationContext()); runOnUiThread(() -> result.success(path)); }
                         catch (Exception e) { runOnUiThread(() -> result.error("ASR", "模型准备失败：" + e.getMessage(), null)); }

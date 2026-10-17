@@ -15,6 +15,8 @@ Future<void> discardRecording(String path) async {
 // One model per voice session, confined to a worker isolate. No FFI pointers
 // cross isolates; each utterance gets a fresh stream and reuses the model.
 class AsrSession {
+  final Duration idleTimeout;
+  AsrSession({this.idleTimeout = const Duration(seconds: 20)});
   final status = ValueNotifier<String>('离线模型尚未准备');
   Isolate? _worker;
   ReceivePort? _port, _errors;
@@ -25,21 +27,33 @@ class AsrSession {
   int _serial = 0, _users = 0, _pins = 0, _vadGeneration = 0;
   Completer<void>? _unpinned;
   final vadEvents = StreamController<Map<String, dynamic>>.broadcast(sync: true);
-  Future<void> retainVoice() async {
+  Future<bool> retainVoice({bool Function()? isCurrent}) async {
     while (_suspension != null) { await _suspension; }
+    if (isCurrent != null && !isCurrent()) return false;
     _pins++; _idle?.cancel();
-    try { await prepare(); } catch (_) { releaseVoice(); rethrow; }
+    try {
+      await prepare();
+      if (isCurrent != null && !isCurrent()) { releaseVoice(keepWarm: false); return false; }
+      return true;
+    } catch (_) { releaseVoice(keepWarm: false); rethrow; }
   }
-  void releaseVoice() {
+  void releaseVoice({bool keepWarm = true}) {
     if (_pins == 0) return;
     _pins--;
     if (_pins == 0) {
       _unpinned?.complete(); _unpinned = null;
-      release();
+      if (keepWarm && !_releaseRequested && _suspension == null) { _armIdle(); }
+      else { release(); }
     }
   }
-  Future<int> startVad(double silence) async {
+  // A speculative tab warm-up never queues behind TTS and never opens the mic.
+  Future<void> prewarm() async {
+    if (_suspension != null || _pins > 0 || _preparing != null) return;
     await prepare();
+  }
+  Future<int> startVad(double silence, {bool Function()? isCurrent}) async {
+    await prepare();
+    if (isCurrent != null && !isCurrent()) return 0;
     final id = ++_vadGeneration;
     final ready = Completer<String>();
     final request = ++_serial; _pending[request] = ready;
@@ -86,10 +100,13 @@ class AsrSession {
   }
   Future<void> _prepare() async {
     try {
+      // Wait for the previous native recognizer to free its memory before reload.
+      if (_closed != null) await _closed!.future;
+      if (_releaseRequested && _users == 0 && _pins == 0) return;
       status.value = '正在准备离线模型…首次使用需要稍等';
       final dir = await native.invokeMethod<String>('prepareAsr');
       if (dir == null) throw StateError('无法打开语音模型目录');
-      if (_releaseRequested && _users == 0) { status.value = '离线模型已释放'; return; }
+      if (_releaseRequested && _users == 0 && _pins == 0) { status.value = '离线模型已释放'; return; }
       final vadPath = await native.invokeMethod<String>('prepareVad');
       if (vadPath == null) throw StateError('无法打开人声检测模型');
       if (_releaseRequested && _users == 0 && _pins == 0) { status.value = '离线模型已释放'; return; }
@@ -156,7 +173,7 @@ class AsrSession {
   }
   void _armIdle() {
     _idle?.cancel();
-    if (_pins == 0) _idle = Timer(const Duration(seconds: 60), release);
+    if (_pins == 0) _idle = Timer(idleTimeout, release);
   }
   void release() {
     _releaseRequested = true; _idle?.cancel();

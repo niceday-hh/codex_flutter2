@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'asr.dart';
@@ -16,7 +17,7 @@ class CapturedVoice {
 }
 
 abstract class VoiceCapture {
-  Future<void> open();
+  Future<void> open({bool waitForModel = true});
   Future<void> start(double silence, void Function(int endSample) endpoint, void Function(Object) level);
   Future<CapturedVoice> stop({int? endSample});
   Future<void> cancel();
@@ -25,44 +26,93 @@ abstract class VoiceCapture {
 
 class OfflineVoiceCapture implements VoiceCapture {
   final AsrSession session;
-  OfflineVoiceCapture(this.session);
+  final Stream<dynamic> _pcmSource, _levelSource;
+  OfflineVoiceCapture(this.session, {Stream<dynamic>? pcm, Stream<dynamic>? levels})
+    : _pcmSource = pcm ?? const EventChannel('memo/recordingPcm').receiveBroadcastStream(),
+      _levelSource = levels ?? const EventChannel('memo/recordingLevels').receiveBroadcastStream();
+  // PCM16 mono at 16 kHz: no more than the existing 45-second recording cap.
+  static const maxBufferedBytes = 16000 * 2 * 45;
+  final _backlog = Queue<Uint8List>();
+  int _bufferedBytes = 0;
+  int get bufferedBytes => _bufferedBytes;
   StreamSubscription<dynamic>? _pcm, _levels;
   StreamSubscription<Map<String, dynamic>>? _vad;
-  bool _retained = false, _accepting = false;
+  bool _retained = false, _accepting = false, _draining = false;
+  Future<bool>? _modelReady;
   DateTime _started = DateTime.now();
-  int _generation = 0;
-  @override Future<void> open() async {
-    if (_retained) return;
-    await session.retainVoice(); _retained = true;
+  int _generation = 0, _leaseTicket = 0, _recordTicket = 0;
+  @override Future<void> open({bool waitForModel = true}) async {
+    if (_modelReady == null) {
+      final ticket = ++_leaseTicket;
+      final ready = session.retainVoice(isCurrent: () => ticket == _leaseTicket);
+      _modelReady = ready;
+      // Observe failure even if a cancelled, early-start recording never awaits it.
+      unawaited(ready.then((held) {
+        if (!held) return;
+        if (ticket == _leaseTicket) { _retained = true; }
+        else { session.releaseVoice(); }
+      }, onError: (Object _) {}));
+    }
+    if (waitForModel && !await _modelReady!) throw StateError('语音准备已取消');
+  }
+  bool _current(int ticket) => _accepting && ticket == _recordTicket;
+  void _clearBacklog() { _backlog.clear(); _bufferedBytes = 0; }
+  Future<void> _prepareDetector(double silence, int ticket, void Function(int) endpoint) async {
+    try {
+      final ready = _modelReady;
+      if (ready == null || !await ready || !_current(ticket)) return;
+      final generation = await session.startVad(silence, isCurrent: () => _current(ticket));
+      if (!_current(ticket) || generation == 0) return;
+      _generation = generation; _draining = true;
+      // Preserve order and yield between 2-second batches; never block the UI
+      // with one large copy or an unlimited burst after a cold model load.
+      while (_current(ticket) && _backlog.isNotEmpty) {
+        for (var i = 0; i < 20 && _current(ticket) && _backlog.isNotEmpty; i++) {
+          final frame = _backlog.removeFirst(); _bufferedBytes -= frame.length;
+          session.feedVad(generation, frame);
+        }
+        if (_backlog.isNotEmpty) await Future<void>.delayed(Duration.zero);
+      }
+      if (_current(ticket)) _draining = false;
+    } catch (_) {
+      if (_current(ticket)) { _accepting = false; _clearBacklog(); endpoint(-1); }
+    }
   }
   @override Future<void> start(double silence, void Function(int) endpoint, void Function(Object) level) async {
     await _unsubscribe();
-    _generation = await session.startVad(silence);
-    final generation = _generation;
+    final ticket = _recordTicket;
+    _accepting = true;
     _vad = session.vadEvents.stream.listen((event) {
-      if (!_accepting || event['generation'] != generation) return;
+      if (!_current(ticket) || _generation == 0 || event['generation'] != _generation) return;
       if (event['error'] != null) { _accepting = false; endpoint(-1); }
       else if (event['endSample'] is int) { endpoint(event['endSample'] as int); }
     });
-    _pcm = const EventChannel('memo/recordingPcm').receiveBroadcastStream().listen((dynamic data) {
-      if (_accepting && data is Uint8List) session.feedVad(generation, data);
-    }, onError: (Object _) { if (_accepting) { _accepting = false; endpoint(-1); } });
-    _levels = const EventChannel('memo/recordingLevels').receiveBroadcastStream().listen(
-      (dynamic value) { if (_accepting && value != null) level(value as Object); },
+    _pcm = _pcmSource.listen((dynamic data) {
+      if (!_current(ticket) || data is! Uint8List) return;
+      if (_generation != 0 && !_draining) { session.feedVad(_generation, data); return; }
+      if (_bufferedBytes + data.length > maxBufferedBytes) {
+        _accepting = false; _clearBacklog(); endpoint(-1); return;
+      }
+      _backlog.addLast(data); _bufferedBytes += data.length;
+    }, onError: (Object _) { if (_current(ticket)) { _accepting = false; endpoint(-1); } });
+    _levels = _levelSource.listen(
+      (dynamic value) { if (_current(ticket) && value != null) level(value as Object); },
       onError: (Object _) {});
-    _accepting = true; _started = DateTime.now();
+    unawaited(_prepareDetector(silence, ticket, endpoint));
+    _started = DateTime.now();
     await native.invokeMethod<void>('startRecording');
     _started = DateTime.now();
     // A visible assistant can silence an otherwise successfully started recorder.
     for (var i = 0; i < 40; i++) {
-      if (!_accepting) return;
+      if (!_current(ticket)) return;
       if (await native.invokeMethod<bool>('microphoneReady') == true) return;
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
     throw StateError('麦克风暂不可用，请先关闭 YOYO 面板或其它录音应用后重试');
   }
   Future<void> _unsubscribe() async {
-    _accepting = false; session.stopVad();
+    _accepting = false; _recordTicket++; _generation = 0; _draining = false;
+    _clearBacklog(); session.stopVad();
     final pcm = _pcm, levels = _levels, vad = _vad;
     _pcm = null; _levels = null; _vad = null;
     await pcm?.cancel(); await levels?.cancel(); await vad?.cancel();
@@ -74,14 +124,18 @@ class OfflineVoiceCapture implements VoiceCapture {
     if (path == null) throw StateError('没有录音，请重试');
     final reference = endSample != null && endSample > 0
       ? _started.add(Duration(microseconds: (endSample * 1000000 / 16000).round())) : ended;
-    final text = await session.transcribe(path, maxSamples: endSample);
-    return CapturedVoice(text, reference.isAfter(ended) ? ended : reference);
+    try {
+      if (_modelReady == null || !await _modelReady!) throw StateError('语音准备已取消');
+      final text = await session.transcribe(path, maxSamples: endSample);
+      return CapturedVoice(text, reference.isAfter(ended) ? ended : reference);
+    } catch (_) { await discardRecording(path); rethrow; }
   }
   @override Future<void> cancel() async {
     await _unsubscribe();
     await native.invokeMethod<void>('cancelRecording');
   }
   @override void release() {
+    _leaseTicket++; _modelReady = null;
     if (_retained) { _retained = false; session.releaseVoice(); }
   }
 }
@@ -137,12 +191,13 @@ class VoiceFlow extends ChangeNotifier {
   Future<void> _start(VoicePhase mode) {
     final ticket = ++_epoch;
     _stopTimers(); pending = null; _confirmDeadline = null; _commandDeadline = null;
-    phase = VoicePhase.preparing; message = '正在准备麦克风和离线模型…'; _notify();
+    phase = VoicePhase.preparing;
+    message = mode == VoicePhase.recording ? '正在打开麦克风…' : '正在准备麦克风和离线模型…'; _notify();
     return _queue(() async {
       try {
         await capture.cancel();
         if (!_current(ticket)) return;
-        await capture.open();
+        await capture.open(waitForModel: mode != VoicePhase.recording);
         if (!_current(ticket)) return;
         if (mode == VoicePhase.recording) { text = ''; reference = null; openVoicePage(); }
         await _listen(mode, ticket);
@@ -160,7 +215,7 @@ class VoiceFlow extends ChangeNotifier {
       if (mode == VoicePhase.recording && store.defaults['voiceAutoStop'] == false) return;
       unawaited(finish(endSample: end));
     }, meter.accept);
-    if (!_current(ticket)) return;
+    if (!_current(ticket) || phase != VoicePhase.preparing) return;
     phase = mode; meter.start();
     if (mode == VoicePhase.commands) _commandDeadline ??= now().add(const Duration(seconds: 15));
     message = switch (mode) {

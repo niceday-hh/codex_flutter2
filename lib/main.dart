@@ -69,6 +69,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     openVoicePage: () { if (mounted) setState(() => tab = 2); }, onSaved: reload);
   DialogRoute<void>? _voiceDialog;
   bool _dialogScheduled = false, _wasPaused = false, _entryPending = true;
+  bool _initialized = false, _foreground = true, _checkingEntry = false, _suppressVoiceEntry = false;
   DateTime selectedDate = DateTime.now();
   DateTime calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
 
@@ -76,10 +77,12 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     super.initState(); WidgetsBinding.instance.addObserver(this);
     voice.addListener(_voiceChanged);
     native.setMethodCallHandler((call) async {
-      if (call.method == 'openReminder') { await voice.cancel(); await reload(); if (mounted) openById(call.arguments as int); }
+      if (call.method == 'openReminder') {
+        _suppressVoiceEntry = true; _entryPending = false;
+        await voice.cancel(); await reload(); if (mounted) openById(call.arguments as int);
+      }
       if (call.method == 'voiceEntry') {
-        _entryPending = true;
-        if (mounted && !Navigator.of(context).canPop()) setState(() => tab = 0);
+        _suppressVoiceEntry = false; _entryPending = true;
         await _maybeStartHandsFree();
       }
       if (call.method == 'stateChanged') { await reload(); }
@@ -90,31 +93,64 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   Future<void> initialize() async {
     try { await native.invokeMethod('restore'); } catch (_) {}
     await reload();
-    try {
-      final id = await native.invokeMethod<int>('initialReminderId');
-      if (mounted && id != null && id > 0) { openById(id); }
-      else { await _maybeStartHandsFree(); }
-    } catch (_) {}
+    int? id;
+    try { id = await native.invokeMethod<int>('initialReminderId'); } catch (_) {}
+    if (!mounted) return;
+    _initialized = true;
+    if (id != null && id > 0) { _suppressVoiceEntry = true; _entryPending = false; openById(id); }
+    else { await _maybeStartHandsFree(); }
     unawaited(speech.preparePending());
   }
   Future<void> _maybeStartHandsFree() async {
-    if (!mounted || tab != 0 || voice.active || voice.pending != null || store.defaults['handsFree'] != true || Navigator.of(context).canPop()) return;
-    try { if (await native.invokeMethod<bool>('voiceEntryAllowed') == true && mounted && !voice.active) {
-      _entryPending = false; await voice.startCommands();
-    } } catch (e) { toast(niceError(e)); }
+    if (!_canStartHandsFree || _checkingEntry) return;
+    _checkingEntry = true;
+    try {
+      if (await native.invokeMethod<bool>('voiceEntryAllowed') == true && _canStartHandsFree) {
+        _entryPending = false;
+        setState(() => tab = 0);
+        await voice.startCommands();
+      }
+    } catch (e) { toast(niceError(e)); }
+    finally { _checkingEntry = false; }
+  }
+  bool get _canStartHandsFree => mounted && _initialized && _foreground && _entryPending &&
+    !_suppressVoiceEntry && !voice.active && voice.pending == null &&
+    store.defaults['handsFree'] == true && !Navigator.of(context).canPop();
+  void _warmManualTab() {
+    if (!mounted || !_foreground || tab != 2 || voice.active) return;
+    unawaited(asr.prewarm().catchError((Object _) {}));
+  }
+  void _selectTab(int i) {
+    _entryPending = false; speech.stopPreview();
+    final stopped = voice.pause(keepDraft: false);
+    setState(() => tab = i);
+    unawaited(stopped.then((_) async {
+      if (!mounted || !_foreground || tab != i || voice.active) return;
+      if (i == 2) _warmManualTab();
+      if (i == 0) { _entryPending = true; await _maybeStartHandsFree(); }
+    }).catchError((Object e) { toast(niceError(e)); }));
+  }
+  Future<void> _pauseForBackground() async {
+    try { await voice.pause(); } catch (_) {}
+    finally { asr.release(); }
   }
   @override void dispose() {
     voice.removeListener(_voiceChanged); voice.dispose();
+    asr.release();
     WidgetsBinding.instance.removeObserver(this); native.setMethodCallHandler(null); super.dispose();
   }
   @override void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
-      _wasPaused = true; unawaited(voice.pause());
+      _foreground = false; _wasPaused = true; _suppressVoiceEntry = false;
+      unawaited(_pauseForBackground());
     }
     if (state == AppLifecycleState.resumed) {
-      unawaited(reload().then((_) async { if (_wasPaused || _entryPending) { _wasPaused = false; await _maybeStartHandsFree(); } }));
+      _foreground = true;
+      if (_wasPaused) { _wasPaused = false; _entryPending = true; }
+      unawaited(reload().then((_) async { await _maybeStartHandsFree(); _warmManualTab(); }));
     }
   }
+  @override void didHaveMemoryPressure() { asr.release(); }
   void _voiceChanged() {
     if (!mounted) return;
     setState(() {});
@@ -238,7 +274,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
           foregroundColor: Colors.white, tooltip: '新建提醒', child: const Icon(Icons.add_rounded, size: 32)) : null,
     bottomNavigationBar: NavigationBar(backgroundColor: Colors.white,
       selectedIndex: tab, indicatorColor: const Color(0xFFECE5FF),
-      onDestinationSelected: (i) { speech.stopPreview(); unawaited(voice.pause(keepDraft: false)); setState(() => tab = i); }, destinations: const [
+      onDestinationSelected: _selectTab, destinations: const [
         NavigationDestination(icon: Icon(Icons.description_outlined), selectedIcon: Icon(Icons.description_rounded), label: '备忘录'),
         NavigationDestination(icon: Icon(Icons.calendar_month_outlined), label: '日历'),
         NavigationDestination(icon: Icon(Icons.mic_none_rounded), selectedIcon: Icon(Icons.mic_rounded), label: '语音'),
@@ -523,7 +559,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     ]),
     section('免手语音操作', ''), settingsGroup([
       SwitchListTile(title: const Text('打开应用后预听语音指令'),
-        subtitle: const Text('前台就绪后预听15秒，可说“开始录音”；首次需授权麦克风。提醒通知入口不自动预听。'),
+        subtitle: const Text('打开应用或从桌面、其他应用返回时，在首页预听15秒；听到“开始录音”后自动切换。编辑或待确认内容不会被打断。'),
         value: store.defaults['handsFree'] as bool? ?? false,
         onChanged: (v) async { store.defaults['handsFree'] = v; await persistDefaults(); }),
       SwitchListTile(title: const Text('连续安静后自动结束录音'),

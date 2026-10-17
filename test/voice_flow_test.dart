@@ -7,9 +7,10 @@ import 'package:timed_memo/voice_flow.dart';
 class FakeCapture implements VoiceCapture {
   final results = <CapturedVoice>[];
   final silences = <double>[];
+  final waitsForModel = <bool>[];
   int opens = 0, releases = 0, cancels = 0;
   Completer<CapturedVoice>? delayed;
-  @override Future<void> open() async { opens++; }
+  @override Future<void> open({bool waitForModel = true}) async { opens++; waitsForModel.add(waitForModel); }
   @override Future<void> start(double silence, void Function(int) endpoint, void Function(Object) level) async { silences.add(silence); }
   @override Future<CapturedVoice> stop({int? endSample}) async => delayed == null ? results.removeAt(0) : delayed!.future;
   @override Future<void> cancel() async { cancels++; }
@@ -31,6 +32,7 @@ void main() {
     final flow = VoiceFlow(capture: c, store: store, clock: () => at,
       openVoicePage: () => opened++, onSaved: () async {});
     await flow.startCommands();
+    expect(c.waitsForModel, [true]);
     expect(flow.phase, VoicePhase.commands);
     expect(c.silences, [0.7]);
     c.results.add(CapturedVoice('开始录音', at));
@@ -87,6 +89,7 @@ void main() {
     final c = FakeCapture(), store = FakeStore();
     final flow = VoiceFlow(capture: c, store: store, clock: () => at, openVoicePage: () {}, onSaved: () async {});
     await flow.startRecording();
+    expect(c.waitsForModel, [false]);
     c.delayed = Completer<CapturedVoice>();
     final recognizing = flow.finish();
     await tester.pump();
