@@ -23,15 +23,15 @@ class VoiceCatalog {
     if (entries.length != speechVoiceNames.length) throw StateError('音色分组资料不完整');
     return VoiceCatalog(entries);
   }
-  List<String> candidates({String language = 'all', String gender = 'all', String query = ''}) {
+  List<String> candidates({String language = 'all', String gender = 'all', String query = '', Set<String>? members}) {
     final key = query.toLowerCase();
     return [for (var i = 0; i < voices.length; i++)
-      if ((language == 'all' || voices[i]['language'] == language) &&
+      if ((members == null || members.contains('$i')) && (language == 'all' || voices[i]['language'] == language) &&
           (gender == 'all' || voices[i]['gender'] == gender) &&
           ('$i ${speechVoiceNames[i]}'.toLowerCase().contains(key))) '$i'];
   }
-  String? pick({String language = 'all', String gender = 'all', String query = '', Random? random}) {
-    final pool = candidates(language: language, gender: gender, query: query);
+  String? pick({String language = 'all', String gender = 'all', String query = '', Random? random, Set<String>? members}) {
+    final pool = candidates(language: language, gender: gender, query: query, members: members);
     return pool.isEmpty ? null : pool[(random ?? Random()).nextInt(pool.length)];
   }
   String tags(String id) {

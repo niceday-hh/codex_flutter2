@@ -171,6 +171,7 @@ public final class ReminderEngine {
         }
         result.put("reminders", rows);
         result.put("defaults", defaults);
+        result.put("voiceGroups", unlocked ? VoiceGroups.read(context) : new JSONArray());
         JSONObject status = new JSONObject();
         status.put("notifications", notifications.areNotificationsEnabled());
         status.put("exact", Build.VERSION.SDK_INT < 31 || alarms.canScheduleExactAlarms());
@@ -181,7 +182,7 @@ public final class ReminderEngine {
         status.put("lastReceived", runtime.getLong("lastReceived", 0));
         status.put("lastRestored", runtime.getLong("lastRestored", 0));
         status.put("package", context.getPackageName());
-        status.put("version", "0.8.0");
+        status.put("version", "0.9.0");
         status.put("testAutoDelete",prefs.getBoolean("testAutoDelete",true));
         status.put("cleanupPrompts", prefs.getBoolean("cleanupPrompts",true));
         status.put("speech", SpeechCache.status(context));
@@ -202,6 +203,7 @@ public final class ReminderEngine {
         JSONObject values = new JSONObject(json);
         BackupCodec.validateStyle(values);
         SpeechSettings.validate(values, true);
+        VoiceInputSettings.validate(values);
         values.remove("notificationChannelId"); values.remove("notificationStyle");
         ensureChannel(new JSONObject(values.toString()));
         if (!prefs.edit().putString("defaults", values.toString()).commit()) throw new IllegalStateException("保存失败");
@@ -213,7 +215,7 @@ public final class ReminderEngine {
     }
     public void save(String json) throws JSONException {
         JSONObject r = new JSONObject(json);
-        r.remove("notificationChannelId"); r.remove("notificationStyle");
+        r.remove("notificationChannelId"); r.remove("notificationStyle"); r.remove("historyScheduledAt");
         BackupCodec.validateReminder(r);
         VoiceCatalog.resolve(context,r);
         if (Build.VERSION.SDK_INT >= 31 && !alarms.canScheduleExactAlarms())
@@ -481,11 +483,11 @@ public final class ReminderEngine {
         boolean bodyAvailable = unlocked && r.has("text");
         Notification publicVersion = new Notification.Builder(context, channelId)
             .setSmallIcon(com.niceday.memo.R.drawable.ic_notification)
-            .setContentTitle("定时备忘录").setContentText("有一条待办提醒 · 解锁后查看")
+            .setContentTitle("超级提醒").setContentText("有一条待办提醒 · 解锁后查看")
             .setVisibility(Notification.VISIBILITY_PUBLIC).build();
         Notification.Builder builder = new Notification.Builder(context, channelId)
             .setSmallIcon(com.niceday.memo.R.drawable.ic_notification)
-            .setColor(0xFF7252F6).setContentTitle("定时备忘录")
+            .setColor(0xFF7252F6).setContentTitle("超级提醒")
             .setContentText(bodyAvailable ? r.getString("text") : "有一条待办提醒 · 解锁后查看")
             .setSubText("第" + r.optInt("attempts") + "/" + r.optInt("totalCount") + "次 · 划掉后停止本轮提醒")
             .setVisibility(NotificationStyles.visibility(r)).setPublicVersion(publicVersion)
@@ -528,21 +530,37 @@ public final class ReminderEngine {
             JSONObject defaults = SpeechSettings.defaults(context);
             r.put("speechMode", SpeechSettings.enabled(r, defaults) ? "on" : "off")
                 .put("speechVoice", SpeechSettings.voice(r, defaults)).put("speechRate", SpeechSettings.rate(r, defaults));
+            if((r.optBoolean("completed") || r.optBoolean("archived")) && r.optLong("activeOccurrence")>0)
+                r.put("historyScheduledAt",r.getLong("activeOccurrence"));
             r.remove("notificationChannelId"); r.remove("notificationStyle"); portable.put(r);
         }
         return new JSONObject().put("format", "timed-memo").put("version", 1)
             .put("exportedAt", System.currentTimeMillis()).put("reminders", portable)
-            .put("defaults", new JSONObject(prefs.getString("defaults", "{}"))).toString(2);
+            .put("defaults", new JSONObject(prefs.getString("defaults", "{}")))
+            .put("voiceGroups",VoiceGroups.read(context)).toString(2);
     }
     public int importBackup(String source) throws JSONException {
         if (!unlocked) throw new IllegalStateException("请先解锁手机");
         JSONArray imported = BackupCodec.decode(source);
+        JSONArray combined=VoiceGroups.read(context);
+        JSONArray incoming=VoiceGroups.validate(new JSONObject(source).optJSONArray("voiceGroups")==null ? new JSONArray() : new JSONObject(source).getJSONArray("voiceGroups"));
+        java.util.Map<String,String> groupIds=new java.util.HashMap<>();
+        for(int i=0;i<incoming.length();i++) {
+            JSONObject g=new JSONObject(incoming.getJSONObject(i).toString());
+            String old=g.getString("id"), replacement=old;
+            if(VoiceGroups.members(combined,old)!=null) replacement=java.util.UUID.randomUUID().toString();
+            groupIds.put(old,replacement); g.put("id",replacement); combined.put(g);
+        }
+        VoiceGroups.validate(combined);
         JSONArray rows = read();
         int id = prefs.getInt("nextId", 1);
         for (int i = 0; i < rows.length(); i++) id = Math.max(id, rows.getJSONObject(i).getInt("id") + 1);
         long generation = Math.max(System.currentTimeMillis(), prefs.getLong("generation", 0) + 1);
         for (int i = 0; i < imported.length(); i++) {
             JSONObject r = imported.getJSONObject(i);
+            String oldGroup=r.optString("speechRandomGroup","");
+            if(groupIds.containsKey(oldGroup)) r.put("speechRandomGroup",groupIds.get(oldGroup));
+            else if(!oldGroup.isEmpty() && VoiceGroups.members(combined,oldGroup)==null) r.put("speechRandomGroup","");
             long n = next(r, System.currentTimeMillis());
             boolean enabled = r.optBoolean("enabled", true) && n > 0 && !r.optBoolean("completed") && !r.optBoolean("archived");
             r.put("id", id++).put("version", generation++).put("enabled", enabled)
@@ -551,13 +569,13 @@ public final class ReminderEngine {
                 .put("completed", r.optBoolean("completed") || ("none".equals(r.optString("repeat")) && n == 0))
                 .put("ringtone", "");
             r.remove("notificationChannelId"); r.remove("notificationStyle");
-            VoiceCatalog.resolve(context,r);
+            VoiceCatalog.resolve(context,r,combined);
             ensureChannel(r);
             rows.put(r);
         }
         // Validate the whole file before a single atomic data write; merge never overwrites local rows.
         write(rows);
-        prefs.edit().putInt("nextId", id).putLong("generation", generation).putInt("schema", 2).commit();
+        prefs.edit().putInt("nextId", id).putLong("generation", generation).putInt("schema", 2).putString("voiceGroups",combined.toString()).commit();
         for (int i = rows.length() - imported.length(); i < rows.length(); i++) {
             JSONObject r = rows.getJSONObject(i); ensureChannel(r); scheduleBase(r);
         }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'voice_group.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -18,11 +19,11 @@ class Reminder {
   String speechMode, speechVoice, speechState;
   double speechRate;
   bool speechHideLocked, speechRepeat, speechRandom;
-  String speechRandomLanguage, speechRandomGender;
+  String speechRandomLanguage, speechRandomGender, speechRandomGroup;
   int intervalMinutes, totalCount;
   int attempts, activeOccurrence, nextTrigger;
   bool acknowledged, completed, archived;
-  int archivedAt, lastAck;
+  int archivedAt, lastAck, historyScheduledAt;
   // Draft-only validation flags; never written to a backup or native schedule.
   bool dateConfirmed = true, timeConfirmed = true;
 
@@ -33,10 +34,10 @@ class Reminder {
     this.presentation = 'banner', this.lockscreen = 'private',
     this.speechMode = 'off', this.speechVoice = '', this.speechRate = 0,
     this.speechHideLocked = true, this.speechRepeat = true, this.speechState = 'off',
-    this.speechRandom = false, this.speechRandomLanguage = 'all', this.speechRandomGender = 'all',
+    this.speechRandom = false, this.speechRandomLanguage = 'all', this.speechRandomGender = 'all', this.speechRandomGroup = '',
     this.attempts = 0, this.activeOccurrence = 0, this.nextTrigger = 0,
     this.acknowledged = false, this.completed = false, this.archived = false,
-    this.archivedAt = 0, this.lastAck = 0})
+    this.archivedAt = 0, this.lastAck = 0, this.historyScheduledAt = 0})
       : date = date ?? DateTime.now().add(const Duration(hours: 1)),
         days = days ?? [];
 
@@ -62,6 +63,7 @@ class Reminder {
     speechRandom: j['speechRandom'] as bool? ?? false,
     speechRandomLanguage: j['speechRandomLanguage'] as String? ?? 'all',
     speechRandomGender: j['speechRandomGender'] as String? ?? 'all',
+    speechRandomGroup: j['speechRandomGroup'] as String? ?? '',
     intervalMinutes: j['intervalMinutes'] as int? ?? 5,
     totalCount: j['totalCount'] as int? ?? 3,
     attempts: j['attempts'] as int? ?? 0,
@@ -70,6 +72,7 @@ class Reminder {
     acknowledged: j['acknowledged'] as bool? ?? false,
     completed: j['completed'] as bool? ?? false,
     archived: j['archived'] as bool? ?? false,
+    historyScheduledAt: (j['historyScheduledAt'] as num?)?.toInt() ?? 0,
     archivedAt: j['archivedAt'] as int? ?? 0, lastAck: j['lastAck'] as int? ?? 0,
   );
   Map<String, dynamic> toJson() => {
@@ -82,7 +85,7 @@ class Reminder {
     'totalCount': totalCount,
     'presentation': presentation, 'lockscreen': lockscreen,
     'speechMode': speechMode, 'speechVoice': speechVoice, 'speechRate': speechRate,
-    'speechRandom': speechRandom, 'speechRandomLanguage': speechRandomLanguage, 'speechRandomGender': speechRandomGender,
+    'speechRandom': speechRandom, 'speechRandomLanguage': speechRandomLanguage, 'speechRandomGender': speechRandomGender, 'speechRandomGroup': speechRandomGroup,
     'speechHideLocked': speechHideLocked, 'speechRepeat': speechRepeat,
     'speechModel': 'voine-vits-mnn-v1',
     'archived': archived, 'archivedAt': archivedAt,
@@ -91,7 +94,7 @@ class Reminder {
     'sound': sound, 'vibration': vibration, 'ringtone': ringtone,
     'presentation': presentation, 'lockscreen': lockscreen,
     'speechMode': speechMode, 'speechVoice': speechVoice, 'speechRate': speechRate,
-    'speechRandom': speechRandom, 'speechRandomLanguage': speechRandomLanguage, 'speechRandomGender': speechRandomGender,
+    'speechRandom': speechRandom, 'speechRandomLanguage': speechRandomLanguage, 'speechRandomGender': speechRandomGender, 'speechRandomGroup': speechRandomGroup,
     'speechHideLocked': speechHideLocked, 'speechRepeat': speechRepeat,
   };
   String get time => '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
@@ -108,6 +111,7 @@ class Reminder {
 
 class MemoStore extends ChangeNotifier {
   List<Reminder> reminders = [];
+  List<VoiceGroup> voiceGroups = [];
   Map<String, dynamic> defaults = {};
   Map<String, dynamic> status = {};
   Future<void> load() async {
@@ -115,6 +119,7 @@ class MemoStore extends ChangeNotifier {
     final j = jsonDecode(raw ?? '{}') as Map<String, dynamic>;
     reminders = (j['reminders'] as List? ?? [])
       .map((v) => Reminder.fromJson(Map<String, dynamic>.from(v as Map))).toList();
+    voiceGroups = (j['voiceGroups'] as List? ?? []).map((g) => VoiceGroup.fromJson(Map<String, dynamic>.from(g as Map))).toList();
     defaults = Map<String, dynamic>.from(j['defaults'] as Map? ?? {});
     status = Map<String, dynamic>.from(j['status'] as Map? ?? {});
     notifyListeners();
@@ -124,6 +129,7 @@ class MemoStore extends ChangeNotifier {
     speechRandom: defaults['speechRandom'] as bool? ?? false,
     speechRandomLanguage: defaults['speechRandomLanguage'] as String? ?? 'all',
     speechRandomGender: defaults['speechRandomGender'] as String? ?? 'all',
+    speechRandomGroup: defaults['speechRandomGroup'] as String? ?? '',
     speechHideLocked: defaults['speechHideLocked'] as bool? ?? true,
     speechRepeat: defaults['speechRepeat'] as bool? ?? true,
     intervalMinutes: defaults['intervalMinutes'] as int? ?? 5,
@@ -135,6 +141,10 @@ class MemoStore extends ChangeNotifier {
     presentation: defaults['presentation'] as String? ?? 'banner',
     lockscreen: defaults['lockscreen'] as String? ?? 'private',
   );
+  Future<void> saveVoiceGroups(List<VoiceGroup> groups) async {
+    await native.invokeMethod('saveVoiceGroups', jsonEncode(groups.map((g) => g.toJson()).toList()));
+    await load();
+  }
   Future<void> save(Reminder r) async {
     await native.invokeMethod('save', jsonEncode(r.toJson()));
     unawaited(speech.preparePending());

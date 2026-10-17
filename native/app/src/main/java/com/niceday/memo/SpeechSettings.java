@@ -48,8 +48,11 @@ public final class SpeechSettings {
             throw new IllegalArgumentException("语速须为0.8至1.3倍");
         for (String field : Arrays.asList("speechHideLocked", "speechRepeat", "speechRandom"))
             if (r.has(field) && !(r.get(field) instanceof Boolean)) throw new IllegalArgumentException("语音隐私开关无效");
-        for(String field: Arrays.asList("speechRandomLanguage","speechRandomGender"))
+        for(String field: Arrays.asList("speechRandomLanguage","speechRandomGender","speechRandomGroup"))
             if(r.has(field) && !(r.get(field) instanceof String)) throw new IllegalArgumentException("音色分组类型无效");
+        String group=r.optString("speechRandomGroup","");
+        if(!group.isEmpty() && !group.matches("[A-Za-z0-9_-]{1,80}")) throw new IllegalArgumentException("角色组编号无效");
+        r.put("speechRandomGroup",group);
         String language=r.optString("speechRandomLanguage","all"), gender=r.optString("speechRandomGender","all");
         if(!Arrays.asList("all","zh","ja").contains(language) || !Arrays.asList("all","female","male").contains(gender))
             throw new IllegalArgumentException("不支持的音色分组");

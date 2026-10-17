@@ -10,6 +10,28 @@ public final class AsrAssets {
     public static synchronized String prepare(Context context) throws IOException {
         return prepare(new File(context.getFilesDir(), "asr"), name -> context.getAssets().open("flutter_assets/assets/models/" + name));
     }
+    public static synchronized String prepareVad(Context context) throws Exception {
+        File dir=new File(context.getFilesDir(),"vad"); if(!dir.isDirectory() && !dir.mkdirs()) throw new IOException("无法创建人声检测目录");
+        File target=new File(dir,"silero-v5.onnx");
+        String digest="6b99cbfd39246b6706f98ec13c7c50c6b299181f2474fa05cbc8046acc274396";
+        if(target.isFile() && digest.equals(hash(target))) return target.getPath();
+        File temp=new File(dir,"silero-v5.tmp");
+        try {
+            try(InputStream in=context.getAssets().open("flutter_assets/assets/vad/silero_vad.onnx"); FileOutputStream out=new FileOutputStream(temp)) {
+                byte[] buffer=new byte[65536]; int n;
+                while((n=in.read(buffer))!=-1) out.write(buffer,0,n);
+                out.getFD().sync();
+            }
+            if(!digest.equals(hash(temp))) throw new IOException("人声检测模型校验失败");
+            if(!temp.renameTo(target)) throw new IOException("无法保存人声检测模型");
+        } finally { temp.delete(); }
+        return target.getPath();
+    }
+    private static String hash(File file) throws Exception {
+        java.security.MessageDigest digest=java.security.MessageDigest.getInstance("SHA-256");
+        try(InputStream in=new FileInputStream(file)) { byte[] b=new byte[65536]; int n; while((n=in.read(b))!=-1) digest.update(b,0,n); }
+        StringBuilder hex=new StringBuilder(); for(byte b:digest.digest()) hex.append(String.format(java.util.Locale.ROOT,"%02x",b&255)); return hex.toString();
+    }
     interface Source { InputStream open(String name) throws IOException; }
     static String prepare(File dir, Source source) throws IOException {
         if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("无法创建语音模型目录");

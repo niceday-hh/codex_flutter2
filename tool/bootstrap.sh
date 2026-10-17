@@ -11,7 +11,8 @@ if [[ ! -f android/gradlew ]]; then
   rm -rf android/app/src/main/java android/app/src/main/kotlin
 fi
 cp -R native/. android/
-mkdir -p assets/models assets/tts
+mkdir -p assets/models assets/tts assets/vad
 touch assets/models/.keep
 python3 tool/fetch_mnn.py
+python3 tool/fetch_vad.py
 flutter pub get

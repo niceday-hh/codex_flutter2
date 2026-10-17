@@ -3,6 +3,7 @@ import 'reminder.dart';
 import 'speech.dart';
 import 'speech_voices.dart';
 import 'voice_catalog.dart';
+import 'voice_group.dart';
 
 const _purple = Color(0xFF7252F6);
 String speechModeLabel(String value) => switch (value) {
@@ -17,14 +18,20 @@ class SpeechOptions extends StatefulWidget {
   final Reminder reminder;
   final Map<String, dynamic> defaults;
   final bool defaultSettings;
+  final List<VoiceGroup> groups;
   final Future<void> Function() onChanged;
   const SpeechOptions({super.key, required this.reminder, required this.defaults,
-    required this.onChanged, this.defaultSettings = false});
+    required this.onChanged, this.defaultSettings = false, this.groups = const []});
   @override State<SpeechOptions> createState() => _SpeechOptionsState();
 }
 class _SpeechOptionsState extends State<SpeechOptions> {
   bool previewing = false;
   Reminder get r => widget.reminder;
+  Set<String>? get members {
+    if (r.speechRandomGroup.isEmpty) return null;
+    final groups = widget.groups.where((g) => g.id == r.speechRandomGroup);
+    return groups.isEmpty ? <String>{} : groups.first.voices.toSet();
+  }
   Future<void> changed() async {
     setState(() {});
     try { await widget.onChanged(); }
@@ -34,7 +41,7 @@ class _SpeechOptionsState extends State<SpeechOptions> {
     final config = Reminder.fromJson(r.toJson());
     if (r.speechRandom && (widget.defaultSettings || r.speechVoice.isEmpty)) {
       final catalog = await VoiceCatalog.load();
-      final id = catalog.pick(language: r.speechRandomLanguage, gender: r.speechRandomGender);
+      final id = catalog.pick(language: r.speechRandomLanguage, gender: r.speechRandomGender, members: members);
       if (id == null) throw StateError('此分组没有可用音色');
       config.speechVoice = id;
       if (!widget.defaultSettings && mounted) { r.speechVoice = id; await changed(); }
@@ -44,8 +51,9 @@ class _SpeechOptionsState extends State<SpeechOptions> {
   Future<void> reroll() async {
     try {
       final catalog = await VoiceCatalog.load();
-      final id = catalog.pick(language: r.speechRandomLanguage, gender: r.speechRandomGender);
-      if (id != null && mounted) { r.speechVoice = id; await changed(); }
+      final id = catalog.pick(language: r.speechRandomLanguage, gender: r.speechRandomGender, members: members);
+      if (id == null) throw StateError('当前分组没有可用音色');
+      if (mounted) { r.speechVoice = id; await changed(); }
     } catch (_) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('音色分组加载失败，请重试'))); }
   }
   @override void dispose() { speech.stopPreview(); super.dispose(); }
@@ -66,7 +74,7 @@ class _SpeechOptionsState extends State<SpeechOptions> {
       subtitle: Text(r.speechRandom && !widget.defaultSettings && r.speechVoice.isEmpty ? '保存时从所选分组抽取一次' : '${speechVoiceLabel(r.speechVoice)} · VITS-MNN 共804个音色条目'), trailing: const Icon(Icons.chevron_right),
       onTap: () async {
         final voice = await chooseSpeechVoice(context, r.speechVoice, allowDefault: !widget.defaultSettings,
-          language: r.speechRandomLanguage, gender: r.speechRandomGender,
+          language: r.speechRandomLanguage, gender: r.speechRandomGender, groups: widget.groups, group: r.speechRandomGroup,
           preview: (id) => speech.preview(Reminder.fromJson(r.toJson())..speechVoice = id));
         if (voice != null && mounted) { r.speechVoice = voice; r.speechRandom = false; await changed(); }
       }),
@@ -78,6 +86,16 @@ class _SpeechOptionsState extends State<SpeechOptions> {
         await changed();
       }),
     if (r.speechRandom) ...[
+      Padding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 12), child: DropdownButtonFormField<String>(
+        key: ValueKey('group-' + r.speechRandomGroup),
+        initialValue: r.speechRandomGroup, isExpanded: true,
+        decoration: const InputDecoration(labelText: '随机角色组'),
+        items: [const DropdownMenuItem(value: '', child: Text('全部角色')),
+          for (final g in widget.groups) DropdownMenuItem(value: g.id, child: Text(g.name)),
+          if (r.speechRandomGroup.isNotEmpty && !widget.groups.any((g) => g.id == r.speechRandomGroup))
+            DropdownMenuItem(value: r.speechRandomGroup, child: const Text('原角色组已删除，保留已选音色'))],
+        onChanged: (v) async { if (v == null) return; r.speechRandomGroup = v; if (!widget.defaultSettings) r.speechVoice = ''; await changed(); })),
+
       Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Row(children: [
         Expanded(child: DropdownButtonFormField<String>(initialValue: r.speechRandomLanguage, isExpanded: true,
           decoration: const InputDecoration(labelText: '配音来源'),
@@ -130,20 +148,28 @@ Future<double?> chooseSpeechRate(BuildContext context, double current, {required
 }
 
 Future<String?> chooseSpeechVoice(BuildContext context, String current, {required bool allowDefault,
-  required Future<void> Function(String) preview, String language = 'all', String gender = 'all'}) async {
+  required Future<void> Function(String) preview, String language = 'all', String gender = 'all', List<VoiceGroup> groups = const [], String group = ''}) async {
   final catalog = await VoiceCatalog.load();
   if (!context.mounted) return null;
   var query = '', busy = '', source = language, role = gender;
+  var selectedGroup = groups.any((g) => g.id == group) ? group : '';
   String? message;
   return showModalBottomSheet<String>(context: context, showDragHandle: true, isScrollControlled: true,
     builder: (c) => StatefulBuilder(builder: (c, update) {
-      final matches = catalog.candidates(language: source, gender: role, query: query);
+      final selected = groups.where((g) => g.id == selectedGroup);
+      final members = selected.isEmpty ? null : selected.first.voices.toSet();
+      final matches = catalog.candidates(language: source, gender: role, query: query, members: members);
       return SafeArea(child: Padding(
       padding: EdgeInsets.fromLTRB(16, 0, 16, MediaQuery.viewInsetsOf(c).bottom),
       child: SizedBox(height: (MediaQuery.sizeOf(c).height - MediaQuery.viewInsetsOf(c).bottom) * 0.8,
       child: Column(children: [
         const Text('选择播报音色', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
         const Text('VITS-MNN · 804个音色条目', style: TextStyle(fontSize: 12)),
+        if (groups.isNotEmpty) DropdownButtonFormField<String>(initialValue: selectedGroup, isExpanded: true,
+          decoration: const InputDecoration(labelText: '角色组'),
+          items: [const DropdownMenuItem(value: '', child: Text('全部角色')),
+            for (final g in groups) DropdownMenuItem(value: g.id, child: Text(g.name))],
+          onChanged: (v) => update(() => selectedGroup = v ?? '')),
         const SizedBox(height: 12), Row(children: [
           Expanded(child: DropdownButtonFormField<String>(initialValue: source, isExpanded: true,
             decoration: const InputDecoration(labelText: '配音来源'),
@@ -159,7 +185,7 @@ Future<String?> chooseSpeechVoice(BuildContext context, String current, {require
           onChanged: (v) => update(() => query = v.trim().toLowerCase())),
         Row(children: [Expanded(child: Text('${matches.length} 个匹配音色', style: const TextStyle(fontSize: 12))),
           TextButton.icon(onPressed: matches.isEmpty ? null : () {
-            final id = catalog.pick(language: source, gender: role, query: query);
+            final id = catalog.pick(language: source, gender: role, query: query, members: members);
             speech.stopPreview(); Navigator.pop(c, id);
           }, icon: const Icon(Icons.shuffle), label: const Text('随机挑一个'))]),
         if (allowDefault) ListTile(title: const Text('跟随默认音色'), onTap: () { speech.stopPreview(); Navigator.pop(c, ''); }),

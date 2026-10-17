@@ -22,12 +22,43 @@ class AsrSession {
   Future<void>? _preparing;
   final _pending = <int, Completer<String>>{};
   Timer? _idle;
-  int _serial = 0, _users = 0;
+  int _serial = 0, _users = 0, _pins = 0, _vadGeneration = 0;
+  Completer<void>? _unpinned;
+  final vadEvents = StreamController<Map<String, dynamic>>.broadcast(sync: true);
+  Future<void> retainVoice() async {
+    while (_suspension != null) { await _suspension; }
+    _pins++; _idle?.cancel();
+    try { await prepare(); } catch (_) { releaseVoice(); rethrow; }
+  }
+  void releaseVoice() {
+    if (_pins == 0) return;
+    _pins--;
+    if (_pins == 0) {
+      _unpinned?.complete(); _unpinned = null;
+      release();
+    }
+  }
+  Future<int> startVad(double silence) async {
+    await prepare();
+    final id = ++_vadGeneration;
+    final ready = Completer<String>();
+    final request = ++_serial; _pending[request] = ready;
+    _commands!.send(['vadStart', request, id, silence]);
+    await ready.future;
+    return id;
+  }
+  void feedVad(int generation, Uint8List pcm) {
+    if (generation != _vadGeneration || _commands == null) return;
+    _commands!.send(['pcm', generation, TransferableTypedData.fromList([pcm])]);
+  }
+  void stopVad() { _vadGeneration++; _commands?.send(['vadStop']); }
+
   bool _releaseRequested = false;
   Future<void>? _suspension;
   Completer<void>? _drained, _closed;
 
   Future<T> withoutModel<T>(Future<T> Function() work) async {
+    while (_pins > 0) { _unpinned ??= Completer<void>(); await _unpinned!.future; }
     final previous = _suspension;
     final paused = Completer<void>();
     _suspension = paused.future;
@@ -59,6 +90,9 @@ class AsrSession {
       final dir = await native.invokeMethod<String>('prepareAsr');
       if (dir == null) throw StateError('无法打开语音模型目录');
       if (_releaseRequested && _users == 0) { status.value = '离线模型已释放'; return; }
+      final vadPath = await native.invokeMethod<String>('prepareVad');
+      if (vadPath == null) throw StateError('无法打开人声检测模型');
+      if (_releaseRequested && _users == 0 && _pins == 0) { status.value = '离线模型已释放'; return; }
       status.value = '正在加载识别模型…';
       final ready = Completer<void>();
       final port = _port = ReceivePort();
@@ -70,6 +104,8 @@ class AsrSession {
           if (!ready.isCompleted) ready.complete();
         } else if (message[0] == 'loadError') {
           if (!ready.isCompleted) ready.completeError(StateError(message[1] as String));
+        } else if (message[0] == 'vad') {
+          vadEvents.add(Map<String, dynamic>.from(message[1] as Map));
         } else {
           final completer = _pending.remove(message[1]);
           if (completer != null) {
@@ -87,7 +123,7 @@ class AsrSession {
       final exited = ReceivePort();
       final closed = _closed = Completer<void>();
       exited.listen((_) { if (!closed.isCompleted) closed.complete(); exited.close(); });
-      _worker = await Isolate.spawn(_recognizerWorker, [port.sendPort, dir], onError: errors.sendPort, onExit: exited.sendPort, errorsAreFatal: true);
+      _worker = await Isolate.spawn(_recognizerWorker, [port.sendPort, dir, vadPath], onError: errors.sendPort, onExit: exited.sendPort, errorsAreFatal: true);
       await ready.future;
       status.value = '离线模型已就绪';
       if (_releaseRequested) { release(); } else { _armIdle(); }
@@ -96,7 +132,7 @@ class AsrSession {
       _close(); status.value = '模型准备失败，点击录音可重试'; rethrow;
     }
   }
-  Future<String> transcribe(String path) async {
+  Future<String> transcribe(String path, {int? maxSamples}) async {
     if (_suspension != null) await _suspension;
     _users++;
     try {
@@ -106,7 +142,7 @@ class AsrSession {
       final result = Completer<String>();
       final id = ++_serial;
       _pending[id] = result;
-      _commands!.send([id, path]);
+      _commands!.send([id, path, maxSamples]);
       return await result.future;
     } finally {
       _users--;
@@ -120,11 +156,11 @@ class AsrSession {
   }
   void _armIdle() {
     _idle?.cancel();
-    _idle = Timer(const Duration(seconds: 60), release);
+    if (_pins == 0) _idle = Timer(const Duration(seconds: 60), release);
   }
   void release() {
     _releaseRequested = true; _idle?.cancel();
-    if (_users > 0 || _pending.isNotEmpty || (_preparing != null && _commands == null)) return;
+    if (_pins > 0 || _users > 0 || _pending.isNotEmpty || (_preparing != null && _commands == null)) return;
     _close(); status.value = '离线模型已释放，再次录音会自动准备';
   }
   void _close() {
@@ -150,16 +186,61 @@ void _recognizerWorker(List<dynamic> args) {
       ),
     ));
   } catch (e) { reply.send(['loadError', '$e']); return; }
+  sherpa.VoiceActivityDetector? vad;
+  var vadGeneration = 0;
+  var speechSeen = false;
+  var reported = false;
   final commands = ReceivePort();
   reply.send(['ready', commands.sendPort]);
   commands.listen((dynamic request) {
-    if (request == null) { recognizer.free(); commands.close(); return; }
+    if (request == null) { vad?.free(); recognizer.free(); commands.close(); return; }
+    if (request[0] == 'vadStop') { vad?.free(); vad = null; return; }
+    if (request[0] == 'vadStart') {
+      final id = request[1] as int;
+      try {
+        vad?.free(); vad = null;
+        vadGeneration = request[2] as int; speechSeen = false; reported = false;
+        vad = sherpa.VoiceActivityDetector(config: sherpa.VadModelConfig(
+          sileroVad: sherpa.SileroVadModelConfig(model: args[2] as String,
+            minSilenceDuration: (request[3] as num).toDouble(), minSpeechDuration: 0.25,
+            maxSpeechDuration: 50),
+          sampleRate: 16000, numThreads: 1, provider: 'cpu', debug: false),
+          bufferSizeInSeconds: 60);
+        reply.send(['text', id, 'ready']);
+      } catch (e) { reply.send(['error', id, '$e']); }
+      return;
+    }
+    if (request[0] == 'pcm') {
+      if (vad == null || request[1] != vadGeneration || reported) return;
+      try {
+        final bytes = (request[2] as TransferableTypedData).materialize().asUint8List();
+        final data = ByteData.sublistView(bytes);
+        final samples = Float32List(bytes.length ~/ 2);
+        for (var i = 0; i < samples.length; i++) { samples[i] = data.getInt16(i * 2, Endian.little) / 32768.0; }
+        vad!.acceptWaveform(samples);
+        if (vad!.isDetected() && !speechSeen) {
+          speechSeen = true;
+          reply.send(['vad', {'generation': vadGeneration, 'speech': true}]);
+        }
+        if (!vad!.isEmpty()) {
+          final segment = vad!.front(); reported = true;
+          reply.send(['vad', {'generation': vadGeneration, 'endSample': segment.start + segment.samples.length}]);
+          vad!.pop();
+        }
+      } catch (e) {
+        reported = true;
+        reply.send(['vad', {'generation': vadGeneration, 'error': '$e'}]);
+      }
+      return;
+    }
     final id = request[0] as int;
     try {
       final bytes = File(request[1] as String).readAsBytesSync();
       if (bytes.length < 3200) throw StateError('录音太短，请说完后再结束');
       final data = ByteData.sublistView(bytes);
-      final samples = Float32List(bytes.length ~/ 2);
+      final limit = request.length > 2 && request[2] is int ? request[2] as int : bytes.length ~/ 2;
+      final sampleCount = limit.clamp(0, bytes.length ~/ 2).toInt();
+      final samples = Float32List(sampleCount);
       for (var i = 0; i < samples.length; i++) {
         samples[i] = data.getInt16(i * 2, Endian.little) / 32768.0;
       }

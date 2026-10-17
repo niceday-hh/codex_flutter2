@@ -11,7 +11,7 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
-    <application android:label="定时备忘录·新版" android:name="${applicationName}"
+    <application android:label="超级提醒" android:name="${applicationName}"
         android:icon="@drawable/ic_launcher" android:allowBackup="false"
         android:usesCleartextTraffic="false" android:enableOnBackInvokedCallback="true">
         <activity android:name="com.niceday.memo.MainActivity" android:exported="true"

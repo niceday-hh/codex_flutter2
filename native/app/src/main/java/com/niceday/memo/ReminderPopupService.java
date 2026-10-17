@@ -62,7 +62,7 @@ public final class ReminderPopupService extends Service {
             layout.setContentDescription("亮屏提醒卡片"); layout.setElevation(dp(14));
             GradientDrawable background = new GradientDrawable(); background.setColor(Color.WHITE); background.setCornerRadius(dp(22));
             background.setStroke(dp(1), 0xFFE5DEFF); layout.setBackground(background);
-            TextView title = label("定时备忘录 · 第" + reminder.optInt("attempts") + "次", 13, 0xFF7252F6);
+            TextView title = label("超级提醒 · 第" + reminder.optInt("attempts") + "次", 13, 0xFF7252F6);
             layout.addView(title);
             TextView body = label(reminder.getString("text"), 20, 0xFF252039); body.setMaxLines(4);
             body.setEllipsize(android.text.TextUtils.TruncateAt.END); body.setPadding(0, dp(10), 0, dp(10));

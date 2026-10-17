@@ -31,7 +31,7 @@ public final class MainActivity extends FlutterActivity {
         activity.runOnUiThread(() -> {
             if (!activity.resumed || activity.getSystemService(KeyguardManager.class).isKeyguardLocked()) return;
             if (activity.reminderDialog != null) activity.reminderDialog.dismiss();
-            AlertDialog dialog = new AlertDialog.Builder(activity).setTitle("定时备忘录")
+            AlertDialog dialog = new AlertDialog.Builder(activity).setTitle("超级提醒")
                 .setMessage(reminder.optString("text"))
                 .setNegativeButton("收起", null).setPositiveButton("已读", (d, which) -> {
                     try { new ReminderEngine(activity).acknowledge(reminder.optInt("id"), token); }
@@ -75,12 +75,17 @@ public final class MainActivity extends FlutterActivity {
         // Prevent reminder text leaking through task-switcher previews or screenshots.
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
     }
+    private EventChannel.EventSink pcmSink;
     @Override public void configureFlutterEngine(FlutterEngine engine) {
         super.configureFlutterEngine(engine);
         channel = new MethodChannel(engine.getDartExecutor().getBinaryMessenger(), "memo/native");
         new EventChannel(engine.getDartExecutor().getBinaryMessenger(), "memo/recordingLevels").setStreamHandler(new EventChannel.StreamHandler() {
             @Override public void onListen(Object arguments, EventChannel.EventSink events) { levelSink=events; }
             @Override public void onCancel(Object arguments) { levelSink=null; }
+        });
+        new EventChannel(engine.getDartExecutor().getBinaryMessenger(), "memo/recordingPcm").setStreamHandler(new EventChannel.StreamHandler() {
+            @Override public void onListen(Object arguments, EventChannel.EventSink events) { pcmSink=events; }
+            @Override public void onCancel(Object arguments) { pcmSink=null; }
         });
         memoPreferences = getSharedPreferences("memo", Context.MODE_PRIVATE);
         memoListener = (preferences, key) -> {
@@ -92,9 +97,16 @@ public final class MainActivity extends FlutterActivity {
                 ReminderEngine store = new ReminderEngine(this);
                 switch (call.method) {
                     case "getState" -> result.success(store.state());
+                    case "saveVoiceGroups" -> { VoiceGroups.save(this,(String)call.arguments); result.success(null); }
+                    case "microphoneReady" -> result.success(resumed && !getSystemService(KeyguardManager.class).isKeyguardLocked() && recorder!=null && recorder.getRecordingState()==AudioRecord.RECORDSTATE_RECORDING && (Build.VERSION.SDK_INT<29 || recorder.getActiveRecordingConfiguration()!=null && !recorder.getActiveRecordingConfiguration().isClientSilenced()));
+                    case "voiceEntryAllowed" -> result.success(resumed && !getSystemService(KeyguardManager.class).isKeyguardLocked() && !getIntent().hasExtra("reminderId"));
                     case "prepareAsr" -> documents.execute(() -> {
                         try { String path = AsrAssets.prepare(getApplicationContext()); runOnUiThread(() -> result.success(path)); }
                         catch (Exception e) { runOnUiThread(() -> result.error("ASR", "模型准备失败：" + e.getMessage(), null)); }
+                    });
+                    case "prepareVad" -> documents.execute(() -> {
+                        try { String path=AsrAssets.prepareVad(getApplicationContext()); runOnUiThread(() -> result.success(path)); }
+                        catch(Exception e) { runOnUiThread(() -> result.error("VAD","人声检测准备失败",null)); }
                     });
                     case "prepareTts" -> documents.execute(() -> {
                         try { String path = TtsAssets.prepare(getApplicationContext()); synthesizer.open(this, path); runOnUiThread(() -> result.success(path)); }
@@ -338,6 +350,12 @@ public final class MainActivity extends FlutterActivity {
                         bytes[i * 2] = (byte) samples[i]; bytes[i * 2 + 1] = (byte) (samples[i] >> 8);
                     }
                     out.write(bytes, 0, count * 2); total += count;
+                    if(count>0) {
+                        final byte[] pcm=java.util.Arrays.copyOf(bytes,count*2);
+                        runOnUiThread(() -> {
+                            if(recording && source==recorder && generation==recordingGeneration && pcmSink!=null) pcmSink.success(pcm);
+                        });
+                    }
                     long now=SystemClock.elapsedRealtime();
                     if(count>0 && now-lastLevel>=100) {
                         lastLevel=now; final double dbfs=AudioLevel.dbfs(squares,count), peakLevel=peak/32768.0;
@@ -380,5 +398,6 @@ public final class MainActivity extends FlutterActivity {
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent); setIntent(intent);
         if (channel != null && intent.hasExtra("reminderId")) channel.invokeMethod("openReminder", intent.getIntExtra("reminderId", 0));
+        else if(channel!=null && Intent.ACTION_MAIN.equals(intent.getAction())) channel.invokeMethod("voiceEntry",null);
     }
 }

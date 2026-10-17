@@ -29,10 +29,20 @@ public final class VoiceCatalog {
         }
         return result;
     }
-    static void resolve(Context c, JSONObject row) throws JSONException {
+    static void resolve(Context c, JSONObject row) throws JSONException { resolve(c,row,VoiceGroups.read(c)); }
+    static void resolve(Context c, JSONObject row, JSONArray groups) throws JSONException {
         try {
         if (!row.optBoolean("speechRandom")) return;
+        // A saved choice survives group edits/deletion and time-only task edits.
+        String chosen=row.optString("speechVoice","");
+        if(chosen.matches("[0-9]{1,3}") && Integer.parseInt(chosen)<=803) return;
         List<String> pool=candidates(c,row.optString("speechRandomLanguage","all"),row.optString("speechRandomGender","all"));
+        String group=row.optString("speechRandomGroup","");
+        if(!group.isEmpty()) {
+            Set<String> members=VoiceGroups.members(groups,group);
+            if(members==null) throw new IllegalArgumentException("角色组已删除，请重新选择");
+            pool.removeIf(id -> !members.contains(id));
+        }
         if(pool.isEmpty()) throw new IllegalArgumentException("此分组没有可随机选择的音色，请调整分组");
         if(!pool.contains(row.optString("speechVoice")))
             row.put("speechVoice",pool.get(java.util.concurrent.ThreadLocalRandom.current().nextInt(pool.size())));

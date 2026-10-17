@@ -18,3 +18,7 @@ __pycache__/
 *.pyc
 vendor/
 .cxx/
+
+assets/vad/*.onnx
+
+tool/test-runtime/

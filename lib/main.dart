@@ -8,7 +8,9 @@ import 'voice_parser.dart';
 import 'speech.dart';
 import 'speech_options.dart';
 import 'task_library.dart';
-import 'recording_waveform.dart';
+import 'voice_flow.dart';
+import 'voice_page.dart';
+import 'voice_groups_page.dart';
 
 const purple = Color(0xFF7252F6);
 const ink = Color(0xFF25213A);
@@ -27,7 +29,7 @@ void main() {
 class MemoApp extends StatelessWidget {
   const MemoApp({super.key});
   @override Widget build(BuildContext context) => MaterialApp(
-    title: '定时备忘录', debugShowCheckedModeBanner: false,
+    title: '超级提醒', debugShowCheckedModeBanner: false,
     locale: const Locale('zh', 'CN'),
     supportedLocales: const [Locale('zh', 'CN')],
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
@@ -62,13 +64,19 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   int tab = 0;
   bool loading = true;
   String? error;
+  late final voice = VoiceFlow(capture: OfflineVoiceCapture(asr), store: store,
+    openVoicePage: () { if (mounted) setState(() => tab = 2); }, onSaved: reload);
+  DialogRoute<void>? _voiceDialog;
+  bool _dialogScheduled = false, _wasPaused = false;
   DateTime selectedDate = DateTime.now();
   DateTime calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
 
   @override void initState() {
     super.initState(); WidgetsBinding.instance.addObserver(this);
+    voice.addListener(_voiceChanged);
     native.setMethodCallHandler((call) async {
-      if (call.method == 'openReminder') { await reload(); if (mounted) openById(call.arguments as int); }
+      if (call.method == 'openReminder') { await voice.cancel(); await reload(); if (mounted) openById(call.arguments as int); }
+      if (call.method == 'voiceEntry') { await _maybeStartHandsFree(); }
       if (call.method == 'stateChanged') { await reload(); }
       if (call.method == 'prepareSpeech') { await speech.preparePending(retry: true); }
     });
@@ -77,17 +85,57 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   Future<void> initialize() async {
     try { await native.invokeMethod('restore'); } catch (_) {}
     await reload();
-    unawaited(speech.preparePending());
     try {
       final id = await native.invokeMethod<int>('initialReminderId');
-      if (mounted && id != null && id > 0) openById(id);
+      if (mounted && id != null && id > 0) { openById(id); }
+      else { await _maybeStartHandsFree(); }
     } catch (_) {}
+    unawaited(speech.preparePending());
+  }
+  Future<void> _maybeStartHandsFree() async {
+    if (!mounted || tab != 0 || voice.active || voice.pending != null || store.defaults['handsFree'] != true || Navigator.of(context).canPop()) return;
+    try { if (await native.invokeMethod<bool>('voiceEntryAllowed') == true && mounted && !voice.active) await voice.startCommands(); } catch (e) { toast(niceError(e)); }
   }
   @override void dispose() {
+    voice.removeListener(_voiceChanged); voice.dispose();
     WidgetsBinding.instance.removeObserver(this); native.setMethodCallHandler(null); super.dispose();
   }
   @override void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) reload();
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      _wasPaused = true; unawaited(voice.pause());
+    }
+    if (state == AppLifecycleState.resumed) {
+      unawaited(reload().then((_) async { if (_wasPaused) { _wasPaused = false; await _maybeStartHandsFree(); } }));
+    }
+  }
+  void _voiceChanged() {
+    if (!mounted) return;
+    setState(() {});
+    if (_dialogScheduled) return;
+    _dialogScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _dialogScheduled = false;
+      if (!mounted) return;
+      if (voice.pending == null) {
+        final route = _voiceDialog; _voiceDialog = null;
+        if (route != null && route.isActive) Navigator.of(context).removeRoute(route);
+      } else if (_voiceDialog == null) {
+        final route = DialogRoute<void>(context: context, barrierDismissible: false,
+          builder: (_) => VoiceConfirmation(flow: voice, onEdit: _editVoiceDraft));
+        _voiceDialog = route;
+        Navigator.of(context).push(route).whenComplete(() { if (identical(_voiceDialog, route)) _voiceDialog = null; });
+      }
+    });
+  }
+  Future<void> _editVoiceDraft() async {
+    final parsed = voice.pending;
+    if (parsed == null || voice.phase == VoicePhase.saving) return;
+    await voice.cancel();
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) =>
+      ReminderEditor(reminder: parsed.reminder, store: store, voice: parsed)));
+    if (saved == true) await reload();
   }
   Future<void> reload() async {
     try {
@@ -161,17 +209,23 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     await reload();
   }
   @override Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(child: loading ? const Center(child: CircularProgressIndicator())
+    body: SafeArea(child: Column(children: [
+      if (voice.active && voice.pending == null && tab != 2) Material(color: const Color(0xFFECE5FF), child: ListTile(
+        dense: true, leading: const Icon(Icons.mic_none), title: Text(voice.message),
+        subtitle: voice.phase == VoicePhase.commands ? Text('剩余 ' + voice.secondsLeft.toString() + ' 秒') : null,
+        trailing: IconButton(tooltip: '停止预听', onPressed: voice.cancel, icon: const Icon(Icons.close)))),
+      Expanded(child: loading ? const Center(child: CircularProgressIndicator())
       : error != null ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
         Text(error!), TextButton(onPressed: reload, child: const Text('重新加载'))]))
       : IndexedStack(index: tab, children: [homePage(), calendarPage(),
-        TickerMode(enabled: tab == 2, child: VoicePage(store: store, onSaved: reload, active: tab == 2)), settingsPage()])),
+        TickerMode(enabled: tab == 2, child: VoicePage(flow: voice)), settingsPage()])),
+    ])),
     floatingActionButton: !loading && error == null && (tab == 0 || tab == 1)
       ? FloatingActionButton(onPressed: () => edit(), backgroundColor: purple,
           foregroundColor: Colors.white, tooltip: '新建提醒', child: const Icon(Icons.add_rounded, size: 32)) : null,
     bottomNavigationBar: NavigationBar(backgroundColor: Colors.white,
       selectedIndex: tab, indicatorColor: const Color(0xFFECE5FF),
-      onDestinationSelected: (i) { speech.stopPreview(); setState(() => tab = i); }, destinations: const [
+      onDestinationSelected: (i) { speech.stopPreview(); unawaited(voice.pause(keepDraft: false)); setState(() => tab = i); }, destinations: const [
         NavigationDestination(icon: Icon(Icons.description_outlined), selectedIcon: Icon(Icons.description_rounded), label: '备忘录'),
         NavigationDestination(icon: Icon(Icons.calendar_month_outlined), label: '日历'),
         NavigationDestination(icon: Icon(Icons.mic_none_rounded), selectedIcon: Icon(Icons.mic_rounded), label: '语音'),
@@ -273,8 +327,10 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     final first = DateTime(calendarMonth.year, calendarMonth.month);
     final count = DateTime(first.year, first.month + 1, 0).day;
     final offset = first.weekday - 1;
-    final list = store.reminders.where((r) => !r.archived && !r.completed && occursOn(r, selectedDate)).toList()..sort((a, b) => a.time.compareTo(b.time));
-    return ListView(padding: const EdgeInsets.only(bottom: 90), children: [
+    final list = store.reminders.where((r) => calendarOccursOn(r, selectedDate)).toList()..sort((a, b) => a.time.compareTo(b.time));
+    final active = list.where((r) => !r.completed && !r.archived).toList();
+    final history = list.where((r) => r.completed || r.archived).toList();
+    return CustomScrollView(slivers: [SliverList.list(children: [
       header('提醒日历', '每一天，都安排得刚刚好'),
       Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Surface(child: Column(children: [
         Row(children: [Expanded(child: Text('${first.year}年${first.month}月', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
@@ -290,7 +346,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
             if (d < 1 || d > count) return const SizedBox.shrink();
             final date = DateTime(first.year, first.month, d);
             final selected = sameDay(date, selectedDate);
-            final has = store.reminders.any((r) => !r.archived && !r.completed && occursOn(r, date));
+            final has = store.reminders.any((r) => calendarOccursOn(r, date));
             return InkWell(onTap: () => setState(() => selectedDate = date), borderRadius: BorderRadius.circular(16),
               child: Container(decoration: BoxDecoration(color: selected ? purple : Colors.transparent, borderRadius: BorderRadius.circular(16)),
                 child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text('$d', style: TextStyle(color: selected ? Colors.white : ink,
@@ -301,7 +357,12 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       ]))),
       section('${selectedDate.month}月${selectedDate.day}日', '${list.length} 个提醒'),
       if (list.isEmpty) emptyState('这一天还没有提醒', '点击 + 添加一件值得记住的事'),
-      ...list.map(reminderCard),
+    ]),
+      if (active.isNotEmpty) SliverToBoxAdapter(child: section('待提醒与暂停', '')),
+      SliverList.builder(itemCount: active.length, itemBuilder: (_, i) => reminderCard(active[i])),
+      if (history.isNotEmpty) SliverToBoxAdapter(child: section('当天历史任务', '按保留的计划日期整理')),
+      SliverList.builder(itemCount: history.length, itemBuilder: (_, i) => reminderCard(history[i])),
+      const SliverToBoxAdapter(child: SizedBox(height: 90)),
     ]);
   }
   Widget settingsPage() => ListView(padding: const EdgeInsets.only(bottom: 30), children: [
@@ -310,8 +371,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       Container(width: 54, height: 54, decoration: BoxDecoration(color: purple, borderRadius: BorderRadius.circular(17)),
         child: const Icon(Icons.notifications_rounded, color: Colors.white, size: 32)),
       const SizedBox(width: 16), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('定时备忘录', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-        Text('v0.8.0 · 本地保存 · 离线语音', style: TextStyle(color: muted, fontSize: 12))])),
+        Text('超级提醒', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+        Text('v0.9.0 · 本地保存 · 离线语音', style: TextStyle(color: muted, fontSize: 12))])),
     ]))),
     section('任务整理', '完成记录自动收起，保留以后使用'),
     settingsGroup([
@@ -445,9 +506,31 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     ]),
     section('语音识别', ''), settingsGroup([
       const ListTile(leading: Icon(Icons.mic_none_rounded, color: purple), title: Text('离线语音识别'),
-        subtitle: Text('中文 Paraformer int8 · 录音不上传'), trailing: Tag('已内置')),
+        subtitle: Text('Paraformer int8 + Silero VAD · 全程本地'), trailing: Tag('已内置')),
+    ]),
+    section('免手语音操作', ''), settingsGroup([
+      SwitchListTile(title: const Text('打开应用后预听语音指令'),
+        subtitle: const Text('前台就绪后预听15秒，可说“开始录音”；首次需授权麦克风。提醒通知入口不自动预听。'),
+        value: store.defaults['handsFree'] as bool? ?? false,
+        onChanged: (v) async { store.defaults['handsFree'] = v; await persistDefaults(); }),
+      SwitchListTile(title: const Text('连续安静后自动结束录音'),
+        subtitle: const Text('按人声活动判断，识别后弹出确认卡片；确认阶段不播放语音。'),
+        value: store.defaults['voiceAutoStop'] as bool? ?? true,
+        onChanged: (v) async { store.defaults['voiceAutoStop'] = v; await persistDefaults(); }),
+      settingRow(Icons.timer_outlined, '自动停录等待', (store.defaults['voiceSilenceSeconds'] ?? 5).toString() + ' 秒 · 单次录音最长45秒', () async {
+        final seconds = await showDialog<int>(context: context, builder: (c) => SimpleDialog(title: const Text('连续无声多久后停录'),
+          children: [for (var i = 3; i <= 10; i++) SimpleDialogOption(onPressed: () => Navigator.pop(c, i), child: Text(i.toString() + ' 秒'))]));
+        if (seconds != null) { store.defaults['voiceSilenceSeconds'] = seconds; await persistDefaults(); }
+      }),
+      settingRow(Icons.mic_external_on_outlined, '试用免手输入', '先说“开始录音”，再说时间和事项；确认或重新录音均可语音操作', () async {
+        setState(() => tab = 0); await voice.startCommands();
+      }),
     ]),
     section('离线语音播报', 'VITS-MNN · 804个音色条目'), settingsGroup([
+      settingRow(Icons.groups_outlined, '我的角色组', store.voiceGroups.length.toString() + ' 个组 · 创建专属随机音色范围', () async {
+        await Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => VoiceGroupsPage(store: store)));
+        await reload();
+      }),
       defaultSpeechOptions(),
       ValueListenableBuilder<String>(valueListenable: speech.status, builder: (_, value, child) => ListTile(
         leading: const Icon(Icons.graphic_eq, color: purple), title: const Text('语音准备状态'), subtitle: Text(value))),
@@ -474,11 +557,12 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       speechRepeat: store.defaults['speechRepeat'] as bool? ?? true,
       speechRandom: store.defaults['speechRandom'] as bool? ?? false,
       speechRandomLanguage: store.defaults['speechRandomLanguage'] as String? ?? 'all',
-      speechRandomGender: store.defaults['speechRandomGender'] as String? ?? 'all');
-    return SpeechOptions(defaultSettings: true, reminder: config, defaults: store.defaults, onChanged: () async {
+      speechRandomGender: store.defaults['speechRandomGender'] as String? ?? 'all',
+      speechRandomGroup: store.defaults['speechRandomGroup'] as String? ?? '');
+    return SpeechOptions(groups: store.voiceGroups, defaultSettings: true, reminder: config, defaults: store.defaults, onChanged: () async {
       store.defaults.addAll({'speechMode': config.speechMode, 'speechVoice': config.speechVoice,
         'speechRate': config.speechRate, 'speechHideLocked': config.speechHideLocked, 'speechRepeat': config.speechRepeat,
-        'speechRandom': config.speechRandom, 'speechRandomLanguage': config.speechRandomLanguage, 'speechRandomGender': config.speechRandomGender});
+        'speechRandom': config.speechRandom, 'speechRandomLanguage': config.speechRandomLanguage, 'speechRandomGender': config.speechRandomGender, 'speechRandomGroup': config.speechRandomGroup});
       await persistDefaults();
     });
   }
@@ -782,7 +866,7 @@ class _ReminderEditorState extends State<ReminderEditor> {
       ])), const SizedBox(height: 14),
       Surface(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
         const ListTile(title: Text('语音播报', style: TextStyle(fontWeight: FontWeight.w700))),
-        SpeechOptions(reminder: r, defaults: widget.store.defaults, onChanged: () async { if (mounted) setState(() {}); }),
+        SpeechOptions(groups: widget.store.voiceGroups, reminder: r, defaults: widget.store.defaults, onChanged: () async { if (mounted) setState(() {}); }),
       ])), const SizedBox(height: 14),
       Surface(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
         const ListTile(title: Text('未读再次提醒', style: TextStyle(fontWeight: FontWeight.w700)), subtitle: Text('手动划掉通知或滑动确认后停止')),
@@ -801,124 +885,7 @@ class _ReminderEditorState extends State<ReminderEditor> {
   );
 }
 
-class VoicePage extends StatefulWidget {
-  final MemoStore store;
-  final Future<void> Function() onSaved;
-  final bool active;
-  const VoicePage({super.key, required this.store, required this.onSaved, required this.active});
-  @override State<VoicePage> createState() => _VoicePageState();
-}
-class _VoicePageState extends State<VoicePage> with WidgetsBindingObserver {
-  final meter = RecordingMeter();
-  StreamSubscription<dynamic>? levels;
-  void stopMeter() {
-    meter.stop();
-    final subscription = levels; levels = null;
-    if (subscription != null) unawaited(subscription.cancel());
-  }
-  final text = TextEditingController();
-  bool recording = false, busy = false;
-  Timer? timer;
-  int seconds = 0;
-  DateTime? reference;
-  int session = 0;
-  String? warning;
-  void warmup() { asr.prepare().catchError((Object e) { if (mounted) setState(() => warning = niceError(e)); }); }
-  @override void initState() {
-    super.initState(); WidgetsBinding.instance.addObserver(this);
-    if (widget.active) warmup();
-  }
-  @override void dispose() {
-    timer?.cancel(); stopMeter(); meter.dispose(); text.dispose(); WidgetsBinding.instance.removeObserver(this);
-    session++; asr.release(); native.invokeMethod('cancelRecording'); super.dispose();
-  }
-  @override void didUpdateWidget(VoicePage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!oldWidget.active && widget.active) warmup();
-    if (oldWidget.active && !widget.active) { session++; asr.release(); }
-    if (oldWidget.active && !widget.active && recording) {
-      timer?.cancel(); stopMeter(); native.invokeMethod('cancelRecording');
-      recording = false; warning = '录音已停止，请重新录音';
-    }
-  }
-  @override void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && widget.active) warmup();
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) { session++; asr.release(); }
-    if ((state == AppLifecycleState.paused || state == AppLifecycleState.detached) && recording) {
-      timer?.cancel(); stopMeter(); native.invokeMethod('cancelRecording');
-      if (mounted) setState(() { recording = false; warning = '录音已暂停，请重新录音'; });
-    }
-  }
-  Future<void> microphone() async {
-    if (busy) return;
-    if (recording) { await finish(); return; }
-    final ticket = ++session;
-    setState(() => busy = true);
-    warmup();
-    try {
-      levels ??= const EventChannel('memo/recordingLevels').receiveBroadcastStream().listen(
-        meter.accept, onError: (Object _) { if (mounted) meter.stop(); });
-      await native.invokeMethod('startRecording');
-      if (!mounted || !widget.active || ticket != session) {
-        stopMeter(); await native.invokeMethod('cancelRecording');
-        if (mounted) setState(() => busy = false);
-        return;
-      }
-      meter.start();
-      setState(() { recording = true; busy = false; seconds = 0; warning = null; reference = null; text.clear(); });
-      timer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (!mounted || !recording) return;
-        setState(() => seconds++);
-        if (seconds >= 45) finish();
-      });
-    } catch (e) { stopMeter(); if (mounted) setState(() { busy = false; warning = niceError(e); }); }
-  }
-  Future<void> finish() async {
-    if (!recording) return;
-    final endedAt = DateTime.now();
-    final ticket = session;
-    timer?.cancel(); stopMeter(); setState(() { recording = false; busy = true; });
-    try {
-      final path = await native.invokeMethod<String>('stopRecording');
-      if (path == null) throw StateError('没有录音，请重试');
-      if (!mounted || !widget.active || ticket != session) { await discardRecording(path); return; }
-      final result = await transcribe(path);
-      if (mounted && ticket == session) setState(() { reference = endedAt; text.text = result; warning = result.trim().isEmpty ? '没有听清，请靠近麦克风再试一次' : null; });
-    } catch (e) { if (mounted && ticket == session) setState(() => warning = niceError(e)); }
-    finally { if (mounted) setState(() => busy = false); }
-  }
-  Future<void> confirm() async {
-    final parsed = parseVoice(text.text, now: reference ??= DateTime.now(), defaults: widget.store.draft());
-    if (parsed.warning != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(parsed.warning!)));
-    }
-    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => ReminderEditor(reminder: parsed.reminder, store: widget.store, voice: parsed)));
-    if (saved == true) { await widget.onSaved(); if (mounted) setState(() { text.clear(); reference = null; warning = '提醒已保存'; }); }
-  }
-  @override Widget build(BuildContext context) => ListView(padding: const EdgeInsets.fromLTRB(24, 26, 24, 30), children: [
-    Row(children: [Expanded(child: Text('语音新建', style: Theme.of(context).textTheme.headlineLarge)), const Tag('离线识别')]),
-    const SizedBox(height: 8), const Text('说出时间和事情，剩下的交给提醒', style: TextStyle(color: muted)),
-    const SizedBox(height: 30), SizedBox(height: 200, child: Center(child: AnimatedBuilder(animation: meter, builder: (_, child) => Stack(alignment: Alignment.center, children: [
-      Container(width: 168 + meter.level * 18, height: 168 + meter.level * 18,
-        decoration: const BoxDecoration(color: Color(0xFFF0EBFF), shape: BoxShape.circle)),
-      Container(width: 142, height: 142, decoration: const BoxDecoration(color: Color(0xFFE5DBFF), shape: BoxShape.circle)),
-      Semantics(button: true, label: recording ? '停止录音并识别' : '开始录音', child: InkWell(onTap: busy ? null : microphone, borderRadius: BorderRadius.circular(70),
-        child: Container(width: 116, height: 116, decoration: const BoxDecoration(shape: BoxShape.circle,
-          gradient: LinearGradient(colors: [Color(0xFF9A79FF), Color(0xFF6740F2)], begin: Alignment.topLeft, end: Alignment.bottomRight)),
-          child: busy ? const Padding(padding: EdgeInsets.all(37), child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
-            : Icon(recording ? Icons.stop_rounded : Icons.mic_rounded, color: Colors.white, size: 48)))),
-    ])))),
-    ValueListenableBuilder<String>(valueListenable: asr.status, builder: (_, status, child) => Column(children: [
-      Text(busy ? status : recording ? '正在聆听… ${seconds}s' : '点击开始说话', textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-      if (!busy && !recording) Text(status, style: const TextStyle(color: muted, fontSize: 12)),
-    ])),
-    const SizedBox(height: 18), RecordingWaveform(meter: meter),
-    const SizedBox(height: 24), Surface(child: TextField(controller: text, enabled: !busy && !recording, minLines: 3, maxLines: 6,
-      onChanged: (value) => setState(() { reference = value.trim().isEmpty ? null : reference ?? DateTime.now(); }), decoration: const InputDecoration(hintText: '例如：二十分钟后提醒我做饭，开启语音提醒', border: InputBorder.none, filled: false))),
-    const SizedBox(height: 16), if (warning != null) Padding(padding: const EdgeInsets.only(bottom: 16), child: Text(warning!, style: const TextStyle(color: muted))),
-    FilledButton(onPressed: text.text.trim().isEmpty || busy || recording ? null : confirm, child: const Text('确认并设置提醒')),
-    const SizedBox(height: 12), OutlinedButton(onPressed: busy ? null : microphone, child: Text(recording ? '结束录音' : '重新录音')),
-    const SizedBox(height: 20), const Text('可在句末说“开启语音提醒”“不要语音播报”“锁屏时正常播报”。未说明时跟随默认设置。识别后请确认日期、时间和内容。支持五分钟后、半小时后、明天、几月几号、每天、工作日及每周几。倒计时从录音结束或开始输入时计时，保存前可明确重新计时。录音最长45秒，识别后自动删除。',
-      textAlign: TextAlign.center, style: TextStyle(color: muted, fontSize: 12, height: 1.6)),
-  ]);
-}
+
+bool calendarOccursOn(Reminder r, DateTime date) => r.completed || r.archived ? sameDay(historyCalendarDate(r), date) : occursOn(r, date);
+
+DateTime historyCalendarDate(Reminder r) => r.historyScheduledAt > 0 ? DateTime.fromMillisecondsSinceEpoch(r.historyScheduledAt) : r.activeOccurrence > 0 ? DateTime.fromMillisecondsSinceEpoch(r.activeOccurrence) : r.date;

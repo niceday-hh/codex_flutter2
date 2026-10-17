@@ -62,7 +62,7 @@ public final class SpeechPlaybackService extends Service {
         channel.setSound(null, null); channel.enableVibration(false);
         getSystemService(NotificationManager.class).createNotificationChannel(channel);
         Notification notification = new Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("定时备忘录").setContentText("正在播放提醒语音")
+            .setContentTitle("超级提醒").setContentText("正在播放提醒语音")
             .setVisibility(Notification.VISIBILITY_SECRET).setOngoing(true).setOnlyAlertOnce(true).build();
         if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
         else startForeground(NOTIFICATION, notification);

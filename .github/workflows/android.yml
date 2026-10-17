@@ -6,11 +6,42 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: android-release-v080-${{ github.ref }}
+  group: android-release-v090-${{ github.ref }}
   cancel-in-progress: true
 env:
   CI_ASSET_TAG: ci-${{ github.run_id }}
 jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.7'
+          channel: stable
+          cache: true
+      - name: Prepare Flutter and pinned VAD
+        run: bash tool/bootstrap.sh
+      - name: Prepare real VAD test runtime
+        run: python3 tool/fetch_test_runtime.py
+      - name: Analyze Flutter code
+        run: flutter analyze
+      - name: Flutter voice flow, UI, parser and real VAD tests
+        env:
+          LD_LIBRARY_PATH: ${{ env.SHERPA_TEST_LIB }}
+        run: flutter test
+      - name: Native schedule checks
+        run: |
+          mkdir -p tool/out
+          javac -d tool/out native/app/src/main/java/com/niceday/memo/Schedule.java tool/ScheduleTest.java
+          java -cp tool/out ScheduleTest
+      - name: Debug fixture snapshot race checks
+        run: python3 -m unittest discover -s tool -p '*_unit_test.py' -v
   prepare:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -27,7 +58,7 @@ jobs:
               --notes "Temporary build transfer; publication still requires all checks and fixed signing."
           fi
   build:
-    needs: prepare
+    needs: [prepare, checks]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     outputs:
@@ -46,22 +77,13 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: model-downloads
-          key: offline-models-${{ github.job }}-${{ hashFiles('tool/fetch_model.py', 'tool/fetch_mnn.py', 'tool/vits_model.lock.json') }}
+          key: offline-models-${{ github.job }}-${{ hashFiles('tool/fetch_model.py', 'tool/fetch_vad.py', 'tool/fetch_mnn.py', 'tool/vits_model.lock.json') }}
       - name: Bootstrap Android platform
         run: bash tool/bootstrap.sh
-      - name: Analyze Flutter code
-        run: flutter analyze
-      - name: Flutter UI and voice parser tests
-        run: flutter test
-      - name: Native schedule checks
-        run: |
-          mkdir -p tool/out
-          javac -d tool/out native/app/src/main/java/com/niceday/memo/Schedule.java tool/ScheduleTest.java
-          java -cp tool/out ScheduleTest
-      - name: Debug fixture snapshot race checks
-        run: python3 -m unittest discover -s tool -p '*_unit_test.py' -v
       - name: Prepare embedded offline model
-        run: python3 tool/fetch_model.py
+        run: |
+          python3 tool/fetch_model.py
+          python3 tool/fetch_vad.py
       - name: Prepare VITS-MNN offline speech model
         run: python3 tool/fetch_tts.py
       - name: Prepare fixed release signing
@@ -116,7 +138,7 @@ jobs:
             gh release upload "$CI_ASSET_TAG" native-test-results.zip --clobber
           fi
   emulator:
-    needs: prepare
+    needs: [prepare, checks]
     strategy:
       fail-fast: false
       matrix:
@@ -137,7 +159,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: model-downloads
-          key: offline-models-${{ github.job }}-${{ hashFiles('tool/fetch_model.py', 'tool/fetch_mnn.py', 'tool/vits_model.lock.json') }}
+          key: offline-models-${{ github.job }}-${{ hashFiles('tool/fetch_model.py', 'tool/fetch_vad.py', 'tool/fetch_mnn.py', 'tool/vits_model.lock.json') }}
       - uses: actions/cache/restore@v4
         id: nativecache
         with:
@@ -202,7 +224,7 @@ jobs:
           fi
           gh release download "$CI_ASSET_TAG" --dir release
           (cd release && sha256sum --check SHA256SUMS.txt)
-          gh release create "$tag" --target "$GITHUB_SHA" --title "定时备忘录 $tag · 固定签名新版" \
+          gh release create "$tag" --target "$GITHUB_SHA" --title "超级提醒 $tag · 固定签名新版" \
             --notes-file "docs/releases/$tag.md" --prerelease \
             release/*.apk release/*.json release/SHA256SUMS.txt release/native-test-results.zip
           gh release delete "$CI_ASSET_TAG" --yes

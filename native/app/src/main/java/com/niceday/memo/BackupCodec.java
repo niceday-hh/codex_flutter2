@@ -34,7 +34,7 @@ public final class BackupCodec {
         for(String field:Arrays.asList("testReminder","testAutoDelete"))
             if(r.has(field) && !(r.get(field) instanceof Boolean)) throw new IllegalArgumentException("测试清理设置无效");
         if(r.has("archived") && !(r.get("archived") instanceof Boolean)) throw new IllegalArgumentException("归档状态无效");
-        for (String field : Arrays.asList("archivedAt","lastAck")) {
+        for (String field : Arrays.asList("archivedAt","lastAck","historyScheduledAt")) {
             if (!r.has(field)) continue;
             Object value=r.get(field);
             if (!(value instanceof Integer || value instanceof Long) || ((Number)value).longValue()<0 || ((Number)value).longValue()>8640000000000000L)
@@ -60,6 +60,7 @@ public final class BackupCodec {
         JSONObject root = new JSONObject(source);
         if (!"timed-memo".equals(root.optString("format")) || root.optInt("version") != 1)
             throw new IllegalArgumentException("不是支持的备忘录备份文件");
+        if(root.has("voiceGroups")) VoiceGroups.validate(root.getJSONArray("voiceGroups"));
         JSONArray rows = root.getJSONArray("reminders");
         if (rows.length() > 1000) throw new IllegalArgumentException("一次最多导入1000条提醒");
         for (int i = 0; i < rows.length(); i++) {

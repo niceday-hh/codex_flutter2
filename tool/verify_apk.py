@@ -16,6 +16,8 @@ apk = directory / 'app-release.apk'
 with zipfile.ZipFile(apk) as z:
     for entry in ['assets/flutter_assets/assets/models/model.int8.onnx', 'assets/flutter_assets/assets/models/tokens.txt', 'lib/arm64-v8a/libsherpa-onnx-c-api.so']:
         assert entry in z.namelist(), f'Missing APK entry: {entry}'
+    vad=z.read('assets/flutter_assets/assets/vad/silero_vad.onnx')
+    assert hashlib.sha256(vad).hexdigest() == '6b99cbfd39246b6706f98ec13c7c50c6b299181f2474fa05cbc8046acc274396'
     manifest = json.loads(z.read('assets/flutter_assets/assets/tts/manifest.json'))
     for resource, entry in manifest['files'].items():
         payload = z.read('assets/flutter_assets/assets/tts/' + resource)
@@ -46,6 +48,7 @@ apk.rename(renamed)
     'source_commit': os.environ['GITHUB_SHA'], 'flutter': '3.35.7', 'abi': 'arm64-v8a',
     'signing': kind, 'certificate_sha256': expected if kind == 'release' else None,
     'model': 'paraformer-zh-int8-2025-10-07',
+    'vad_model': 'silero-vad-v5.0',
     'tts_model': 'voine-vits-uma-genshin-honkai-mnn', 'tts_speakers': 804, 'tts_sample_rate': 22050,
     'reboot_tests_run': False,
     'tests': ['flutter analyze', 'flutter test', 'JVM schedule checks', 'native notification/backup/boot tests'],
