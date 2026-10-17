@@ -9,6 +9,7 @@ import 'speech.dart';
 import 'speech_options.dart';
 import 'task_library.dart';
 import 'voice_flow.dart';
+import 'app_error.dart';
 import 'voice_page.dart';
 import 'voice_groups_page.dart';
 
@@ -149,6 +150,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s)));
   }
   Future<void> edit([Reminder? existing]) async {
+    await voice.pause(keepDraft: false);
     final draft = existing == null ? store.draft() : Reminder.fromJson({...existing.toJson()});
     draft.enabled = true;
     draft.completed = false;
@@ -170,6 +172,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     if (matches.isNotEmpty) viewReminder(matches.first);
   }
   Future<void> viewReminder(Reminder r) async {
+    await voice.pause(keepDraft: false);
     await showModalBottomSheet<void>(context: context, isScrollControlled: true,
       backgroundColor: Colors.white, showDragHandle: true,
       builder: (sheetContext) => ReminderDetail(reminder: r, onAck: () async {
@@ -204,6 +207,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     } catch (e) { toast(niceError(e)); }
   }
   Future<void> taskLibrary() async {
+    await voice.pause(keepDraft: false);
     await Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => TaskLibraryPage(
       store: store, card: reminderCard)));
     await reload();
@@ -212,7 +216,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     body: SafeArea(child: Column(children: [
       if (voice.active && voice.pending == null && tab != 2) Material(color: const Color(0xFFECE5FF), child: ListTile(
         dense: true, leading: const Icon(Icons.mic_none), title: Text(voice.message),
-        subtitle: voice.phase == VoicePhase.commands ? Text('剩余 ' + voice.secondsLeft.toString() + ' 秒') : null,
+        subtitle: voice.phase == VoicePhase.commands ? Text('剩余 ${voice.secondsLeft} 秒') : null,
         trailing: IconButton(tooltip: '停止预听', onPressed: voice.cancel, icon: const Icon(Icons.close)))),
       Expanded(child: loading ? const Center(child: CircularProgressIndicator())
       : error != null ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -287,7 +291,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     child: Row(children: [Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
       const Spacer(), Text(subtitle, style: const TextStyle(color: muted, fontSize: 12))]));
   Widget permissionBanner() => Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-    child: InkWell(onTap: () => setState(() => tab = 3), borderRadius: BorderRadius.circular(18),
+    child: InkWell(onTap: () { unawaited(voice.pause(keepDraft: false)); setState(() => tab = 3); }, borderRadius: BorderRadius.circular(18),
       child: Container(padding: const EdgeInsets.all(15), decoration: BoxDecoration(color: const Color(0xFFFFF0E4), borderRadius: BorderRadius.circular(18)),
         child: const Row(children: [Icon(Icons.info_outline, color: Color(0xFFB96C29)), SizedBox(width: 10),
           Expanded(child: Text('请在设置中开启通知与精确定时权限', style: TextStyle(fontSize: 13))), Icon(Icons.chevron_right)]))));
@@ -517,9 +521,9 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         subtitle: const Text('按人声活动判断，识别后弹出确认卡片；确认阶段不播放语音。'),
         value: store.defaults['voiceAutoStop'] as bool? ?? true,
         onChanged: (v) async { store.defaults['voiceAutoStop'] = v; await persistDefaults(); }),
-      settingRow(Icons.timer_outlined, '自动停录等待', (store.defaults['voiceSilenceSeconds'] ?? 5).toString() + ' 秒 · 单次录音最长45秒', () async {
+      settingRow(Icons.timer_outlined, '自动停录等待', "${store.defaults['voiceSilenceSeconds'] ?? 5} 秒 · 单次录音最长45秒", () async {
         final seconds = await showDialog<int>(context: context, builder: (c) => SimpleDialog(title: const Text('连续无声多久后停录'),
-          children: [for (var i = 3; i <= 10; i++) SimpleDialogOption(onPressed: () => Navigator.pop(c, i), child: Text(i.toString() + ' 秒'))]));
+          children: [for (var i = 3; i <= 10; i++) SimpleDialogOption(onPressed: () => Navigator.pop(c, i), child: Text('$i 秒'))]));
         if (seconds != null) { store.defaults['voiceSilenceSeconds'] = seconds; await persistDefaults(); }
       }),
       settingRow(Icons.mic_external_on_outlined, '试用免手输入', '先说“开始录音”，再说时间和事项；确认或重新录音均可语音操作', () async {
@@ -527,7 +531,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       }),
     ]),
     section('离线语音播报', 'VITS-MNN · 804个音色条目'), settingsGroup([
-      settingRow(Icons.groups_outlined, '我的角色组', store.voiceGroups.length.toString() + ' 个组 · 创建专属随机音色范围', () async {
+      settingRow(Icons.groups_outlined, '我的角色组', '${store.voiceGroups.length} 个组 · 创建专属随机音色范围', () async {
         await Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => VoiceGroupsPage(store: store)));
         await reload();
       }),
@@ -637,7 +641,6 @@ bool occursOn(Reminder r, DateTime d) {
   if (!r.enabled || day.isBefore(anchor)) return false;
   return r.repeat == 'daily' || r.days.contains(d.weekday);
 }
-String niceError(Object e) => e is PlatformException ? e.message ?? '操作失败，请重试' : '操作失败：$e';
 const presentations = {'banner': '横幅和通知栏', 'drawer': '仅通知栏'};
 const lockscreens = {'private': '隐藏正文', 'hidden': '不在锁屏显示'};
 String channelImportanceLabel(int importance) => switch (importance) {

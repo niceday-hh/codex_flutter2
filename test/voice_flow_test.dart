@@ -106,6 +106,22 @@ void main() {
     expect(flow.phase, VoicePhase.idle); expect(flow.pending, isNotNull); expect(store.saved, isEmpty);
     flow.dispose(); await tester.pump();
   });
+  testWidgets('unknown commands keep only the remaining listening window', (tester) async {
+    var clock = at;
+    final c = FakeCapture(), store = FakeStore();
+    final flow = VoiceFlow(capture: c, store: store, clock: () => clock, openVoicePage: () {}, onSaved: () async {});
+    await flow.startCommands();
+    clock = at.add(const Duration(seconds: 10));
+    c.results.add(CapturedVoice('今天天气不错', clock)); await flow.finish();
+    expect(flow.phase, VoicePhase.commands); expect(flow.secondsLeft, 5);
+    await tester.pump(const Duration(seconds: 5)); await tester.pump();
+    expect(flow.phase, VoicePhase.idle);
+    await flow.reviewText('五分钟后提醒我喝水');
+    clock = clock.add(const Duration(seconds: 21));
+    c.results.add(CapturedVoice('没有听清', clock)); await flow.finish();
+    expect(flow.phase, VoicePhase.idle); expect(flow.pending, isNotNull); expect(store.saved, isEmpty);
+    flow.dispose(); await tester.pump();
+  });
   testWidgets('interactive recognition holds postpone TTS until the session releases', (tester) async {
     final session = ReadyAsr();
     await session.retainVoice();

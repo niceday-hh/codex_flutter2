@@ -52,7 +52,10 @@ class _SpeechOptionsState extends State<SpeechOptions> {
     try {
       final catalog = await VoiceCatalog.load();
       final id = catalog.pick(language: r.speechRandomLanguage, gender: r.speechRandomGender, members: members);
-      if (id == null) throw StateError('当前分组没有可用音色');
+      if (id == null) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('当前分组没有可用音色，请调整角色组、来源或性别')));
+        return;
+      }
       if (mounted) { r.speechVoice = id; await changed(); }
     } catch (_) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('音色分组加载失败，请重试'))); }
   }
@@ -87,7 +90,7 @@ class _SpeechOptionsState extends State<SpeechOptions> {
       }),
     if (r.speechRandom) ...[
       Padding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 12), child: DropdownButtonFormField<String>(
-        key: ValueKey('group-' + r.speechRandomGroup),
+        key: ValueKey('group-${r.speechRandomGroup}'),
         initialValue: r.speechRandomGroup, isExpanded: true,
         decoration: const InputDecoration(labelText: '随机角色组'),
         items: [const DropdownMenuItem(value: '', child: Text('全部角色')),

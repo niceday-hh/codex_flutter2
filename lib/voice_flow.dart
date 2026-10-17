@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'asr.dart';
 import 'recording_waveform.dart';
 import 'reminder.dart';
+import 'app_error.dart';
 import 'voice_parser.dart';
 
 enum VoicePhase { idle, preparing, commands, recording, processing, confirming, saving }
@@ -109,7 +109,7 @@ class VoiceFlow extends ChangeNotifier {
   VoicePhase _captureMode = VoicePhase.idle;
   bool _disposed = false;
   Timer? _limit, _ticker;
-  DateTime? _confirmDeadline;
+  DateTime? _confirmDeadline, _commandDeadline;
   Future<void> _tail = Future.value();
   VoiceFlow({required this.capture, required this.store, required this.openVoicePage,
     required this.onSaved, DateTime Function()? clock}) : now = clock ?? DateTime.now;
@@ -136,7 +136,7 @@ class VoiceFlow extends ChangeNotifier {
   Future<void> startRecording() => _start(VoicePhase.recording);
   Future<void> _start(VoicePhase mode) {
     final ticket = ++_epoch;
-    _stopTimers(); pending = null; _confirmDeadline = null;
+    _stopTimers(); pending = null; _confirmDeadline = null; _commandDeadline = null;
     phase = VoicePhase.preparing; message = '正在准备麦克风和离线模型…'; _notify();
     return _queue(() async {
       try {
@@ -162,15 +162,16 @@ class VoiceFlow extends ChangeNotifier {
     }, meter.accept);
     if (!_current(ticket)) return;
     phase = mode; meter.start();
+    if (mode == VoicePhase.commands) _commandDeadline ??= now().add(const Duration(seconds: 15));
     message = switch (mode) {
       VoicePhase.commands => '正在预听，可说“开始录音”',
       VoicePhase.confirming => '请说“确认”“重新录音”或“取消”',
       _ => '正在录音；连续安静后自动识别',
     };
     final duration = mode == VoicePhase.recording ? const Duration(seconds: 45)
-      : mode == VoicePhase.commands ? const Duration(seconds: 15)
+      : mode == VoicePhase.commands ? _commandDeadline!.difference(now())
       : (_confirmDeadline ?? now().add(const Duration(seconds: 20))).difference(now());
-    if (duration <= Duration.zero) { await pause(keepDraft: true, notice: '确认超时，草稿已保留，可用下方按钮继续'); return; }
+    if (duration <= Duration.zero) { await _closeInside(pending == null ? '预听已结束，麦克风已关闭' : '确认超时，草稿已保留，可用下方按钮继续'); return; }
     _countdown(duration, () {
       if (!_current(ticket)) return;
       if (mode == VoicePhase.recording) { unawaited(finish()); }
@@ -192,7 +193,7 @@ class VoiceFlow extends ChangeNotifier {
           if (isVoiceCancel(utterance)) { await _closeInside('预听已取消'); return; }
           final start = RegExp(r'^\s*(?:请)?(?:开始录音|打开录音|切换到录音(?:页面|页)?)[，,。；;\s]*').firstMatch(utterance);
           if (start == null) {
-            await _closeInside(utterance.isEmpty ? '没有听清，可点击录音重试' : '未匹配开始录音指令，预听已结束');
+            await _listen(VoicePhase.commands, ticket);
             return;
           }
           openVoicePage();

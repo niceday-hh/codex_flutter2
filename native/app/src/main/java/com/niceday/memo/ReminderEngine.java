@@ -573,9 +573,11 @@ public final class ReminderEngine {
             ensureChannel(r);
             rows.put(r);
         }
-        // Validate the whole file before a single atomic data write; merge never overwrites local rows.
+        // Commit task/group references together; the existing mirror writer stays unchanged.
+        if(!prefs.edit().putString("reminders",rows.toString()).putString("voiceGroups",combined.toString())
+            .putInt("nextId",id).putLong("generation",generation).putInt("schema",2).commit())
+            throw new IllegalStateException("导入保存失败，请检查存储空间");
         write(rows);
-        prefs.edit().putInt("nextId", id).putLong("generation", generation).putInt("schema", 2).putString("voiceGroups",combined.toString()).commit();
         for (int i = rows.length() - imported.length(); i < rows.length(); i++) {
             JSONObject r = rows.getJSONObject(i); ensureChannel(r); scheduleBase(r);
         }

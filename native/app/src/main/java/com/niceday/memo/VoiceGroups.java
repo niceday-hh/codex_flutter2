@@ -23,7 +23,7 @@ public final class VoiceGroups {
             if(voices.length()==0 || voices.length()>804) throw new IllegalArgumentException("角色组须包含1至804个角色");
             for(int j=0;j<voices.length();j++) {
                 Object value=voices.get(j);
-                if(!(value instanceof String) || !((String)value).matches("[0-9]{1,3}") || Integer.parseInt((String)value)>803 || !unique.add((String)value))
+                if(!(value instanceof String) || !((String)value).matches("(0|[1-9][0-9]{0,2})") || Integer.parseInt((String)value)>803 || !unique.add((String)value))
                     throw new IllegalArgumentException("角色组包含无效或重复音色");
                 selected.put(value);
             }
@@ -36,7 +36,7 @@ public final class VoiceGroups {
         android.content.SharedPreferences prefs=c.getSharedPreferences("memo",0);
         JSONObject defaults=new JSONObject(prefs.getString("defaults","{}"));
         if(!defaults.optString("speechRandomGroup").isEmpty() && members(groups,defaults.optString("speechRandomGroup"))==null)
-            defaults.put("speechRandomGroup","");
+            defaults.put("speechRandomGroup","").put("speechRandom",false);
         if(!prefs.edit().putString("voiceGroups",groups.toString()).putString("defaults",defaults.toString()).commit())
             throw new IllegalStateException("角色组保存失败");
     }

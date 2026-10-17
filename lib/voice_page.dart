@@ -32,7 +32,7 @@ class _VoicePageState extends State<VoicePage> {
     const SizedBox(height: 20),
     Text(flow.message.isEmpty ? '点击开始说话' : flow.message, textAlign: TextAlign.center,
       style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-    if (flow.capturing) Text('剩余 ' + flow.secondsLeft.toString() + ' 秒', textAlign: TextAlign.center),
+    if (flow.capturing) Text('剩余 ${flow.secondsLeft} 秒', textAlign: TextAlign.center),
     const SizedBox(height: 18), RecordingWaveform(meter: flow.meter),
     const SizedBox(height: 24),
     Card(elevation: 0, color: Colors.white, child: Padding(padding: const EdgeInsets.all(16), child:
@@ -60,7 +60,7 @@ class VoiceConfirmation extends StatelessWidget {
     if (parsed == null) return const SizedBox.shrink();
     final r = parsed.reminder;
     final saving = flow.phase == VoicePhase.saving;
-    final date = r.date.year.toString() + '年' + r.date.month.toString() + '月' + r.date.day.toString() + '日 ';
+    final date = '${r.date.year}年${r.date.month}月${r.date.day}日 ';
     return PopScope(canPop: false, child: AlertDialog(
       title: const Text('确认提醒'),
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -72,7 +72,7 @@ class VoiceConfirmation extends StatelessWidget {
         if (flow.validationError != null) Padding(padding: const EdgeInsets.only(top: 12),
           child: Text(flow.validationError!, style: const TextStyle(color: Colors.deepOrange))),
         const SizedBox(height: 16), Text(flow.message),
-        if (flow.capturing) Text('语音确认剩余 ' + flow.secondsLeft.toString() + ' 秒'),
+        if (flow.capturing) Text('语音确认剩余 ${flow.secondsLeft} 秒'),
         const SizedBox(height: 8), const Text('可说“确认”“重新录音”或“取消”，也可使用下方按钮。',
           style: TextStyle(fontSize: 12, color: Color(0xFF8A859C))),
       ])),
