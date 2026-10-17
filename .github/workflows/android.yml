@@ -6,10 +6,28 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: android-${{ github.ref }}
+  group: android-release-${{ github.ref }}
   cancel-in-progress: true
+env:
+  CI_ASSET_TAG: ci-${{ github.run_id }}
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Prepare private draft asset transfer
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if ! gh release view "$CI_ASSET_TAG" >/dev/null 2>&1; then
+            gh release create "$CI_ASSET_TAG" --target "$GITHUB_SHA" --draft \
+              --title "CI ${{ github.run_id }} (unpublished)" \
+              --notes "Temporary build transfer; publication still requires all checks and fixed signing."
+          fi
   build:
+    needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 45
     outputs:
@@ -70,22 +88,35 @@ jobs:
         run: cd android && ./gradlew :app:testReleaseUnitTest --no-daemon
       - name: Verify embedded model and fixed certificate
         run: python3 tool/verify_apk.py
-      - uses: actions/upload-artifact@v4
-        with:
-          name: arm64-build
-          path: |
-            build/app/outputs/flutter-apk/*.apk
-            build/app/outputs/flutter-apk/BUILD_INFO.json
+      - name: Stage verified signed build
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release upload "$CI_ASSET_TAG" --clobber \
+            build/app/outputs/flutter-apk/*.apk \
+            build/app/outputs/flutter-apk/BUILD_INFO.json \
             build/app/outputs/flutter-apk/SHA256SUMS.txt
-          retention-days: 30
-          compression-level: 0
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: native-test-results
-          path: build/app/test-results/testReleaseUnitTest/*.xml
-          if-no-files-found: ignore
+      - name: Stage native test reports
+        if: always() && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import glob, zipfile
+          paths = glob.glob("build/app/test-results/testReleaseUnitTest/*.xml")
+          if paths:
+              with zipfile.ZipFile("native-test-results.zip", "w", zipfile.ZIP_DEFLATED) as out:
+                  for path in paths:
+                      out.write(path, path.rsplit("/", 1)[-1])
+          PY
+          if [ -f native-test-results.zip ]; then
+            gh release upload "$CI_ASSET_TAG" native-test-results.zip --clobber
+          fi
   emulator:
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
@@ -142,26 +173,23 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -partition-size 2048
           script: |
             python3 tool/device_test_suite.py
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: device-test-results-${{ matrix.api }}
-          path: device-*-test-results-api*.json
+      - name: Stage device test reports
+        if: always() && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          shopt -s nullglob
+          reports=(device-*-test-results-api*.json)
+          if [ "${#reports[@]}" -gt 0 ]; then
+            gh release upload "$CI_ASSET_TAG" "${reports[@]}" --clobber
+          fi
   publish:
     needs: [build, emulator]
     if: github.ref == 'refs/heads/main' && needs.build.outputs.signing == 'release'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: arm64-build
-          path: release
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: device-test-results-*
-          merge-multiple: true
-          path: release
       - name: Publish verified signed APK and version notes
         env:
           GH_TOKEN: ${{ github.token }}
@@ -172,5 +200,9 @@ jobs:
             echo "Release exists; bump version before publishing a new build."
             exit 0
           fi
+          gh release download "$CI_ASSET_TAG" --dir release
+          (cd release && sha256sum --check SHA256SUMS.txt)
           gh release create "$tag" --target "$GITHUB_SHA" --title "定时备忘录 $tag · 固定签名新版" \
-            --notes-file "docs/releases/$tag.md" --prerelease release/*.apk release/*.json release/SHA256SUMS.txt
+            --notes-file "docs/releases/$tag.md" --prerelease \
+            release/*.apk release/*.json release/SHA256SUMS.txt release/native-test-results.zip
+          gh release delete "$CI_ASSET_TAG" --yes --cleanup-tag
