@@ -319,4 +319,22 @@ void main() {
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
 
+  testWidgets('a newer foreground return is retried after an older readiness check completes', (tester) async {
+    final first = Completer<bool>(); var checks = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+      if (call.method == 'getState') return jsonEncode({'reminders': [], 'defaults': {'handsFree': true}, 'status': {}});
+      if (call.method == 'voiceEntryAllowed') { checks++; return checks == 1 ? first.future : false; }
+      if (call.method == 'initialReminderId') return 0;
+      return null;
+    });
+    await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle(); expect(checks, 1);
+    for (final state in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused,
+      AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+    }
+    await tester.pumpAndSettle(); first.complete(false); await tester.pumpAndSettle();
+    expect(checks, 2); expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  });
+
 }

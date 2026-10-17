@@ -69,7 +69,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     openVoicePage: () { if (mounted) setState(() => tab = 2); }, onSaved: reload);
   DialogRoute<void>? _voiceDialog;
   bool _dialogScheduled = false, _wasPaused = false, _entryPending = true;
-  bool _initialized = false, _foreground = true, _checkingEntry = false, _suppressVoiceEntry = false;
+  bool _initialized = false, _foreground = true, _checkingEntry = false, _entryAgain = false, _suppressVoiceEntry = false;
   DateTime selectedDate = DateTime.now();
   DateTime calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
 
@@ -102,7 +102,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     unawaited(speech.preparePending());
   }
   Future<void> _maybeStartHandsFree() async {
-    if (!_canStartHandsFree || _checkingEntry) return;
+    if (_checkingEntry) { _entryAgain = true; return; }
+    if (!_canStartHandsFree) return;
     _checkingEntry = true;
     try {
       if (await native.invokeMethod<bool>('voiceEntryAllowed') == true && _canStartHandsFree) {
@@ -111,7 +112,13 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         await voice.startCommands();
       }
     } catch (e) { toast(niceError(e)); }
-    finally { _checkingEntry = false; }
+    finally {
+      _checkingEntry = false;
+      if (_entryAgain) {
+        _entryAgain = false;
+        if (_canStartHandsFree) unawaited(_maybeStartHandsFree());
+      }
+    }
   }
   bool get _canStartHandsFree => mounted && _initialized && _foreground && _entryPending &&
     !_suppressVoiceEntry && !voice.active && voice.pending == null &&
