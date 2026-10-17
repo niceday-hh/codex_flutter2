@@ -9,8 +9,14 @@ const voiceGenders = {'all': '不限角色性别', 'female': '女性角色', 'ma
 class VoiceCatalog {
   final List<Map<String, dynamic>> voices;
   VoiceCatalog(this.voices);
+  static VoiceCatalog? _cached;
   static Future<VoiceCatalog>? _loading;
-  static Future<VoiceCatalog> load() => _loading ??= _load();
+  static Future<VoiceCatalog> load() {
+    final cached = _cached;
+    if (cached != null) return Future.value(cached);
+    return _loading ??= _load().then((catalog) { _cached = catalog; return catalog; })
+      .whenComplete(() => _loading = null);
+  }
   static Future<VoiceCatalog> _load() async {
     final raw = jsonDecode(await rootBundle.loadString('native/app/src/main/assets/voice_catalog.json')) as Map<String, dynamic>;
     final entries = (raw['voices'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();

@@ -34,6 +34,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: SingleChildScrollView(child:
       SpeechOptions(reminder: r, defaults: const {}, onChanged: () async {})))));
     await tester.tap(find.text('播报音色')); await tester.pumpAndSettle();
+    expect(find.text('选择播报音色'), findsOneWidget);
     await tester.enterText(find.byType(TextField), '303'); await tester.pumpAndSettle();
     expect(find.text(speechVoiceLabel('303')), findsOneWidget);
     await tester.tap(find.text('随机挑一个')); await tester.pumpAndSettle();

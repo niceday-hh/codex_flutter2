@@ -39,7 +39,7 @@ class _SpeechOptionsState extends State<SpeechOptions> {
       config.speechVoice = id;
       if (!widget.defaultSettings && mounted) { r.speechVoice = id; await changed(); }
     }
-    await speech.preview(config);
+    if (mounted) await speech.preview(config);
   }
   Future<void> reroll() async {
     try {

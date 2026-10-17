@@ -8,7 +8,7 @@ void main() {
   test('language and gender pools intersect and unknown roles do not leak into gender pools', () async {
     final catalog = await VoiceCatalog.load();
     expect(catalog.candidates().length, 804);
-    expect(catalog.candidates(language: 'ja'), containsAll(['0', '303']));
+    expect(catalog.candidates(language: 'ja'), containsAll(['0', '148', '303']));
     expect(catalog.candidates(language: 'zh'), contains('228'));
     expect(catalog.candidates(gender: 'female'), contains('228'));
     expect(catalog.candidates(gender: 'male'), contains('104'));
