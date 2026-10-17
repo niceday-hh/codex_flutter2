@@ -43,10 +43,13 @@ final class TtsAssets {
                 java.nio.file.Files.write(marker.toPath(), hash.getBytes(StandardCharsets.UTF_8));
             } finally { temporary.delete(); }
         }
+        clearLegacy(context);
+        return dir.getPath();
+    }
+    static void clearLegacy(Context context) {
         File legacy = new File(context.getFilesDir(), "tts-aishell3-v1");
         File[] obsolete = legacy.listFiles();
         if (obsolete != null) for (File file : obsolete) if (file.isFile()) file.delete();
         legacy.delete();
-        return dir.getPath();
     }
 }

@@ -22,7 +22,7 @@ final class TaskCleanupNotification {
         Notification.Builder b=new Notification.Builder(c,"memo_cleanup_v1").setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("本轮提醒已停止 · 如何保留任务？")
             .setContentText(recurring?"不选择则继续原循环；归档或删除会停止以后的循环":"不选择则保留在已完成列表，可随时复用")
-            .setContentIntent(content).setVisibility(Notification.VISIBILITY_PRIVATE).setPublicVersion(generic)
+            .setContentIntent(content).setVisibility(NotificationStyles.visibility(row)).setPublicVersion(generic)
             .setOnlyAlertOnce(true).setAutoCancel(true).setCategory(Notification.CATEGORY_STATUS);
         for(String action:new String[]{ReminderEngine.ARCHIVE,ReminderEngine.DELETE}) {
             Intent i=new Intent(c,ReminderReceiver.class).setAction(action).setData(Uri.parse("memo://cleanup/"+action+"/"+id))

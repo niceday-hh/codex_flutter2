@@ -109,7 +109,13 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       draft.date = DateTime.now().add(const Duration(hours: 1));
     }
     final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => ReminderEditor(reminder: draft, store: store)));
-    if (saved == true) { await reload(); toast('提醒已保存'); }
+    if (saved == true) {
+      if (mounted && existing != null && (existing.archived || existing.completed)) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        setState(() => tab = 0);
+      }
+      await reload(); toast('提醒已保存');
+    }
   }
   void openById(int id) {
     final matches = store.reminders.where((r) => r.id == id);
@@ -461,7 +467,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   Widget defaultSpeechOptions() {
     final config = Reminder(
       speechMode: store.defaults['speechMode'] as String? ?? 'off',
-      speechVoice: store.defaults['speechVoice'] as String? ?? '0',
+      speechVoice: store.defaults['speechVoice'] as String? ?? '228',
       speechRate: (store.defaults['speechRate'] as num?)?.toDouble() ?? 1.0,
       speechHideLocked: store.defaults['speechHideLocked'] as bool? ?? true,
       speechRepeat: store.defaults['speechRepeat'] as bool? ?? true);

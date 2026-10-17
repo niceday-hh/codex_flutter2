@@ -27,6 +27,8 @@ def snapshot():
     return json.loads(adb('exec-out','run-as',PACKAGE,'cat','files/notification-probe.json'))
 
 result={'reboot_tests_run':False}
+original_timeout=shell('settings','get','system','screen_off_timeout')
+shell('settings','put','system','screen_off_timeout','600000')
 path=Path(f'device-cleanup-test-results-api{shell("getprop","ro.build.version.sdk")}.json')
 try:
     shell('input','keyevent','KEYCODE_WAKEUP'); shell('wm','dismiss-keyguard',check=False)
@@ -48,6 +50,7 @@ try:
         result[action+'_after_process_death']=True
     print('PASS: dismissed notification stops retries; silent native archive/delete actions persist with UI absent',flush=True)
 finally:
+    shell('settings','put','system','screen_off_timeout',original_timeout,check=False)
     path.write_text(json.dumps(result,ensure_ascii=False,indent=2))
     if len(result)<3: print('Cleanup diagnostics:',json.dumps({'runtime':runtime(),'notifications':snapshot()},ensure_ascii=False),flush=True)
     probe('CLEAR')

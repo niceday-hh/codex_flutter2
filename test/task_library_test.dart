@@ -18,7 +18,8 @@ void main() {
     expect(find.byType(Dismissible), findsOneWidget);
     await tester.tap(find.byTooltip('任务收纳')); await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, '搜索任务内容'), '收纳记录 999'); await tester.pumpAndSettle();
-    expect(find.text('收纳记录 999'), findsOneWidget); expect(find.text('收纳记录 998'), findsNothing);
+    expect(find.byWidgetPredicate((w) => w is Text && w.data == '收纳记录 999'), findsOneWidget);
+    expect(find.text('收纳记录 998'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
@@ -29,6 +30,11 @@ void main() {
       if (call.method == 'getState') return jsonEncode({'reminders': [record], 'status': {'notifications': true, 'exact': true}});
       if (call.method == 'archive') { archives++; record = {...record, 'archived': true, 'archivedAt': 10000, 'enabled': false, 'completed': true}; }
       if (call.method == 'delete') deletes++;
+      if (call.method == 'requestNotifications') return true;
+      if (call.method == 'save') {
+        final saved = jsonDecode(call.arguments as String) as Map<String, dynamic>;
+        record = {...saved, 'completed': false};
+      }
       return null;
     });
     await tester.binding.setSurfaceSize(const Size(393, 852));
@@ -39,12 +45,16 @@ void main() {
     expect(archives, 0); expect(deletes, 0);
     await tester.drag(find.byType(Dismissible), const Offset(-400, 0)); await tester.pumpAndSettle();
     await tester.tap(find.text('归档保留')); await tester.pumpAndSettle();
-    expect(archives, 1); expect(deletes, 0); expect(find.byType(Dismissible), findsNothing);
+    expect(archives, 1); expect(deletes, 0); expect(find.byKey(const ValueKey('task-1-0-0')), findsNothing);
     await tester.tap(find.byTooltip('任务收纳')); await tester.pumpAndSettle();
     await tester.tap(find.text('已归档')); await tester.pumpAndSettle();
     expect(find.text('可复用的任务'), findsOneWidget);
     await tester.tap(find.byTooltip('更多操作')); await tester.pumpAndSettle();
     expect(find.text('编辑并复用'), findsOneWidget);
+    await tester.tap(find.text('编辑并复用')); await tester.pumpAndSettle();
+    await tester.tap(find.text('保存')); await tester.pumpAndSettle();
+    expect(record['archived'], isFalse); expect(record['enabled'], isTrue);
+    expect(find.byTooltip('任务收纳'), findsOneWidget); expect(find.text('可复用的任务'), findsWidgets);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });

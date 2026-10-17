@@ -93,10 +93,13 @@ public class ReminderEngineTest {
         assertEquals(1,edited.getInt("id")); assertFalse(edited.getBoolean("archived")); assertFalse(edited.getBoolean("completed")); assertTrue(edited.getBoolean("enabled"));
     }
     @Test public void aishellUpgradeResetsOnlyVoiceAndPreservesExistingSchedule() throws Exception {
+        java.io.File legacy=new java.io.File(context.getFilesDir(),"tts-aishell3-v1"); legacy.mkdirs();
+        java.nio.file.Files.write(new java.io.File(legacy,"model.onnx").toPath(),new byte[]{1,2});
         JSONObject r=row().put("speechVoice","33").put("speechMode","on"); persist(r);
         context.getSharedPreferences("memo",0).edit().remove("speechModel").commit();
         engine=new ReminderEngine(context);
         assertEquals("228",row().getString("speechVoice")); assertEquals("on",row().getString("speechMode")); assertEquals(token,row().getLong("nextTrigger"));
+        assertFalse(legacy.exists());
     }
     @Test public void speechNotificationDoesNotRingAndBackupFreezesInheritedVoice() throws Exception {
         engine.defaults(new JSONObject().put("speechMode", "on").put("speechVoice", "33").put("speechRate", 0.9).toString());

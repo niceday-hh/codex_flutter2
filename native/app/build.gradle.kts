@@ -49,7 +49,7 @@ android {
         }
     }
     externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
-    androidResources { noCompress += listOf("onnx", "mnn") }
+    androidResources { noCompress += "onnx" }
     testOptions { unitTests.isIncludeAndroidResources = true }
 }
 flutter { source = "../.." }

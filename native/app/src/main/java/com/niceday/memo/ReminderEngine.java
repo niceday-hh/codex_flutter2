@@ -50,6 +50,7 @@ public final class ReminderEngine {
             defaults.put("speechVoice",SpeechSettings.VOICE).put("speechModel","voine-vits-mnn-v1");
             prefs.edit().putString("reminders",rows.toString()).putString("defaults",defaults.toString())
                 .putString("speechModel","voine-vits-mnn-v1").commit();
+            TtsAssets.clearLegacy(context); SpeechCache.prune(context);
         } catch(JSONException e) { error("音色迁移未完成，请导出备份后重试"); }
     }
     private static final String[] RUNTIME_FIELDS = {"nextTrigger", "activeOccurrence", "attempts", "retryAt",
@@ -273,9 +274,11 @@ public final class ReminderEngine {
     }
     public void archive(int id) throws JSONException {
         JSONArray rows=read(); JSONObject r=find(rows,id); if(r==null) return;
+        long generation=Math.max(System.currentTimeMillis(),Math.max(r.optLong("version"),prefs.getLong("generation",0))+1);
+        prefs.edit().putLong("generation",generation).commit();
         r.put("archived",true).put("archivedAt",System.currentTimeMillis()).put("completed",true).put("enabled",false)
             .put("acknowledged",true).put("retryAt",0).put("nextTrigger",0).put("lastAck",System.currentTimeMillis())
-            .put("version",Math.max(System.currentTimeMillis(),r.optLong("version")+1));
+            .put("version",generation);
         write(rows); cancel(id,BASE); cancel(id,RETRY); notifications.cancel(id); notifications.cancel(-id);
         SpeechPlaybackService.cancel(id); SpeechCache.prune(context); syncGuardian();
     }
@@ -567,7 +570,7 @@ public final class ReminderEngine {
             .put("enabled", true).put("sound", defaults.getBoolean("sound")).put("vibration", defaults.getString("vibration"))
             .put("wakeScreen", defaults.getBoolean("wakeScreen")).put("ringtone", defaults.getString("ringtone"))
             .put("presentation", defaults.getString("presentation")).put("lockscreen", defaults.getString("lockscreen"))
-            .put("speechMode", defaults.optString("speechMode", "off")).put("speechVoice", defaults.optString("speechVoice", "0"))
+            .put("speechMode", defaults.optString("speechMode", "off")).put("speechVoice", defaults.optString("speechVoice", SpeechSettings.VOICE))
             .put("speechRate", defaults.optDouble("speechRate", 1)).put("speechHideLocked", defaults.optBoolean("speechHideLocked", true))
             .put("speechRepeat", defaults.optBoolean("speechRepeat", true))
             .put("intervalMinutes", 5).put("totalCount", Math.max(1, Math.min(20, totalCount)));
