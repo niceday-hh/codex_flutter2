@@ -22,6 +22,12 @@ with zipfile.ZipFile(apk) as z:
         assert len(payload) == entry['bytes'] and hashlib.sha256(payload).hexdigest() == entry['sha256']
     assert manifest['speaker_count'] == 804 and manifest['sample_rate'] == 22050
     assert 'lib/arm64-v8a/libmemo_vits.so' in z.namelist(), 'Missing MNN JNI runtime'
+    catalog_bytes = z.read('assets/voice_catalog.json')
+    assert catalog_bytes == z.read('assets/flutter_assets/native/app/src/main/assets/voice_catalog.json'), 'Voice groups differ between native and Flutter'
+    assert catalog_bytes == Path('native/app/src/main/assets/voice_catalog.json').read_bytes(), 'Voice groups differ from source'
+    catalog = json.loads(catalog_bytes)
+    assert len(catalog['voices']) == 804
+    assert all(v['language'] in ('zh', 'ja') and v['gender'] in ('male', 'female', 'unknown') for v in catalog['voices'])
     assert not any(p.startswith('assets/flutter_assets/assets/tts/') and p.endswith(('.onnx', '.fst', '.far')) for p in z.namelist()), 'AISHELL assets must be removed'
 expected = Path('docs/signing-certificate.sha256').read_text().strip().lower()
 if kind == 'release':

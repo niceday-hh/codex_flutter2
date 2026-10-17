@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:timed_memo/main.dart';
 import 'package:timed_memo/reminder.dart';
+import 'package:timed_memo/task_library.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +17,7 @@ void main() {
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
     expect(find.text('收纳记录 999'), findsNothing);
     expect(find.byType(Dismissible), findsOneWidget);
-    await tester.tap(find.byTooltip('任务收纳')); await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('历史任务')); await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, '搜索任务内容'), '收纳记录 999'); await tester.pumpAndSettle();
     expect(find.byWidgetPredicate((w) => w is Text && w.data == '收纳记录 999'), findsOneWidget);
     expect(find.text('收纳记录 998'), findsNothing);
@@ -40,22 +41,33 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(393, 852));
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
     await tester.drag(find.byType(Dismissible), const Offset(-400, 0)); await tester.pumpAndSettle();
-    expect(find.text('完成后如何保留？'), findsOneWidget);
+    expect(find.text('结束后如何处理？'), findsOneWidget);
     await tester.tap(find.text('取消')); await tester.pumpAndSettle();
     expect(archives, 0); expect(deletes, 0);
     await tester.drag(find.byType(Dismissible), const Offset(-400, 0)); await tester.pumpAndSettle();
-    await tester.tap(find.text('归档保留')); await tester.pumpAndSettle();
+    await tester.tap(find.text('保留到历史')); await tester.pumpAndSettle();
     expect(archives, 1); expect(deletes, 0); expect(find.byKey(const ValueKey('task-1-0-0')), findsNothing);
-    await tester.tap(find.byTooltip('任务收纳')); await tester.pumpAndSettle();
-    await tester.tap(find.text('已归档')); await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('历史任务')); await tester.pumpAndSettle();
     expect(find.text('可复用的任务'), findsOneWidget);
     await tester.tap(find.byTooltip('更多操作')); await tester.pumpAndSettle();
     expect(find.text('编辑并复用'), findsOneWidget);
     await tester.tap(find.text('编辑并复用')); await tester.pumpAndSettle();
     await tester.tap(find.text('保存')); await tester.pumpAndSettle();
     expect(record['archived'], isFalse); expect(record['enabled'], isTrue);
-    expect(find.byTooltip('任务收纳'), findsOneWidget); expect(find.text('可复用的任务'), findsWidgets);
+    expect(find.byTooltip('历史任务'), findsOneWidget); expect(find.text('可复用的任务'), findsWidgets);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
+  });
+  testWidgets('completed and archived records form one history without duplicates', (tester) async {
+    final store = MemoStore()..reminders = [
+      Reminder(id: 1, text: '自动完成记录', enabled: false, completed: true),
+      Reminder(id: 2, text: '主动保留记录', enabled: false, completed: true, archived: true),
+    ];
+    await tester.pumpWidget(MaterialApp(home: TaskLibraryPage(store: store, card: (r) => Text(r.text))));
+    await tester.pumpAndSettle();
+    expect(find.text('自动完成记录'), findsOneWidget); expect(find.text('主动保留记录'), findsOneWidget);
+    expect(find.byType(ChoiceChip), findsNothing);
+    expect(find.textContaining('2 条'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
   });
 }

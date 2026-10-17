@@ -48,9 +48,16 @@ try:
             assert not r['enabled'] and r['nextTrigger']==0 and r['retryAt']==0
         else: wait(lambda: all(r['id']!=id for r in rows()),'Delete action did not remove task',15)
         result[action+'_after_process_death']=True
-    print('PASS: dismissed notification stops retries; silent native archive/delete actions persist with UI absent',flush=True)
+    row=await_created(probe('SELF_TEST'),runtime); id=row['id']
+    assert row.get('testReminder') and row.get('testAutoDelete'),row
+    wait(lambda: next((r for r in rows() if r['id']==id and r.get('attempts')==1),None),'Self-test did not fire')
+    probe('CLEANUP_DISMISS','--ei','id',str(id))
+    wait(lambda: all(r['id']!=id for r in rows()),'Confirmed self-test was not automatically deleted',15)
+    assert all(n['id']!=-id for n in snapshot()),'Self-test must not leave a cleanup chooser'
+    result['self_test_auto_deleted']=True
+    print('PASS: dismissed notification stops retries; native history/delete and self-test auto-delete persist with UI absent',flush=True)
 finally:
     shell('settings','put','system','screen_off_timeout',original_timeout,check=False)
     path.write_text(json.dumps(result,ensure_ascii=False,indent=2))
-    if len(result)<3: print('Cleanup diagnostics:',json.dumps({'runtime':runtime(),'notifications':snapshot()},ensure_ascii=False),flush=True)
+    if not result.get('self_test_auto_deleted'): print('Cleanup diagnostics:',json.dumps({'runtime':runtime(),'notifications':snapshot()},ensure_ascii=False),flush=True)
     probe('CLEAR')

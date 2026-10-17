@@ -28,4 +28,17 @@ void main() {
     expect(r.speechVoice, '803');
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
+  testWidgets('random picker selects within the selected group and search', (tester) async {
+    final r = Reminder(speechRandom: true, speechRandomLanguage: 'ja', speechRandomGender: 'female');
+    await tester.binding.setSurfaceSize(const Size(393, 1200));
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SingleChildScrollView(child:
+      SpeechOptions(reminder: r, defaults: const {}, onChanged: () async {})))));
+    await tester.tap(find.text('播报音色')); await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '303'); await tester.pumpAndSettle();
+    expect(find.text(speechVoiceLabel('303')), findsOneWidget);
+    await tester.tap(find.text('随机挑一个')); await tester.pumpAndSettle();
+    expect(r.speechVoice, '303');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

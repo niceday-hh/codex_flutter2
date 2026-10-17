@@ -31,6 +31,8 @@ public final class BackupCodec {
         r.put("intervalMinutes", interval).put("totalCount", total);
         validateStyle(r);
         SpeechSettings.validate(r, false);
+        for(String field:Arrays.asList("testReminder","testAutoDelete"))
+            if(r.has(field) && !(r.get(field) instanceof Boolean)) throw new IllegalArgumentException("测试清理设置无效");
         if(r.has("archived") && !(r.get("archived") instanceof Boolean)) throw new IllegalArgumentException("归档状态无效");
         for (String field : Arrays.asList("archivedAt","lastAck")) {
             if (!r.has(field)) continue;

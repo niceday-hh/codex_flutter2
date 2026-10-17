@@ -99,7 +99,8 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
                 if ("PRIVACY_SEED".equals(intent.getAction()) || "BANNER_SEED".equals(intent.getAction())) engine.defaults(new JSONObject()
                     .put("sound", false).put("vibration", "three").put("wakeScreen", false)
                     .put("presentation", "BANNER_SEED".equals(intent.getAction()) ? "banner" : "drawer").put("lockscreen", "private").toString());
-                int id = engine.createTest(intent.getIntExtra("seconds", 15), "BANNER_SEED".equals(intent.getAction()) ? 3 : 1);
+                int id = "SELF_TEST".equals(intent.getAction()) ? engine.createSelfTest(15)
+                    : engine.createTest(intent.getIntExtra("seconds", 15), "BANNER_SEED".equals(intent.getAction()) ? 3 : 1);
                 if ("CORE_SEED".equals(intent.getAction())) {
                     if (engine.reliableMode()) throw new IllegalStateException("Core fixture mode did not persist");
                     setResultData("reliableMode=false");

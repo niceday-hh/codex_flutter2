@@ -3,32 +3,26 @@ import 'reminder.dart';
 
 class TaskLibraryPage extends StatefulWidget {
   final MemoStore store;
-  final bool initialArchived;
   final Widget Function(Reminder) card;
-  const TaskLibraryPage({super.key, required this.store, required this.card, this.initialArchived = false});
+  const TaskLibraryPage({super.key, required this.store, required this.card});
   @override State<TaskLibraryPage> createState() => _TaskLibraryPageState();
 }
 
 class _TaskLibraryPageState extends State<TaskLibraryPage> {
-  late bool archived = widget.initialArchived;
   String query = '';
   int collectedAt(Reminder r) => (r.archived ? r.archivedAt : r.lastAck) > 0
     ? (r.archived ? r.archivedAt : r.lastAck) : r.date.millisecondsSinceEpoch;
   @override Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('任务收纳')),
+    appBar: AppBar(title: const Text('历史任务')),
     body: AnimatedBuilder(animation: widget.store, builder: (_, child) {
       final rows = widget.store.reminders.where((r) =>
-        (archived ? r.archived : r.completed && !r.archived) && r.text.toLowerCase().contains(query.toLowerCase())).toList()
+        (r.archived || r.completed) && r.text.toLowerCase().contains(query.toLowerCase())).toList()
         ..sort((a, b) => collectedAt(b).compareTo(collectedAt(a)));
       return Column(children: [
         Padding(padding: const EdgeInsets.fromLTRB(20, 8, 20, 12), child: TextField(
           decoration: const InputDecoration(hintText: '搜索任务内容', prefixIcon: Icon(Icons.search)),
           onChanged: (s) => setState(() => query = s.trim()))),
-        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          ChoiceChip(label: const Text('已完成'), selected: !archived, onSelected: (_) => setState(() => archived = false)),
-          const SizedBox(width: 12), ChoiceChip(label: const Text('已归档'), selected: archived, onSelected: (_) => setState(() => archived = true)),
-        ]),
-        Padding(padding: const EdgeInsets.all(12), child: Text('${rows.length} 条 · ${archived ? '已停止提醒，内容保留，可编辑后复用' : '已自动收起，按完成日期排列'}',
+        Padding(padding: const EdgeInsets.all(12), child: Text('${rows.length} 条 · 已停止提醒，内容保留；可编辑后复用',
           style: const TextStyle(color: Color(0xFF8A859C), fontSize: 12))),
         Expanded(child: rows.isEmpty ? const Center(child: Text('还没有匹配的记录')) : ListView.builder(
           itemCount: rows.length, itemBuilder: (_, i) {

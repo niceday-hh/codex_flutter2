@@ -46,8 +46,14 @@ public final class SpeechSettings {
         double rate = r.optDouble("speechRate", defaults ? 1 : 0);
         if (!Double.isFinite(rate) || (rate != 0 && (rate < 0.8 || rate > 1.3)) || (defaults && rate == 0))
             throw new IllegalArgumentException("语速须为0.8至1.3倍");
-        for (String field : Arrays.asList("speechHideLocked", "speechRepeat"))
+        for (String field : Arrays.asList("speechHideLocked", "speechRepeat", "speechRandom"))
             if (r.has(field) && !(r.get(field) instanceof Boolean)) throw new IllegalArgumentException("语音隐私开关无效");
+        for(String field: Arrays.asList("speechRandomLanguage","speechRandomGender"))
+            if(r.has(field) && !(r.get(field) instanceof String)) throw new IllegalArgumentException("音色分组类型无效");
+        String language=r.optString("speechRandomLanguage","all"), gender=r.optString("speechRandomGender","all");
+        if(!Arrays.asList("all","zh","ja").contains(language) || !Arrays.asList("all","female","male").contains(gender))
+            throw new IllegalArgumentException("不支持的音色分组");
+        r.put("speechRandom",r.optBoolean("speechRandom",false)).put("speechRandomLanguage",language).put("speechRandomGender",gender);
         r.put("speechMode", mode).put("speechVoice", voice).put("speechRate", rate).put("speechModel","voine-vits-mnn-v1");
         if (!r.has("speechHideLocked")) r.put("speechHideLocked", true);
         if (!r.has("speechRepeat")) r.put("speechRepeat", true);

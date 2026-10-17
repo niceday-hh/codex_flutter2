@@ -15,6 +15,7 @@ import android.view.WindowManager;
 import io.flutter.embedding.android.FlutterActivity;
 import io.flutter.embedding.engine.FlutterEngine;
 import io.flutter.plugin.common.MethodChannel;
+import io.flutter.plugin.common.EventChannel;
 import java.io.*;
 
 public final class MainActivity extends FlutterActivity {
@@ -52,6 +53,8 @@ public final class MainActivity extends FlutterActivity {
         activity.channel.invokeMethod("prepareSpeech", null); return true;
     }
     private MethodChannel channel;
+    private EventChannel.EventSink levelSink;
+    private long recordingGeneration;
     private SharedPreferences memoPreferences;
     private SharedPreferences.OnSharedPreferenceChangeListener memoListener;
     private MethodChannel.Result permissionResult, ringtoneResult;
@@ -75,6 +78,10 @@ public final class MainActivity extends FlutterActivity {
     @Override public void configureFlutterEngine(FlutterEngine engine) {
         super.configureFlutterEngine(engine);
         channel = new MethodChannel(engine.getDartExecutor().getBinaryMessenger(), "memo/native");
+        new EventChannel(engine.getDartExecutor().getBinaryMessenger(), "memo/recordingLevels").setStreamHandler(new EventChannel.StreamHandler() {
+            @Override public void onListen(Object arguments, EventChannel.EventSink events) { levelSink=events; }
+            @Override public void onCancel(Object arguments) { levelSink=null; }
+        });
         memoPreferences = getSharedPreferences("memo", Context.MODE_PRIVATE);
         memoListener = (preferences, key) -> {
             if (("reminders".equals(key) || "speechChanged".equals(key)) && channel != null) channel.invokeMethod("stateChanged", null);
@@ -183,7 +190,8 @@ public final class MainActivity extends FlutterActivity {
                     case "cancelRecording" -> { stopRecording(true); result.success(null); }
                     case "initialReminderId" -> result.success(getIntent().getIntExtra("reminderId", 0));
                     case "restore" -> { store.restore(false); result.success(null); }
-                    case "testReminder" -> result.success(store.createTest(15));
+                    case "testReminder" -> { result.success(store.createSelfTest(15)); requestSpeechPreparation(); }
+                    case "testAutoDelete" -> { store.testAutoDelete((Boolean)call.arguments); result.success(null); }
                     case "popupMode" -> {
                         boolean enabled = (Boolean) call.arguments;
                         store.popupMode(enabled);
@@ -315,18 +323,31 @@ public final class MainActivity extends FlutterActivity {
         catch (RuntimeException e) { output.close(); recorder.release(); recorder = null; throw e; }
         recording = true;
         final AudioRecord source = recorder;
+        final long generation=++recordingGeneration;
         audioThread = new Thread(() -> {
             try (FileOutputStream out = output) {
                 short[] samples = new short[1600];
                 byte[] bytes = new byte[3200];
-                int total = 0;
+                int total = 0; long lastLevel=0;
                 while (recording && total < 16000 * 45) {
                     int count = source.read(samples, 0, samples.length);
                     if (count < 0) throw new IOException("录音设备读入失败");
+                    long squares=0; int peak=0;
                     for (int i = 0; i < count; i++) {
+                        int sample=samples[i]; squares+=(long)sample*sample; peak=Math.max(peak,Math.abs(sample));
                         bytes[i * 2] = (byte) samples[i]; bytes[i * 2 + 1] = (byte) (samples[i] >> 8);
                     }
                     out.write(bytes, 0, count * 2); total += count;
+                    long now=SystemClock.elapsedRealtime();
+                    if(count>0 && now-lastLevel>=100) {
+                        lastLevel=now; final double dbfs=AudioLevel.dbfs(squares,count), peakLevel=peak/32768.0;
+                        runOnUiThread(() -> {
+                            if(recording && source==recorder && generation==recordingGeneration && levelSink!=null) {
+                                java.util.Map<String,Object> frame=new java.util.HashMap<>();
+                                frame.put("dbfs",dbfs); frame.put("peak",peakLevel); levelSink.success(frame);
+                            }
+                        });
+                    }
                 }
             } catch (Exception e) { if (recording) audioError = e.getMessage(); }
         }, "memo-audio");

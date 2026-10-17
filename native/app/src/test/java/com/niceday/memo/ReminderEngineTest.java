@@ -474,4 +474,45 @@ public class ReminderEngineTest {
         assertEquals(0, row().getInt("attempts"));
         assertTrue(new JSONObject(engine.state()).getJSONObject("status").getJSONArray("trace").toString().contains("rejected"));
     }
+
+    @Test public void markedSelfTestIsDeletedOnDismissalWithoutCleanupChooser() throws Exception {
+        int id=engine.createSelfTest(15);
+        JSONArray rows=new JSONObject(engine.state()).getJSONArray("reminders");
+        JSONObject test=rows.getJSONObject(rows.length()-1); long due=test.getLong("nextTrigger");
+        assertTrue(test.getBoolean("testReminder")); assertTrue(test.getBoolean("testAutoDelete"));
+        Shadows.shadowOf(context.getSystemService(KeyguardManager.class)).setKeyguardLocked(false);
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(16));
+        engine.fire(new Intent(ReminderEngine.BASE).putExtra("id",id).putExtra("token",due).putExtra("version",test.getLong("version")));
+        engine.dismissed(id,due);
+        rows=new JSONObject(engine.state()).getJSONArray("reminders");
+        assertEquals(1,rows.length()); assertEquals(1,rows.getJSONObject(0).getInt("id"));
+        assertNull(Shadows.shadowOf(context.getSystemService(NotificationManager.class)).getNotification(-id));
+    }
+    @Test public void selfTestCleanupCanBeDisabledAndOrdinarySameTextIsNeverDeleted() throws Exception {
+        engine.testAutoDelete(false); int id=engine.createSelfTest(15);
+        JSONArray rows=new JSONObject(engine.state()).getJSONArray("reminders"); JSONObject test=rows.getJSONObject(rows.length()-1);
+        assertFalse(test.getBoolean("testAutoDelete"));
+        test.put("activeOccurrence",123L); context.getSharedPreferences("memo",0).edit().putString("reminders",rows.toString()).commit();
+        engine.acknowledge(id,123L); assertEquals(2,new JSONObject(engine.state()).getJSONArray("reminders").length());
+        JSONObject ordinary=row().put("text","后台提醒自检"); persist(ordinary); engine.testAutoDelete(true);
+        engine.fire(intent(ReminderEngine.BASE,token)); engine.acknowledge(1,token);
+        assertEquals(1,new JSONObject(engine.state()).getJSONArray("reminders").length()); assertTrue(row().getBoolean("completed"));
+    }
+    @Test public void randomVoiceIsChosenOnceAndSurvivesTimeEditsRestoreAndBackup() throws Exception {
+        JSONObject task=row().put("id",0).put("year",Calendar.getInstance().get(Calendar.YEAR))
+            .put("speechMode","on").put("speechRandom",true).put("speechRandomLanguage","ja").put("speechRandomGender","male").put("speechVoice","");
+        Calendar future=Calendar.getInstance(); future.add(Calendar.HOUR,1);
+        task.put("year",future.get(Calendar.YEAR)).put("month",future.get(Calendar.MONTH)+1).put("day",future.get(Calendar.DAY_OF_MONTH))
+            .put("hour",future.get(Calendar.HOUR_OF_DAY)).put("minute",future.get(Calendar.MINUTE));
+        engine.save(task.toString());
+        JSONArray rows=new JSONObject(engine.state()).getJSONArray("reminders"); task=rows.getJSONObject(rows.length()-1);
+        String selected=task.getString("speechVoice"); assertTrue(VoiceCatalog.candidates(context,"ja","male").contains(selected));
+        task.put("second",(task.optInt("second")+1)%60); engine.save(task.toString()); engine.restore(false);
+        rows=new JSONObject(new ReminderEngine(context).state()).getJSONArray("reminders");
+        assertEquals(selected,rows.getJSONObject(rows.length()-1).getString("speechVoice"));
+        String backup=engine.exportBackup(); engine.importBackup(backup);
+        rows=new JSONObject(engine.state()).getJSONArray("reminders");
+        assertEquals(selected,rows.getJSONObject(rows.length()-1).getString("speechVoice"));
+        assertTrue(rows.getJSONObject(rows.length()-1).getBoolean("speechRandom"));
+    }
 }

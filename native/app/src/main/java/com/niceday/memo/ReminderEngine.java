@@ -181,7 +181,8 @@ public final class ReminderEngine {
         status.put("lastReceived", runtime.getLong("lastReceived", 0));
         status.put("lastRestored", runtime.getLong("lastRestored", 0));
         status.put("package", context.getPackageName());
-        status.put("version", "0.7.0");
+        status.put("version", "0.8.0");
+        status.put("testAutoDelete",prefs.getBoolean("testAutoDelete",true));
         status.put("cleanupPrompts", prefs.getBoolean("cleanupPrompts",true));
         status.put("speech", SpeechCache.status(context));
         status.put("popupEnabled", popupEnabled());
@@ -214,6 +215,7 @@ public final class ReminderEngine {
         JSONObject r = new JSONObject(json);
         r.remove("notificationChannelId"); r.remove("notificationStyle");
         BackupCodec.validateReminder(r);
+        VoiceCatalog.resolve(context,r);
         if (Build.VERSION.SDK_INT >= 31 && !alarms.canScheduleExactAlarms())
             throw new IllegalArgumentException("请先开启闹钟与提醒权限，白名单和电池优化不能替代这项权限");
         if (!notifications.areNotificationsEnabled()) throw new IllegalArgumentException("请先允许应用通知");
@@ -282,6 +284,7 @@ public final class ReminderEngine {
         write(rows); cancel(id,BASE); cancel(id,RETRY); notifications.cancel(id); notifications.cancel(-id);
         SpeechPlaybackService.cancel(id); SpeechCache.prune(context); syncGuardian();
     }
+    public void testAutoDelete(boolean enabled) { prefs.edit().putBoolean("testAutoDelete",enabled).commit(); }
     public void cleanupPrompts(boolean enabled) { prefs.edit().putBoolean("cleanupPrompts",enabled).commit(); }
     public void dismissed(int id,long token) throws JSONException {
         JSONObject before=find(read(),id);
@@ -303,6 +306,9 @@ public final class ReminderEngine {
         JSONArray rows = read();
         JSONObject r = find(rows, id);
         if (r == null || token == 0 || r.optLong("activeOccurrence") != token) return;
+        if(r.optBoolean("testReminder") && r.optBoolean("testAutoDelete") && "none".equals(r.optString("repeat"))) {
+            delete(id); trace("test_auto_deleted",id,token,"自检任务已确认，自动清理"); return;
+        }
         r.put("acknowledged", true);
         r.put("retryAt", 0);
         r.put("lastAck", System.currentTimeMillis());
@@ -545,6 +551,7 @@ public final class ReminderEngine {
                 .put("completed", r.optBoolean("completed") || ("none".equals(r.optString("repeat")) && n == 0))
                 .put("ringtone", "");
             r.remove("notificationChannelId"); r.remove("notificationStyle");
+            VoiceCatalog.resolve(context,r);
             ensureChannel(r);
             rows.put(r);
         }
@@ -556,6 +563,11 @@ public final class ReminderEngine {
         }
         syncGuardian();
         return imported.length();
+    }
+    public int createSelfTest(int seconds) throws JSONException {
+        int id=createTest(seconds); JSONArray rows=read(); JSONObject r=find(rows,id);
+        r.put("testReminder",true).put("testAutoDelete",prefs.getBoolean("testAutoDelete",true));
+        write(rows); return id;
     }
     public int createTest(int seconds) throws JSONException { return createTest(seconds, 1); }
     public int createTest(int seconds, int totalCount) throws JSONException {
