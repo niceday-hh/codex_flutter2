@@ -34,7 +34,7 @@ jobs:
       - name: Flutter voice flow, UI, parser and real VAD tests
         env:
           LD_LIBRARY_PATH: ${{ env.SHERPA_TEST_LIB }}
-        run: flutter test --timeout=45s
+        run: flutter test --timeout=45s --fail-fast
       - name: Native schedule checks
         run: |
           mkdir -p tool/out

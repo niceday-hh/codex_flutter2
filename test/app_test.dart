@@ -238,8 +238,10 @@ void main() {
       await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text(label)));
       await tester.pumpAndSettle();
       final before = checks; allowed = true;
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      for (final state in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused,
+        AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed]) {
+        tester.binding.handleAppLifecycleStateChanged(state);
+      }
       await tester.pumpAndSettle();
       expect(checks, greaterThan(before));
       expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 0);
@@ -277,8 +279,10 @@ void main() {
       return null;
     });
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle(); expect(checks, 0);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    for (final state in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused,
+      AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+    }
     await tester.pumpAndSettle(); expect(checks, 1);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });

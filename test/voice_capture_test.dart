@@ -31,7 +31,8 @@ class LoadingAsr extends AsrSession {
 }
 
 void main() {
-  testWidgets('manual mic starts before cold model; buffered and live frames keep order', (tester) async {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  test('manual mic starts before cold model; buffered and live frames keep order', () async {
     final model = LoadingAsr();
     final pcm = StreamController<Uint8List>.broadcast(sync: true);
     var starts = 0;
@@ -46,7 +47,7 @@ void main() {
     expect(starts, 1); expect(model.ready.isCompleted, isFalse);
     pcm.add(Uint8List.fromList([1, 0])); pcm.add(Uint8List.fromList([2, 0]));
     expect(capture.bufferedBytes, 4); expect(model.frames, isEmpty);
-    model.ready.complete(); await tester.pump();
+    model.ready.complete(); await Future<void>.delayed(Duration.zero);
     pcm.add(Uint8List.fromList([3, 0]));
     expect(model.frames, [[1, 0], [2, 0], [3, 0]]);
     expect(capture.bufferedBytes, 0);
@@ -54,7 +55,7 @@ void main() {
     await pcm.close(); model.status.dispose();
   });
 
-  testWidgets('cancel during cold loading clears audio and suppresses delayed detector', (tester) async {
+  test('cancel during cold loading clears audio and suppresses delayed detector', () async {
     final model = LoadingAsr();
     final pcm = StreamController<Uint8List>.broadcast(sync: true);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async => call.method == 'microphoneReady' ? true : null);
@@ -63,7 +64,7 @@ void main() {
     pcm.add(Uint8List(3200));
     await capture.cancel(); capture.release();
     expect(capture.bufferedBytes, 0);
-    model.ready.complete(); await tester.pump();
+    model.ready.complete(); await Future<void>.delayed(Duration.zero);
     expect(model.detectors, 0); expect(model.frames, isEmpty);
     var generated = false;
     await model.withoutModel(() async { generated = true; });
@@ -94,7 +95,7 @@ void main() {
     capture.release(); model.release(); model.status.dispose(); await dir.delete(recursive: true);
   });
 
-  testWidgets('cold audio cache has a hard 45-second bound and is cleared on overflow', (tester) async {
+  test('cold audio cache has a hard 45-second bound and is cleared on overflow', () async {
     final model = LoadingAsr();
     final pcm = StreamController<Uint8List>.broadcast(sync: true);
     final endpoints = <int>[];
@@ -105,35 +106,35 @@ void main() {
     expect(capture.bufferedBytes, OfflineVoiceCapture.maxBufferedBytes);
     expect(endpoints, isEmpty);
     pcm.add(Uint8List(2)); expect(endpoints, [-1]); expect(capture.bufferedBytes, 0);
-    await capture.cancel(); capture.release(); model.ready.complete(); await tester.pump();
+    await capture.cancel(); capture.release(); model.ready.complete(); await Future<void>.delayed(Duration.zero);
     expect(model.frames, isEmpty);
     model.release(); await pcm.close(); model.status.dispose();
   });
 
-  testWidgets('late VAD initialization from a previous recording cannot feed the next one', (tester) async {
+  test('late VAD initialization from a previous recording cannot feed the next one', () async {
     final model = LoadingAsr()..firstDetector = Completer<int>();
     model.ready.complete();
     final pcm = StreamController<Uint8List>.broadcast(sync: true);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async => call.method == 'microphoneReady' ? true : null);
     final capture = OfflineVoiceCapture(model, pcm: pcm.stream, levels: const Stream.empty());
-    await capture.open(); await capture.start(5, (_) {}, (_) {}); await tester.pump();
+    await capture.open(); await capture.start(5, (_) {}, (_) {}); await Future<void>.delayed(Duration.zero);
     pcm.add(Uint8List.fromList([1, 0]));
-    await capture.cancel(); await capture.start(5, (_) {}, (_) {}); await tester.pump();
+    await capture.cancel(); await capture.start(5, (_) {}, (_) {}); await Future<void>.delayed(Duration.zero);
     pcm.add(Uint8List.fromList([2, 0]));
-    model.firstDetector!.complete(1); await tester.pump();
+    model.firstDetector!.complete(1); await Future<void>.delayed(Duration.zero);
     pcm.add(Uint8List.fromList([3, 0]));
     expect(model.frames, [[2, 0], [3, 0]]); expect(model.generations, [2, 2]);
     await capture.cancel(); capture.release(); model.release(); await pcm.close(); model.status.dispose();
   });
 
-  testWidgets('cold model failure reports once and does not leak an unhandled future', (tester) async {
+  test('cold model failure reports once and does not leak an unhandled future', () async {
     final model = LoadingAsr();
     final endpoints = <int>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async => call.method == 'microphoneReady' ? true : null);
     final capture = OfflineVoiceCapture(model, pcm: const Stream.empty(), levels: const Stream.empty());
     await capture.open(waitForModel: false); await capture.start(5, endpoints.add, (_) {});
-    model.ready.completeError(StateError('fixture load failure')); await tester.pump();
-    expect(endpoints, [-1]); expect(capture.bufferedBytes, 0); expect(tester.takeException(), isNull);
+    model.ready.completeError(StateError('fixture load failure')); await Future<void>.delayed(Duration.zero);
+    expect(endpoints, [-1]); expect(capture.bufferedBytes, 0);
     await capture.cancel(); capture.release(); model.release(); model.status.dispose();
   });
 }
