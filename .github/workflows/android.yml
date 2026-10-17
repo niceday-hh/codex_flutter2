@@ -205,4 +205,4 @@ jobs:
           gh release create "$tag" --target "$GITHUB_SHA" --title "定时备忘录 $tag · 固定签名新版" \
             --notes-file "docs/releases/$tag.md" --prerelease \
             release/*.apk release/*.json release/SHA256SUMS.txt release/native-test-results.zip
-          gh release delete "$CI_ASSET_TAG" --yes --cleanup-tag
+          gh release delete "$CI_ASSET_TAG" --yes
