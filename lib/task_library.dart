@@ -12,12 +12,14 @@ class TaskLibraryPage extends StatefulWidget {
 class _TaskLibraryPageState extends State<TaskLibraryPage> {
   late bool archived = widget.initialArchived;
   String query = '';
+  int collectedAt(Reminder r) => (r.archived ? r.archivedAt : r.lastAck) > 0
+    ? (r.archived ? r.archivedAt : r.lastAck) : r.date.millisecondsSinceEpoch;
   @override Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('任务收纳')),
     body: AnimatedBuilder(animation: widget.store, builder: (_, child) {
       final rows = widget.store.reminders.where((r) =>
         (archived ? r.archived : r.completed && !r.archived) && r.text.toLowerCase().contains(query.toLowerCase())).toList()
-        ..sort((a, b) => (b.archived ? b.archivedAt : b.lastAck).compareTo(a.archived ? a.archivedAt : a.lastAck));
+        ..sort((a, b) => collectedAt(b).compareTo(collectedAt(a)));
       return Column(children: [
         Padding(padding: const EdgeInsets.fromLTRB(20, 8, 20, 12), child: TextField(
           decoration: const InputDecoration(hintText: '搜索任务内容', prefixIcon: Icon(Icons.search)),
@@ -30,9 +32,9 @@ class _TaskLibraryPageState extends State<TaskLibraryPage> {
           style: const TextStyle(color: Color(0xFF8A859C), fontSize: 12))),
         Expanded(child: rows.isEmpty ? const Center(child: Text('还没有匹配的记录')) : ListView.builder(
           itemCount: rows.length, itemBuilder: (_, i) {
-            final r = rows[i], time = r.archived ? r.archivedAt : r.lastAck;
-            final previous = i == 0 ? null : DateTime.fromMillisecondsSinceEpoch(rows[i - 1].archived ? rows[i - 1].archivedAt : rows[i - 1].lastAck);
-            final date = DateTime.fromMillisecondsSinceEpoch(time > 0 ? time : r.date.millisecondsSinceEpoch);
+            final r = rows[i];
+            final previous = i == 0 ? null : DateTime.fromMillisecondsSinceEpoch(collectedAt(rows[i - 1]));
+            final date = DateTime.fromMillisecondsSinceEpoch(collectedAt(r));
             final heading = previous == null || previous.year != date.year || previous.month != date.month || previous.day != date.day;
             return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               if (heading) Padding(padding: const EdgeInsets.fromLTRB(24, 18, 24, 12), child: Text('${date.year}年${date.month}月${date.day}日', style: const TextStyle(fontWeight: FontWeight.w600))),

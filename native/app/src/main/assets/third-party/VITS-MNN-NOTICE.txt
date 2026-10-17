@@ -1,0 +1,4 @@
+Voine/VITS-MNN commit 6379f381b85f544a5debca3804bf300225c6729e; MNN efdea1d0e24ed29b4650d7bba9942236cfc7bc3e.
+https://github.com/Voine/VITS-MNN
+https://github.com/alibaba/MNN
+Upstream README: learning/exchange use only; commercial use prohibited. Model/character rights are separate.

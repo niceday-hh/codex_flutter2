@@ -56,9 +56,9 @@ public final class BackupCodec {
         if (rows.length() > 1000) throw new IllegalArgumentException("一次最多导入1000条提醒");
         for (int i = 0; i < rows.length(); i++) {
             JSONObject row=rows.getJSONObject(i);
-            if (!"voine-vits-mnn-v1".equals(row.optString("speechModel")) && !row.optString("speechVoice").isEmpty())
-                row.put("speechVoice",SpeechSettings.VOICE);
+            boolean legacy=!"voine-vits-mnn-v1".equals(row.optString("speechModel"));
             validateReminder(row);
+            if (legacy && !row.optString("speechVoice").isEmpty()) row.put("speechVoice",SpeechSettings.VOICE);
         }
         return rows;
     }

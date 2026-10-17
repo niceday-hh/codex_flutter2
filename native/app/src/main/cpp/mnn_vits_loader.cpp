@@ -358,7 +358,7 @@ namespace MNN_VITS {
         auto z_p = translate_z_p(m_p_, logs_p_);
         auto z = translate_run_flow(z_p, y_mask, g_expand_outputs);
         auto audio = translate_run_decoder(z, g_expand_outputs);
-        if (!audio || !audio->getInfo() || audio->getInfo()->dim.size() < 3) throw std::runtime_error("Invalid decoder output");
+        if (!audio.get() || !audio->getInfo() || audio->getInfo()->dim.size() < 3) throw std::runtime_error("Invalid decoder output");
         auto audio_ptr = audio->readMap<float>();
         if (!audio_ptr) throw std::runtime_error("Decoder read failed");
         auto audio_size = audio->getInfo()->dim[2];

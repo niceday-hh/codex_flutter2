@@ -105,6 +105,9 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     draft.enabled = true;
     draft.completed = false;
     draft.archived = false;
+    if (existing != null && (existing.archived || existing.completed) && draft.repeat == 'none' && !draft.date.isAfter(DateTime.now())) {
+      draft.date = DateTime.now().add(const Duration(hours: 1));
+    }
     final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => ReminderEditor(reminder: draft, store: store)));
     if (saved == true) { await reload(); toast('提醒已保存'); }
   }

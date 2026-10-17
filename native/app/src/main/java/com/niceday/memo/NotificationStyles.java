@@ -142,6 +142,7 @@ final class NotificationStyles {
         Map<String, JSONObject> groups = new LinkedHashMap<>();
         for (int i = 0; i < rows.length(); i++) {
             JSONObject r = rows.getJSONObject(i);
+            if (r.optBoolean("archived") || r.optBoolean("completed")) continue;
             BackupCodec.validateStyle(r);
             String key = key(r);
             JSONObject group = groups.get(key);

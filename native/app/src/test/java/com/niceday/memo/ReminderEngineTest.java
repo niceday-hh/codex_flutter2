@@ -88,7 +88,9 @@ public class ReminderEngineTest {
         assertTrue(portable.getBoolean("archived"));
         engine.importBackup(engine.exportBackup()); JSONArray rows=new JSONObject(engine.state()).getJSONArray("reminders");
         assertEquals(2,rows.length()); assertTrue(rows.getJSONObject(1).getBoolean("archived")); assertFalse(rows.getJSONObject(1).getBoolean("enabled"));
-        engine.save(future(row()).toString()); assertFalse(row().getBoolean("archived")); assertFalse(row().getBoolean("completed")); assertTrue(row().getBoolean("enabled"));
+        engine.save(future(row()).toString());
+        rows=new JSONObject(engine.state()).getJSONArray("reminders"); JSONObject edited=rows.getJSONObject(1);
+        assertEquals(1,edited.getInt("id")); assertFalse(edited.getBoolean("archived")); assertFalse(edited.getBoolean("completed")); assertTrue(edited.getBoolean("enabled"));
     }
     @Test public void aishellUpgradeResetsOnlyVoiceAndPreservesExistingSchedule() throws Exception {
         JSONObject r=row().put("speechVoice","33").put("speechMode","on"); persist(r);

@@ -44,6 +44,16 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
                 engine.save(row.toString()); setResultCode(row.getInt("id"));
             } else if ("SPEECH_ACK".equals(intent.getAction())) {
                 engine.acknowledge(intent.getIntExtra("id", 0), intent.getLongExtra("token", 0));
+            } else if ("CLEANUP_DISMISS".equals(intent.getAction()) || "CLEANUP_ACTION".equals(intent.getAction())) {
+                int id=intent.getIntExtra("id",0);
+                NotificationManager nm=context.getSystemService(NotificationManager.class);
+                for (android.service.notification.StatusBarNotification posted:nm.getActiveNotifications()) {
+                    if (posted.getId()!=("CLEANUP_DISMISS".equals(intent.getAction())?id:-id)) continue;
+                    Notification n=posted.getNotification();
+                    if ("CLEANUP_DISMISS".equals(intent.getAction())) { nm.cancel(id); n.deleteIntent.send(); }
+                    else n.actions[intent.getIntExtra("index",0)].actionIntent.send();
+                    setResultCode(1);
+                }
             } else if ("KILL_PROCESS".equals(intent.getAction())) {
                 // Same-UID shell commands can still be denied by SELinux on emulator images.
                 // Finish the ordered broadcast, then send a genuine SIGKILL to this process.
@@ -74,6 +84,8 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
                         .put("text", String.valueOf(n.extras.getCharSequence(Notification.EXTRA_TEXT)))
                         .put("publicText", n.publicVersion == null ? "" : String.valueOf(n.publicVersion.extras.getCharSequence(Notification.EXTRA_TEXT)))
                         .put("visibility", n.visibility).put("fullscreen", n.fullScreenIntent != null)
+                        .put("actionCount", n.actions == null ? 0 : n.actions.length)
+                        .put("importance", c.getImportance()).put("sound", c.getSound() == null ? JSONObject.NULL : c.getSound().toString())
                         .put("vibrationEnabled", c.shouldVibrate())
                         .put("pattern", c.getVibrationPattern() == null ? JSONObject.NULL : new JSONArray(c.getVibrationPattern())));
                 }

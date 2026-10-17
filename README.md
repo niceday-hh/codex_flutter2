@@ -1,3 +1,9 @@
+## v0.7.0 · VITS-MNN 与任务收纳
+
+离线播报已替换为 [Voine/VITS-MNN](https://github.com/Voine/VITS-MNN)，804个音色条目，可搜索角色名和试听。主页自动收起已完成任务，任务收纳支持搜索、归档和编辑复用；左滑任务选择归档或删除，划掉提醒通知后显示静默整理选项。详见 [版本说明](docs/releases/v0.7.0.md)、[播报使用说明](docs/speech.md) 和 [模型来源及许可](docs/third-party-vits.md)。
+
+升级会将旧AISHELL-3音色重置为琪亚娜228，保留提醒时间、循环和播报开关。固定签名支持覆盖更新。当前常规CI不执行手机或模拟器重启测试。
+
 ## v0.5.0
 
 支持相对时间语音指令、秒级确认和保存、缺失时间校验、正文隔离、语音模型预热复用，以及可选的解锁亮屏提醒卡片。更新后请在“设置 → 亮屏弹窗增强”开启并授予系统悬浮窗权限。详见 [版本说明](docs/releases/v0.5.0.md)。
@@ -6,7 +12,7 @@
 
 面向荣耀100等 arm64 安卓手机的 Flutter 离线语音定时备忘录。四个 Tab：备忘录、日历、语音、设置。
 
-当前工程版本 v0.4.0。源码、GitHub Actions 构建与已发布 APK 位于本仓库；下载见 [Releases](https://github.com/niceday-hh/codex_flutter2/releases)。未经验证的 unsigned 构建不作为安装包发布。
+当前工程版本 v0.7.0。源码、GitHub Actions 构建与已发布 APK 位于本仓库；下载见 [Releases](https://github.com/niceday-hh/codex_flutter2/releases)。未经验证的 unsigned 构建不作为安装包发布。
 
 ## 本版修复与功能
 

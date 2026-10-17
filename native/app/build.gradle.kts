@@ -8,6 +8,9 @@ plugins {
 val keyProperties = Properties()
 val keyFile = rootProject.file("key.properties")
 if (keyFile.exists()) keyFile.inputStream().use { keyProperties.load(it) }
+val memoAbis = (project.findProperty("target-platform") as? String ?: "android-arm64").split(",").map {
+    when (it) { "android-x64" -> "x86_64"; "android-arm" -> "armeabi-v7a"; else -> "arm64-v8a" }
+}
 
 android {
     namespace = "com.niceday.memo"
@@ -38,6 +41,7 @@ android {
         }
     }
     buildTypes {
+        configureEach { ndk.abiFilters.clear(); ndk.abiFilters.addAll(memoAbis) }
         release {
             signingConfig = if (keyFile.exists()) signingConfigs.getByName("release") else null
             isMinifyEnabled = false
