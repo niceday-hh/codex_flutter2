@@ -24,6 +24,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        externalNativeBuild { cmake { cppFlags += "-std=c++17"; arguments += "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON" } }
     }
     if (keyFile.exists()) {
         signingConfigs {
@@ -43,11 +44,13 @@ android {
             isShrinkResources = false
         }
     }
-    androidResources { noCompress += "onnx" }
+    externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
+    androidResources { noCompress += listOf("onnx", "mnn") }
     testOptions { unitTests.isIncludeAndroidResources = true }
 }
 flutter { source = "../.." }
 dependencies {
+    implementation("com.github.houbb:pinyin:0.4.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")
 }

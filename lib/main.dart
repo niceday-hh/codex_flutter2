@@ -8,6 +8,7 @@ import 'reminder.dart';
 import 'voice_parser.dart';
 import 'speech.dart';
 import 'speech_options.dart';
+import 'task_library.dart';
 
 const purple = Color(0xFF7252F6);
 const ink = Color(0xFF25213A);
@@ -103,6 +104,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     final draft = existing == null ? store.draft() : Reminder.fromJson({...existing.toJson()});
     draft.enabled = true;
     draft.completed = false;
+    draft.archived = false;
     final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => ReminderEditor(reminder: draft, store: store)));
     if (saved == true) { await reload(); toast('提醒已保存'); }
   }
@@ -127,6 +129,27 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     if (yes == true) {
       try { await store.delete(r.id); await reload(); } catch (e) { toast(niceError(e)); }
     }
+  }
+  Future<void> finishTask(Reminder r) async {
+    final action = await showDialog<String>(context: context, builder: (c) => AlertDialog(
+      title: const Text('完成后如何保留？'),
+      content: Text(r.repeat == 'none'
+        ? '归档会停止提醒并保留内容，以后可重新编辑使用；删除会移除这条任务。'
+        : '归档或删除会停止本次及以后的循环提醒。归档仍保留内容，以后可重新启用。'),
+      actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
+        TextButton(onPressed: () => Navigator.pop(c, 'delete'), child: const Text('删除任务')),
+        FilledButton(onPressed: () => Navigator.pop(c, 'archive'), child: const Text('归档保留'))]));
+    if (action == null) return;
+    try {
+      if (action == 'archive') { await store.archive(r.id); toast('已归档，可在任务收纳中复用'); }
+      else { await store.delete(r.id); toast('任务已删除'); }
+      await reload();
+    } catch (e) { toast(niceError(e)); }
+  }
+  Future<void> taskLibrary({bool archived = false}) async {
+    await Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => TaskLibraryPage(
+      store: store, initialArchived: archived, card: reminderCard)));
+    await reload();
   }
   @override Widget build(BuildContext context) => Scaffold(
     body: SafeArea(child: loading ? const Center(child: CircularProgressIndicator())
@@ -154,7 +177,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       ])), if (trailing != null) trailing,
     ]));
   Widget homePage() {
-    final list = List<Reminder>.of(store.reminders)..sort((a, b) {
+    final list = store.reminders.where((r) => !r.archived).toList()..sort((a, b) {
       if (a.unread != b.unread) return a.unread ? -1 : 1;
       return a.displayDate.compareTo(b.displayDate);
     });
@@ -162,10 +185,11 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     final complete = list.where((r) => r.completed).toList();
     final paused = list.where((r) => !r.enabled && !r.completed && !r.unread).toList();
     final now = DateTime.now();
-    return RefreshIndicator(onRefresh: reload, child: ListView(
-      padding: const EdgeInsets.only(bottom: 90), physics: const AlwaysScrollableScrollPhysics(), children: [
+    final archivedCount = store.reminders.where((r) => r.archived).length;
+    return RefreshIndicator(onRefresh: reload, child: CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(), slivers: [SliverList.list(children: [
       header('备忘录', '把重要的事，交给提醒', trailing: IconButton(
-        icon: const Icon(Icons.tune_rounded), onPressed: () => setState(() => tab = 3))),
+        icon: const Icon(Icons.inventory_2_outlined), tooltip: '任务收纳', onPressed: taskLibrary)),
       Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: Text(
         '${now.month}月${now.day}日  周${weekdays[now.weekday - 1]}', style: const TextStyle(fontWeight: FontWeight.w600))),
       const SizedBox(height: 16),
@@ -185,9 +209,19 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       if (store.status['notifications'] != true || store.status['exact'] != true) permissionBanner(),
       section('待办提醒', '${active.length} 条'),
       if (active.isEmpty) emptyState('留一点空间，给重要的事', '点击右下角 +，或用语音创建第一条提醒'),
-      ...active.map(reminderCard),
-      if (complete.isNotEmpty) ...[section('已完成', '${complete.length} 条'), ...complete.map(reminderCard)],
-      if (paused.isNotEmpty) ...[section('未启用', '${paused.length} 条'), ...paused.map(reminderCard)],
+      ]),
+      SliverList.builder(itemCount: active.length, itemBuilder: (_, i) => reminderCard(active[i])),
+      SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 0), child: Surface(child: Column(children: [
+        ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.task_alt, color: purple),
+          title: Text('已完成 · ${complete.length} 条'), subtitle: const Text('自动收起，按日期整理；点击搜索和复用'),
+          trailing: const Icon(Icons.chevron_right), onTap: taskLibrary),
+        ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.inventory_2_outlined, color: purple),
+          title: Text('已归档 · $archivedCount 条'), subtitle: const Text('保留内容，编辑后可再次启用'),
+          trailing: const Icon(Icons.chevron_right), onTap: () => taskLibrary(archived: true)),
+      ])))),
+      if (paused.isNotEmpty) SliverToBoxAdapter(child: section('未启用', '${paused.length} 条')),
+      SliverList.builder(itemCount: paused.length, itemBuilder: (_, i) => reminderCard(paused[i])),
+      const SliverToBoxAdapter(child: SizedBox(height: 90)),
     ]));
   }
   Widget section(String title, String subtitle) => Padding(padding: const EdgeInsets.fromLTRB(24, 26, 24, 12),
@@ -211,18 +245,22 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
             Tag(r.completed ? '已完成' : !r.enabled ? '未启用' : r.unread ? '未读 ${r.attempts}/${r.totalCount}' : r.repeatLabel),
             Text(dateLabel(r.displayDate), style: const TextStyle(fontSize: 11, color: muted)),
           ]),
-        ])), PopupMenuButton<String>(tooltip: '更多操作', onSelected: (v) => v == 'edit' ? edit(r) : remove(r),
-          itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('编辑')), PopupMenuItem(value: 'delete', child: Text('删除'))]),
+        ])), PopupMenuButton<String>(tooltip: '更多操作', onSelected: (v) async {
+          if (v == 'edit') { await edit(r); }
+          else if (v == 'archive') { await finishTask(r); }
+          else { await remove(r); }
+        }, itemBuilder: (_) => [PopupMenuItem(value: 'edit', child: Text(r.archived || r.completed ? '编辑并复用' : '编辑')),
+          if (!r.archived) const PopupMenuItem(value: 'archive', child: Text('完成并整理')),
+          const PopupMenuItem(value: 'delete', child: Text('删除'))]),
       ]))));
-    if (!r.unread) return card;
-    return Dismissible(key: ValueKey('unread-${r.id}-${r.activeOccurrence}-${r.attempts}'),
+    if (r.archived) return card;
+    return Dismissible(key: ValueKey('task-${r.id}-${r.activeOccurrence}-${r.attempts}'), direction: DismissDirection.endToStart,
       background: Container(color: const Color(0xFFECE5FF), alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.symmetric(horizontal: 30), child: const Text('确认已读', style: TextStyle(color: purple))),
+        padding: const EdgeInsets.symmetric(horizontal: 30), child: const Text('完成并整理', style: TextStyle(color: purple))),
       secondaryBackground: Container(color: const Color(0xFFECE5FF), alignment: Alignment.centerRight,
-        padding: const EdgeInsets.symmetric(horizontal: 30), child: const Text('确认已读', style: TextStyle(color: purple))),
+        padding: const EdgeInsets.symmetric(horizontal: 30), child: const Text('归档 / 删除', style: TextStyle(color: purple))),
       confirmDismiss: (_) async {
-        try { await store.ack(r); await reload(); toast('已确认，剩余重提醒已取消'); }
-        catch (e) { toast(niceError(e)); }
+        await finishTask(r);
         return false;
       }, child: card);
   }
@@ -230,7 +268,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     final first = DateTime(calendarMonth.year, calendarMonth.month);
     final count = DateTime(first.year, first.month + 1, 0).day;
     final offset = first.weekday - 1;
-    final list = store.reminders.where((r) => occursOn(r, selectedDate)).toList()..sort((a, b) => a.time.compareTo(b.time));
+    final list = store.reminders.where((r) => !r.archived && occursOn(r, selectedDate)).toList()..sort((a, b) => a.time.compareTo(b.time));
     return ListView(padding: const EdgeInsets.only(bottom: 90), children: [
       header('提醒日历', '每一天，都安排得刚刚好'),
       Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Surface(child: Column(children: [
@@ -247,7 +285,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
             if (d < 1 || d > count) return const SizedBox.shrink();
             final date = DateTime(first.year, first.month, d);
             final selected = sameDay(date, selectedDate);
-            final has = store.reminders.any((r) => occursOn(r, date));
+            final has = store.reminders.any((r) => !r.archived && occursOn(r, date));
             return InkWell(onTap: () => setState(() => selectedDate = date), borderRadius: BorderRadius.circular(16),
               child: Container(decoration: BoxDecoration(color: selected ? purple : Colors.transparent, borderRadius: BorderRadius.circular(16)),
                 child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text('$d', style: TextStyle(color: selected ? Colors.white : ink,
@@ -268,8 +306,18 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         child: const Icon(Icons.notifications_rounded, color: Colors.white, size: 32)),
       const SizedBox(width: 16), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('定时备忘录', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-        Text('v0.6.0 · 本地保存 · 离线语音', style: TextStyle(color: muted, fontSize: 12))])),
+        Text('v0.7.0 · 本地保存 · 离线语音', style: TextStyle(color: muted, fontSize: 12))])),
     ]))),
+    section('任务整理', '完成记录自动收起，保留以后使用'),
+    settingsGroup([
+      ListTile(title: const Text('任务收纳'), subtitle: const Text('搜索已完成和归档任务，编辑后重新启用'),
+        leading: const Icon(Icons.inventory_2_outlined, color: purple), trailing: const Icon(Icons.chevron_right), onTap: taskLibrary),
+      SwitchListTile(title: const Text('划掉通知后询问整理方式'),
+        subtitle: const Text('先停止本轮提醒，再显示静默的归档／删除选项；不选择则保留记录和原循环'),
+        value: store.status['cleanupPrompts'] as bool? ?? true, onChanged: (v) async {
+          try { await native.invokeMethod('cleanupPrompts', v); await reload(); } catch (e) { toast(niceError(e)); }
+        }),
+    ]),
     section('后台可靠性', '增强最近任务关闭后的提醒维护'),
     settingsGroup([
       SwitchListTile(title: const Text('可靠提醒模式'),
@@ -389,7 +437,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       const ListTile(leading: Icon(Icons.mic_none_rounded, color: purple), title: Text('离线语音识别'),
         subtitle: Text('中文 Paraformer int8 · 录音不上传'), trailing: Tag('已内置')),
     ]),
-    section('离线语音播报', 'AISHELL-3 VITS · 174个音色'), settingsGroup([
+    section('离线语音播报', 'VITS-MNN · 804个音色条目'), settingsGroup([
       defaultSpeechOptions(),
       ValueListenableBuilder<String>(valueListenable: speech.status, builder: (_, value, child) => ListTile(
         leading: const Icon(Icons.graphic_eq, color: purple), title: const Text('语音准备状态'), subtitle: Text(value))),

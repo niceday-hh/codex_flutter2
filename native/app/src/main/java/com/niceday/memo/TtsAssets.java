@@ -17,7 +17,7 @@ final class TtsAssets {
             while ((n = input.read(buffer)) != -1) content.write(buffer, 0, n);
             manifest = new JSONObject(content.toString("UTF-8"));
         }
-        File dir = new File(context.getFilesDir(), "tts-aishell3-v1");
+        File dir = new File(context.getFilesDir(), "tts-voine-mnn-v1");
         if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("无法建立播报模型目录");
         JSONObject files = manifest.getJSONObject("files");
         for (java.util.Iterator<String> keys = files.keys(); keys.hasNext();) {
@@ -43,6 +43,10 @@ final class TtsAssets {
                 java.nio.file.Files.write(marker.toPath(), hash.getBytes(StandardCharsets.UTF_8));
             } finally { temporary.delete(); }
         }
+        File legacy = new File(context.getFilesDir(), "tts-aishell3-v1");
+        File[] obsolete = legacy.listFiles();
+        if (obsolete != null) for (File file : obsolete) if (file.isFile()) file.delete();
+        legacy.delete();
         return dir.getPath();
     }
 }

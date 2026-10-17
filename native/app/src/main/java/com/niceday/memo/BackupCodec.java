@@ -31,6 +31,7 @@ public final class BackupCodec {
         r.put("intervalMinutes", interval).put("totalCount", total);
         validateStyle(r);
         SpeechSettings.validate(r, false);
+        if(r.has("archived") && !(r.get("archived") instanceof Boolean)) throw new IllegalArgumentException("归档状态无效");
     }
     public static void validateStyle(JSONObject r) throws JSONException {
         if (!Arrays.asList("system", "off", "once", "twice", "three", "strong").contains(r.optString("vibration", "three")))
@@ -53,7 +54,12 @@ public final class BackupCodec {
             throw new IllegalArgumentException("不是支持的备忘录备份文件");
         JSONArray rows = root.getJSONArray("reminders");
         if (rows.length() > 1000) throw new IllegalArgumentException("一次最多导入1000条提醒");
-        for (int i = 0; i < rows.length(); i++) validateReminder(rows.getJSONObject(i));
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject row=rows.getJSONObject(i);
+            if (!"voine-vits-mnn-v1".equals(row.optString("speechModel")) && !row.optString("speechVoice").isEmpty())
+                row.put("speechVoice",SpeechSettings.VOICE);
+            validateReminder(row);
+        }
         return rows;
     }
 }

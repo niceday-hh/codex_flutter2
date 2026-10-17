@@ -17,6 +17,8 @@ public final class ReminderEngine {
     public static final String BASE = "com.niceday.memo.BASE";
     public static final String RETRY = "com.niceday.memo.RETRY";
     public static final String ACK = "com.niceday.memo.ACK";
+    public static final String ARCHIVE = "com.niceday.memo.ARCHIVE";
+    public static final String DELETE = "com.niceday.memo.DELETE";
     private final Context context;
     private final SharedPreferences prefs;
     private final SharedPreferences runtime;
@@ -33,6 +35,22 @@ public final class ReminderEngine {
         alarms = (AlarmManager) this.context.getSystemService(Context.ALARM_SERVICE);
         notifications = (NotificationManager) this.context.getSystemService(Context.NOTIFICATION_SERVICE);
         styles = new NotificationStyles(this.context, notifications, runtime);
+        if (unlocked) migrateSpeechModel();
+    }
+    private void migrateSpeechModel() {
+        if ("voine-vits-mnn-v1".equals(prefs.getString("speechModel", ""))) return;
+        try {
+            JSONArray rows = new JSONArray(prefs.getString("reminders", "[]"));
+            for (int i=0;i<rows.length();i++) {
+                JSONObject r=rows.getJSONObject(i);
+                if (!r.optString("speechVoice").isEmpty()) r.put("speechVoice", SpeechSettings.VOICE);
+                r.put("speechModel", "voine-vits-mnn-v1");
+            }
+            JSONObject defaults=new JSONObject(prefs.getString("defaults","{}"));
+            defaults.put("speechVoice",SpeechSettings.VOICE).put("speechModel","voine-vits-mnn-v1");
+            prefs.edit().putString("reminders",rows.toString()).putString("defaults",defaults.toString())
+                .putString("speechModel","voine-vits-mnn-v1").commit();
+        } catch(JSONException e) { error("音色迁移未完成，请导出备份后重试"); }
     }
     private static final String[] RUNTIME_FIELDS = {"nextTrigger", "activeOccurrence", "attempts", "retryAt",
         "acknowledged", "completed", "enabled", "lastAck", "lastFired", "metaRevision"};
@@ -40,9 +58,11 @@ public final class ReminderEngine {
         JSONArray rows = new JSONArray(prefs.getString("reminders", "[]"));
         if (!unlocked) return rows;
         JSONArray mirror = new JSONArray(runtime.getString("reminders", "[]"));
+        Map<Integer,JSONObject> mirrors = new HashMap<>();
+        for (int i=0;i<mirror.length();i++) mirrors.put(mirror.getJSONObject(i).getInt("id"),mirror.getJSONObject(i));
         for (int i = 0; i < rows.length(); i++) {
             JSONObject r = rows.getJSONObject(i);
-            JSONObject m = find(mirror, r.getInt("id"));
+            JSONObject m = mirrors.get(r.getInt("id"));
             if (m != null && m.optLong("version") == r.optLong("version") && m.optLong("metaRevision") > r.optLong("metaRevision")) {
                 for (String name : RUNTIME_FIELDS) if (m.has(name)) r.put(name, m.get(name));
             }
@@ -146,7 +166,7 @@ public final class ReminderEngine {
         JSONObject speechDefaults = SpeechSettings.defaults(context);
         for (int i = 0; i < rows.length(); i++) {
             JSONObject row = rows.getJSONObject(i);
-            row.put("speechState", SpeechCache.state(context, row, speechDefaults));
+            row.put("speechState", row.optBoolean("archived") || row.optBoolean("completed") ? "off" : SpeechCache.state(context, row, speechDefaults));
         }
         result.put("reminders", rows);
         result.put("defaults", defaults);
@@ -160,7 +180,8 @@ public final class ReminderEngine {
         status.put("lastReceived", runtime.getLong("lastReceived", 0));
         status.put("lastRestored", runtime.getLong("lastRestored", 0));
         status.put("package", context.getPackageName());
-        status.put("version", "0.6.0");
+        status.put("version", "0.7.0");
+        status.put("cleanupPrompts", prefs.getBoolean("cleanupPrompts",true));
         status.put("speech", SpeechCache.status(context));
         status.put("popupEnabled", popupEnabled());
         status.put("popupPermission", Settings.canDrawOverlays(context));
@@ -217,6 +238,7 @@ public final class ReminderEngine {
         r.put("retryAt", 0);
         r.put("acknowledged", false);
         r.put("completed", false);
+        r.put("archived", false).put("archivedAt",0).remove("cleanupPending");
         JSONArray replacement = new JSONArray();
         for (int i = 0; i < rows.length(); i++) {
             JSONObject old = rows.getJSONObject(i);
@@ -230,6 +252,7 @@ public final class ReminderEngine {
         cancel(id, BASE);
         cancel(id, RETRY);
         notifications.cancel(id);
+        notifications.cancel(-id);
         scheduleBase(r);
         syncGuardian();
     }
@@ -241,12 +264,37 @@ public final class ReminderEngine {
         }
         write(replacement);
         SpeechPlaybackService.cancel(id);
-        cancel(id, BASE); cancel(id, RETRY); notifications.cancel(id);
+        cancel(id, BASE); cancel(id, RETRY); notifications.cancel(id); notifications.cancel(-id);
         SpeechCache.prune(context);
         syncGuardian();
     }
     public void acknowledge(int id, long token) throws JSONException {
         acknowledge(id, token, "应用内确认");
+    }
+    public void archive(int id) throws JSONException {
+        JSONArray rows=read(); JSONObject r=find(rows,id); if(r==null) return;
+        r.put("archived",true).put("archivedAt",System.currentTimeMillis()).put("completed",true).put("enabled",false)
+            .put("acknowledged",true).put("retryAt",0).put("nextTrigger",0).put("lastAck",System.currentTimeMillis())
+            .put("version",Math.max(System.currentTimeMillis(),r.optLong("version")+1));
+        write(rows); cancel(id,BASE); cancel(id,RETRY); notifications.cancel(id); notifications.cancel(-id);
+        SpeechPlaybackService.cancel(id); SpeechCache.prune(context); syncGuardian();
+    }
+    public void cleanupPrompts(boolean enabled) { prefs.edit().putBoolean("cleanupPrompts",enabled).commit(); }
+    public void dismissed(int id,long token) throws JSONException {
+        JSONObject before=find(read(),id);
+        if(before==null || token<=0 || before.optLong("activeOccurrence")!=token || before.optBoolean("acknowledged")) return;
+        acknowledge(id,token,"通知被划掉或系统移除");
+        if(!unlocked || !prefs.getBoolean("cleanupPrompts",true)) return;
+        JSONObject r=find(read(),id); if(r!=null) TaskCleanupNotification.show(context,r);
+    }
+    public void cleanupAction(Intent intent) throws JSONException {
+        // A stale prompt must never delete or archive a newly edited/retriggered task.
+        if(!unlocked || context.getSystemService(KeyguardManager.class).isKeyguardLocked()) return;
+        int id=intent.getIntExtra("id",0); JSONObject r=find(read(),id);
+        if(r==null || !r.optBoolean("acknowledged") || r.optLong("version")!=intent.getLongExtra("version",-1) ||
+            r.optLong("activeOccurrence")!=intent.getLongExtra("token",0)) return;
+        if(ARCHIVE.equals(intent.getAction())) archive(id);
+        else if(DELETE.equals(intent.getAction())) delete(id);
     }
     public void acknowledge(int id, long token, String source) throws JSONException {
         JSONArray rows = read();
@@ -332,6 +380,7 @@ public final class ReminderEngine {
         } else {
             if (token == 0 || r.optLong("nextTrigger") != token || now + 1000 < token) return;
             cancel(id, RETRY);
+            notifications.cancel(-id);
             r.put("activeOccurrence", token);
             r.put("attempts", 0);
             r.put("acknowledged", false);
@@ -429,7 +478,7 @@ public final class ReminderEngine {
             .setSmallIcon(com.niceday.memo.R.drawable.ic_notification)
             .setColor(0xFF7252F6).setContentTitle("定时备忘录")
             .setContentText(bodyAvailable ? r.getString("text") : "有一条待办提醒 · 解锁后查看")
-            .setSubText("第" + r.optInt("attempts") + "/" + r.optInt("totalCount") + "次 · 划掉即确认")
+            .setSubText("第" + r.optInt("attempts") + "/" + r.optInt("totalCount") + "次 · 划掉后停止本轮提醒")
             .setVisibility(NotificationStyles.visibility(r)).setPublicVersion(publicVersion)
             .setPriority(NotificationStyles.importance(r) >= NotificationManager.IMPORTANCE_HIGH ? Notification.PRIORITY_MAX : Notification.PRIORITY_DEFAULT)
             .setCategory(Notification.CATEGORY_ALARM).setContentIntent(content)
@@ -486,7 +535,7 @@ public final class ReminderEngine {
         for (int i = 0; i < imported.length(); i++) {
             JSONObject r = imported.getJSONObject(i);
             long n = next(r, System.currentTimeMillis());
-            boolean enabled = r.optBoolean("enabled", true) && n > 0 && !r.optBoolean("completed");
+            boolean enabled = r.optBoolean("enabled", true) && n > 0 && !r.optBoolean("completed") && !r.optBoolean("archived");
             r.put("id", id++).put("version", generation++).put("enabled", enabled)
                 .put("nextTrigger", enabled ? n : 0).put("activeOccurrence", 0).put("attempts", 0)
                 .put("retryAt", 0).put("acknowledged", false)

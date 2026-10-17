@@ -22,10 +22,10 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(393, 1000));
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: SpeechOptions(reminder: r, defaults: const {}, onChanged: () async {}))));
     await tester.tap(find.text('播报音色')); await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '173'); await tester.pumpAndSettle();
-    expect(find.text('音色 173'), findsOneWidget);
-    await tester.tap(find.text('音色 173')); await tester.pumpAndSettle();
-    expect(r.speechVoice, '173');
+    await tester.enterText(find.byType(TextField), '803'); await tester.pumpAndSettle();
+    expect(find.text(speechVoiceLabel('803')), findsOneWidget);
+    await tester.tap(find.text(speechVoiceLabel('803'))); await tester.pumpAndSettle();
+    expect(r.speechVoice, '803');
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
 }

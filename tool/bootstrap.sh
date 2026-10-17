@@ -13,4 +13,5 @@ fi
 cp -R native/. android/
 mkdir -p assets/models assets/tts
 touch assets/models/.keep
+python3 tool/fetch_mnn.py
 flutter pub get

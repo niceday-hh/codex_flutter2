@@ -16,3 +16,5 @@ assets/tts/*
 
 __pycache__/
 *.pyc
+vendor/
+.cxx/

@@ -20,8 +20,9 @@ with zipfile.ZipFile(apk) as z:
     for resource, entry in manifest['files'].items():
         payload = z.read('assets/flutter_assets/assets/tts/' + resource)
         assert len(payload) == entry['bytes'] and hashlib.sha256(payload).hexdigest() == entry['sha256']
-    assert manifest['speaker_count'] == 174 and manifest['sample_rate'] == 8000
-    assert not any(p.endswith('/rule.far') for p in z.namelist()), 'Large FAR archive must not be embedded'
+    assert manifest['speaker_count'] == 804 and manifest['sample_rate'] == 22050
+    assert 'lib/arm64-v8a/libmemo_vits.so' in z.namelist(), 'Missing MNN JNI runtime'
+    assert not any(p.startswith('assets/flutter_assets/assets/tts/') and p.endswith(('.onnx', '.fst', '.far')) for p in z.namelist()), 'AISHELL assets must be removed'
 expected = Path('docs/signing-certificate.sha256').read_text().strip().lower()
 if kind == 'release':
     sdk = Path(os.environ.get('ANDROID_SDK_ROOT') or os.environ['ANDROID_HOME'])
@@ -39,7 +40,7 @@ apk.rename(renamed)
     'source_commit': os.environ['GITHUB_SHA'], 'flutter': '3.35.7', 'abi': 'arm64-v8a',
     'signing': kind, 'certificate_sha256': expected if kind == 'release' else None,
     'model': 'paraformer-zh-int8-2025-10-07',
-    'tts_model': 'vits-icefall-zh-aishell3', 'tts_speakers': 174, 'tts_sample_rate': 8000,
+    'tts_model': 'voine-vits-uma-genshin-honkai-mnn', 'tts_speakers': 804, 'tts_sample_rate': 22050,
     'reboot_tests_run': False,
     'tests': ['flutter analyze', 'flutter test', 'JVM schedule checks', 'native notification/backup/boot tests'],
     'honor_100_tested': False}, ensure_ascii=False, indent=2))

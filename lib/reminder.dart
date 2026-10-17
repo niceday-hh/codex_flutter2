@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'speech.dart';
 
 const native = MethodChannel('memo/native');
@@ -19,7 +20,8 @@ class Reminder {
   bool speechHideLocked, speechRepeat;
   int intervalMinutes, totalCount;
   int attempts, activeOccurrence, nextTrigger;
-  bool acknowledged, completed;
+  bool acknowledged, completed, archived;
+  int archivedAt, lastAck;
   // Draft-only validation flags; never written to a backup or native schedule.
   bool dateConfirmed = true, timeConfirmed = true;
 
@@ -31,7 +33,8 @@ class Reminder {
     this.speechMode = 'off', this.speechVoice = '', this.speechRate = 0,
     this.speechHideLocked = true, this.speechRepeat = true, this.speechState = 'off',
     this.attempts = 0, this.activeOccurrence = 0, this.nextTrigger = 0,
-    this.acknowledged = false, this.completed = false})
+    this.acknowledged = false, this.completed = false, this.archived = false,
+    this.archivedAt = 0, this.lastAck = 0})
       : date = date ?? DateTime.now().add(const Duration(hours: 1)),
         days = days ?? [];
 
@@ -61,6 +64,8 @@ class Reminder {
     nextTrigger: j['nextTrigger'] as int? ?? 0,
     acknowledged: j['acknowledged'] as bool? ?? false,
     completed: j['completed'] as bool? ?? false,
+    archived: j['archived'] as bool? ?? false,
+    archivedAt: j['archivedAt'] as int? ?? 0, lastAck: j['lastAck'] as int? ?? 0,
   );
   Map<String, dynamic> toJson() => {
     'id': id, 'text': text, 'year': date.year, 'month': date.month,
@@ -73,6 +78,8 @@ class Reminder {
     'presentation': presentation, 'lockscreen': lockscreen,
     'speechMode': speechMode, 'speechVoice': speechVoice, 'speechRate': speechRate,
     'speechHideLocked': speechHideLocked, 'speechRepeat': speechRepeat,
+    'speechModel': 'voine-vits-mnn-v1',
+    'archived': archived, 'archivedAt': archivedAt,
   };
   Map<String, dynamic> get notificationConfig => {
     'sound': sound, 'vibration': vibration, 'ringtone': ringtone,
@@ -92,7 +99,7 @@ class Reminder {
     unread ? activeOccurrence : (nextTrigger > 0 ? nextTrigger : date.millisecondsSinceEpoch));
 }
 
-class MemoStore {
+class MemoStore extends ChangeNotifier {
   List<Reminder> reminders = [];
   Map<String, dynamic> defaults = {};
   Map<String, dynamic> status = {};
@@ -103,6 +110,7 @@ class MemoStore {
       .map((v) => Reminder.fromJson(Map<String, dynamic>.from(v as Map))).toList();
     defaults = Map<String, dynamic>.from(j['defaults'] as Map? ?? {});
     status = Map<String, dynamic>.from(j['status'] as Map? ?? {});
+    notifyListeners();
   }
   Reminder draft() => Reminder(
     speechMode: 'inherit',
@@ -128,6 +136,10 @@ class MemoStore {
   }
   Future<void> delete(int id) async {
     await native.invokeMethod('delete', id);
+    await load();
+  }
+  Future<void> archive(int id) async {
+    await native.invokeMethod('archive', id);
     await load();
   }
   Future<void> saveDefaults() async {

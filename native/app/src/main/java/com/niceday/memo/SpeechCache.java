@@ -8,8 +8,9 @@ import java.util.*;
 /** Private durable audio. Flutter synthesizes ahead of time; alarm delivery only reads WAVs. */
 final class SpeechCache {
     static final long LIMIT = 128L * 1024 * 1024;
-    private static final Set<String> pending = new HashSet<>();
+    private static final Set<String> pending = Collections.synchronizedSet(new HashSet<>());
     private static final Map<String, String> errors = new HashMap<>();
+    static boolean pending(String key) { return key != null && key.matches("[0-9a-f]{64}\\.wav") && pending.contains(key); }
     static File directory(Context c) { return new File(c.getFilesDir(), "speech-audio"); }
     static File file(Context c, String text, JSONObject row, JSONObject defaults) {
         return new File(directory(c), SpeechSettings.cacheKey(text, SpeechSettings.voice(row, defaults), SpeechSettings.rate(row, defaults)) + ".wav");
@@ -20,7 +21,7 @@ final class SpeechCache {
             if (input.readInt() != 0x52494646) return false;
             if (Integer.reverseBytes(input.readInt()) != file.length() - 8 || input.readInt() != 0x57415645 || input.readInt() != 0x666d7420) return false;
             if (Integer.reverseBytes(input.readInt()) != 16 || Short.reverseBytes(input.readShort()) != 1 || Short.reverseBytes(input.readShort()) != 1) return false;
-            if (Integer.reverseBytes(input.readInt()) != 8000) return false;
+            if (Integer.reverseBytes(input.readInt()) != 22050 || Integer.reverseBytes(input.readInt()) != 44100) return false;
             input.seek(32);
             if (Short.reverseBytes(input.readShort()) != 2 || Short.reverseBytes(input.readShort()) != 16 || input.readInt() != 0x64617461) return false;
             return Integer.reverseBytes(input.readInt()) == file.length() - 44;
@@ -103,8 +104,8 @@ final class SpeechCache {
         } catch (JSONException ignored) {}
     }
     static JSONObject status(Context c) throws JSONException {
-        return new JSONObject().put("engine", "AISHELL-3 VITS · 174音色 · 8kHz")
-            .put("speakerCount", 174).put("pending", pending.size()).put("cacheBytes", bytes(c))
+        return new JSONObject().put("engine", "VITS-MNN · 804个音色条目 · 22.05kHz")
+            .put("speakerCount", 804).put("pending", pending.size()).put("cacheBytes", bytes(c))
             .put("error", c.getSystemService(android.os.UserManager.class).isUserUnlocked() ? c.getSharedPreferences("memo", 0).getString("speechLastError", "") : "");
     }
 }

@@ -1,0 +1,30 @@
+{
+  "upstream_commit": "6379f381b85f544a5debca3804bf300225c6729e",
+  "mnn_commit": "efdea1d0e24ed29b4650d7bba9942236cfc7bc3e",
+  "files": {
+    "config.json": {
+      "sha256": "884b1266e75f4f309c4e3fe8e0bc2e7f6147b8002733bef03be8abb52a14d663",
+      "bytes": 22321
+    },
+    "vits_uma_genshin_honkai_dec_fp16.mnn": {
+      "sha256": "5d285a219f37719b360b861c3583ab65e61a79f6a08c096855b721bae30137c7",
+      "bytes": 28977448
+    },
+    "vits_uma_genshin_honkai_dp_fp16.mnn": {
+      "sha256": "3a75515a004093f4f862b9d809182490a3372a96a6ce3bc4b9e4b9a17a3a85c1",
+      "bytes": 1546172
+    },
+    "vits_uma_genshin_honkai_emb_fp16.mnn": {
+      "sha256": "0cc4e535a3863d20148e69f3018f3fb20a11f9850267f0a26e7ab19cb86f5e76",
+      "bytes": 412588
+    },
+    "vits_uma_genshin_honkai_enc_fp16.mnn": {
+      "sha256": "04cecef7847fd6efca36c0d4b9eda80374879d35c42c479543269fb8984822e6",
+      "bytes": 12934052
+    },
+    "vits_uma_genshin_honkai_flow_fp16.mnn": {
+      "sha256": "f39463464726abe23e48de923cc907f6e0545f7ea07ca79f7e04f440fd286e92",
+      "bytes": 17443644
+    }
+  }
+}

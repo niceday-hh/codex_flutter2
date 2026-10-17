@@ -67,7 +67,7 @@ result = {'sdk': int(sdk), 'reboot_tests_run': False, 'physical_audio_verified':
 path.write_text(json.dumps(result, indent=2))
 try:
     id, token = prepare(True)
-    assert state()['status']['speech']['speakerCount'] == 174
+    assert state()['status']['speech']['speakerCount'] == 804
     result['on_device_synthesis'] = True
     killed(); shell('input', 'keyevent', 'KEYCODE_SLEEP')
     first = wait(lambda: next((e for e in events() if e['type'] == 'speech_played' and e['id'] == id), None), 90, 'Locked generic speech did not start')
@@ -93,7 +93,7 @@ try:
     row = current(id)
     assert row['acknowledged'] and row['retryAt'] == 0
     result['unlocked_body_and_manual_stop'] = True
-    print('PASS: on-device AISHELL synthesis, process-death cached playback, lock privacy, retry and manual stop', flush=True)
+    print('PASS: on-device VITS-MNN synthesis, process-death cached playback, lock privacy, retry and manual stop', flush=True)
 finally:
     shell('settings', 'put', 'system', 'screen_off_timeout', original_timeout, check=False)
     path.write_text(json.dumps(result, ensure_ascii=False, indent=2))

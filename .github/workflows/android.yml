@@ -1,7 +1,7 @@
 name: Android build and release
 on:
   push:
-    branches: [main, speech-aishell3]
+    branches: [main, vits-archive]
   workflow_dispatch:
 permissions:
   contents: write
@@ -44,7 +44,7 @@ jobs:
           key: paraformer-zh-int8-a071ee5419e14adb
       - name: Prepare embedded offline model
         run: python3 tool/fetch_model.py
-      - name: Prepare AISHELL-3 offline speech model
+      - name: Prepare VITS-MNN offline speech model
         run: python3 tool/fetch_tts.py
       - name: Prepare fixed release signing
         id: sign

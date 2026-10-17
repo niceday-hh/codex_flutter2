@@ -67,7 +67,8 @@ void main() {
       });
     await tester.binding.setSurfaceSize(const Size(393, 852));
     await tester.pumpWidget(const MemoApp()); await tester.pump(const Duration(milliseconds: 400));
-    await tester.scrollUntilVisible(find.text('已完成任务重新启用'), 250, scrollable: find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(find.text('已完成 · 1 条'), 250, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('已完成 · 1 条')); await tester.pumpAndSettle();
     await tester.tap(find.text('已完成任务重新启用')); await tester.pumpAndSettle();
     await tester.tap(find.text('编辑提醒')); await tester.pumpAndSettle();
     await tester.tap(find.text('保存')); await tester.pumpAndSettle();

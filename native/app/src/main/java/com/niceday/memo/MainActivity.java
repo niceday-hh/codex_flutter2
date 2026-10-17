@@ -59,6 +59,7 @@ public final class MainActivity extends FlutterActivity {
     private String exportDocument;
     private final java.util.concurrent.ExecutorService documents = java.util.concurrent.Executors.newSingleThreadExecutor();
     private MediaPlayer speechPreview;
+    private final VitsSynthesizer synthesizer = new VitsSynthesizer();
     private AudioRecord recorder;
     private Thread audioThread;
     private volatile boolean recording;
@@ -89,9 +90,17 @@ public final class MainActivity extends FlutterActivity {
                         catch (Exception e) { runOnUiThread(() -> result.error("ASR", "模型准备失败：" + e.getMessage(), null)); }
                     });
                     case "prepareTts" -> documents.execute(() -> {
-                        try { String path = TtsAssets.prepare(getApplicationContext()); runOnUiThread(() -> result.success(path)); }
-                        catch (Exception e) { runOnUiThread(() -> result.error("TTS", "播报模型准备失败", null)); }
+                        try { String path = TtsAssets.prepare(getApplicationContext()); synthesizer.open(this, path); runOnUiThread(() -> result.success(path)); }
+                        catch (Throwable e) { runOnUiThread(() -> result.error("TTS", "播报模型准备失败", null)); }
                     });
+                    case "generateSpeech" -> {
+                        JSONObject job = new JSONObject((String)call.arguments);
+                        documents.execute(() -> {
+                            try { synthesizer.generate(this,job); runOnUiThread(() -> result.success(null)); }
+                            catch(Throwable e) { runOnUiThread(() -> result.error("TTS", "此段语音生成失败", null)); }
+                        });
+                    }
+                    case "closeTts" -> documents.execute(() -> { synthesizer.close(); runOnUiThread(() -> result.success(null)); });
                     case "speechJobs" -> result.success(SpeechCache.jobs(this, Boolean.TRUE.equals(call.arguments)).toString());
                     case "speechFinished" -> {
                         String key = call.argument("key"), failure = call.argument("error");
@@ -121,6 +130,8 @@ public final class MainActivity extends FlutterActivity {
                     case "save" -> { store.save((String) call.arguments); result.success(null); }
                     case "saveDefaults" -> { store.defaults((String) call.arguments); result.success(null); }
                     case "delete" -> { store.delete((Integer) call.arguments); result.success(null); }
+                    case "archive" -> { store.archive((Integer) call.arguments); result.success(null); }
+                    case "cleanupPrompts" -> { store.cleanupPrompts((Boolean)call.arguments); result.success(null); }
                     case "ack" -> {
                         Number id = call.argument("id"), token = call.argument("token");
                         store.acknowledge(id.intValue(), token.longValue()); result.success(null);
@@ -343,7 +354,7 @@ public final class MainActivity extends FlutterActivity {
     @Override protected void onDestroy() {
         if (memoPreferences != null && memoListener != null) memoPreferences.unregisterOnSharedPreferenceChangeListener(memoListener);
         super.onDestroy();
-        documents.shutdown();
+        documents.execute(synthesizer::close); documents.shutdown();
     }
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent); setIntent(intent);

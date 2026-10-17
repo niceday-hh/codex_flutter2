@@ -7,7 +7,9 @@ public final class ReminderReceiver extends BroadcastReceiver {
         try {
             String action = intent.getAction();
             if (ReminderEngine.ACK.equals(action)) {
-                engine.acknowledge(intent.getIntExtra("id", 0), intent.getLongExtra("token", 0), "通知被划掉或系统移除");
+                engine.dismissed(intent.getIntExtra("id", 0), intent.getLongExtra("token", 0));
+            } else if (ReminderEngine.ARCHIVE.equals(action) || ReminderEngine.DELETE.equals(action)) {
+                engine.cleanupAction(intent);
             } else if (ReminderEngine.BASE.equals(action) || ReminderEngine.RETRY.equals(action)) {
                 engine.fire(intent);
             } else {

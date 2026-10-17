@@ -23,7 +23,7 @@ public class SpeechCacheTest {
     static void wave(File file) throws Exception {
         ByteBuffer b = ByteBuffer.allocate(100).order(ByteOrder.LITTLE_ENDIAN);
         b.put("RIFF".getBytes()).putInt(92).put("WAVEfmt ".getBytes()).putInt(16).putShort((short)1).putShort((short)1)
-            .putInt(8000).putInt(16000).putShort((short)2).putShort((short)16).put("data".getBytes()).putInt(56);
+            .putInt(22050).putInt(44100).putShort((short)2).putShort((short)16).put("data".getBytes()).putInt(56);
         try (FileOutputStream out = new FileOutputStream(file)) { out.write(b.array()); }
     }
     @Test public void immutableJobsAtomicPromotionAndReuse() throws Exception {

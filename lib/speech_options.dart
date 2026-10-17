@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'reminder.dart';
 import 'speech.dart';
+import 'speech_voices.dart';
 
 const _purple = Color(0xFF7252F6);
 String speechModeLabel(String value) => switch (value) {
   'on' => '开启语音播报', 'inherit' => '跟随默认设置', _ => '关闭语音播报',
 };
-String speechVoiceLabel(String value) => value.isEmpty ? '跟随默认音色' : '音色 $value';
+String speechVoiceLabel(String value) {
+  final id = int.tryParse(value);
+  return id == null || id < 0 || id >= speechVoiceNames.length ? '跟随默认音色' : '$id · ${speechVoiceNames[id]}';
+}
 
 class SpeechOptions extends StatefulWidget {
   final Reminder reminder;
@@ -90,19 +94,23 @@ Future<String?> chooseSpeechVoice(BuildContext context, String current, {require
       padding: EdgeInsets.fromLTRB(16, 0, 16, MediaQuery.viewInsetsOf(c).bottom),
       child: SizedBox(height: MediaQuery.sizeOf(c).height * 0.75, child: Column(children: [
         const Text('选择播报音色', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-        const Text('174个说话人 · 编号0～173 · 点击播放按钮试听', style: TextStyle(fontSize: 12)),
-        const SizedBox(height: 12), TextField(keyboardType: TextInputType.number,
-          decoration: const InputDecoration(hintText: '搜索音色编号'), onChanged: (v) => update(() => query = v.trim())),
+        const Text('804个音色条目 · 可按角色名或编号搜索', style: TextStyle(fontSize: 12)),
+        const SizedBox(height: 12), TextField(
+          decoration: const InputDecoration(hintText: '搜索角色名或编号'), onChanged: (v) => update(() => query = v.trim().toLowerCase())),
         if (allowDefault) ListTile(title: const Text('跟随默认音色'), onTap: () { speech.stopPreview(); Navigator.pop(c, ''); }),
         if (message != null) Text(message!, style: const TextStyle(fontSize: 12)),
-        Expanded(child: ListView(children: List.generate(174, (i) => '$i').where((id) => id.contains(query)).map((id) => ListTile(
-          title: Text('音色 $id'), leading: id == current ? const Icon(Icons.check_circle, color: _purple) : const Icon(Icons.person_outline),
+        Expanded(child: Builder(builder: (_) {
+          final matches = List.generate(speechVoiceNames.length, (i) => '$i').where((id) => speechVoiceLabel(id).toLowerCase().contains(query)).toList();
+          return ListView.builder(itemCount: matches.length, itemBuilder: (_, index) {
+          final id = matches[index];
+          return ListTile(
+          title: Text(speechVoiceLabel(id)), leading: id == current ? const Icon(Icons.check_circle, color: _purple) : const Icon(Icons.person_outline),
           trailing: IconButton(tooltip: '试听音色$id', icon: busy == id ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.play_circle_outline),
             onPressed: busy.isNotEmpty ? null : () async {
               update(() { busy = id; message = '正在准备音色 $id…'; });
               try { await preview(id); if (c.mounted) update(() => message = '正在试听音色 $id'); }
               catch (_) { if (c.mounted) update(() => message = '试听未成功，请检查媒体音量后重试'); }
               finally { if (c.mounted) update(() => busy = ''); }
-            }), onTap: () { speech.stopPreview(); Navigator.pop(c, id); })).toList())),
+            }), onTap: () { speech.stopPreview(); Navigator.pop(c, id); }); }); })),
       ])))))).whenComplete(speech.stopPreview);
 }

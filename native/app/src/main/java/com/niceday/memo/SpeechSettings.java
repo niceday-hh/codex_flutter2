@@ -8,7 +8,7 @@ import java.util.*;
 
 /** Portable settings only. Cache names are derived locally and never trusted from backup. */
 public final class SpeechSettings {
-    public static final String VOICE = "0";
+    public static final String VOICE = "228";
     public static final String GENERIC = "你有一条待办提醒，请解锁后查看";
     private SpeechSettings() {}
     public static JSONObject defaults(Context c) {
@@ -42,20 +42,20 @@ public final class SpeechSettings {
         if (!Arrays.asList("inherit", "on", "off").contains(mode) || (defaults && "inherit".equals(mode)))
             throw new IllegalArgumentException("语音播报设置无效");
         String voice = r.optString("speechVoice", defaults ? VOICE : "");
-        if (!voice.isEmpty() && (!voice.matches("[0-9]{1,3}") || Integer.parseInt(voice) > 173)) throw new IllegalArgumentException("音色编号须为0至173");
+        if (!voice.isEmpty() && (!voice.matches("[0-9]{1,3}") || Integer.parseInt(voice) > 803)) throw new IllegalArgumentException("音色编号须为0至803");
         double rate = r.optDouble("speechRate", defaults ? 1 : 0);
         if (!Double.isFinite(rate) || (rate != 0 && (rate < 0.8 || rate > 1.3)) || (defaults && rate == 0))
             throw new IllegalArgumentException("语速须为0.8至1.3倍");
         for (String field : Arrays.asList("speechHideLocked", "speechRepeat"))
             if (r.has(field) && !(r.get(field) instanceof Boolean)) throw new IllegalArgumentException("语音隐私开关无效");
-        r.put("speechMode", mode).put("speechVoice", voice).put("speechRate", rate);
+        r.put("speechMode", mode).put("speechVoice", voice).put("speechRate", rate).put("speechModel","voine-vits-mnn-v1");
         if (!r.has("speechHideLocked")) r.put("speechHideLocked", true);
         if (!r.has("speechRepeat")) r.put("speechRepeat", true);
     }
     public static String cacheKey(String text, String voice, double rate) {
         try {
             byte[] bytes = MessageDigest.getInstance("SHA-256").digest(
-                ("aishell3-8k-v1\n" + voice + "\n" + Math.round(rate * 100) + "\n" + text).getBytes(StandardCharsets.UTF_8));
+                ("voine-vits-mnn-6379f381-22k-v1\n" + voice + "\n" + Math.round(rate * 100) + "\n" + text).getBytes(StandardCharsets.UTF_8));
             StringBuilder hex = new StringBuilder();
             for (byte b : bytes) hex.append(String.format(Locale.ROOT, "%02x", b & 255));
             return hex.toString();

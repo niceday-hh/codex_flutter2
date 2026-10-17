@@ -48,6 +48,54 @@ public class ReminderEngineTest {
     Intent intent(String action, long occurrence) {
         return new Intent(action).putExtra("id", 1).putExtra("token", occurrence).putExtra("version", 1L);
     }
+    @Test public void notificationDismissalStopsRetriesAndOffersSilentArchiveChoice() throws Exception {
+        Shadows.shadowOf(context.getSystemService(KeyguardManager.class)).setKeyguardLocked(false);
+        engine.fire(intent(ReminderEngine.BASE,token)); engine.dismissed(1,token);
+        assertTrue(row().getBoolean("acknowledged")); assertTrue(row().getBoolean("completed")); assertEquals(0,row().getLong("retryAt"));
+        NotificationManager nm=context.getSystemService(NotificationManager.class);
+        Notification prompt=Shadows.shadowOf(nm).getNotification(-1);
+        assertNotNull(prompt); assertEquals(2,prompt.actions.length); assertNull(prompt.deleteIntent);
+        assertNull(nm.getNotificationChannel(prompt.getChannelId()).getSound());
+        assertFalse(prompt.publicVersion.extras.getCharSequence(Notification.EXTRA_TEXT).toString().contains("私人"));
+        Intent action=Shadows.shadowOf(prompt.actions[0].actionIntent).getSavedIntent();
+        engine.cleanupAction(action);
+        assertTrue(row().getBoolean("archived")); assertFalse(row().getBoolean("enabled"));
+        assertEquals("私人测试内容",row().getString("text")); assertEquals(0,row().getLong("nextTrigger"));
+        assertNull(Shadows.shadowOf(nm).getNotification(-1));
+    }
+    @Test public void staleCleanupCannotDeleteEditedTaskAndPromptCanBeDisabled() throws Exception {
+        Shadows.shadowOf(context.getSystemService(KeyguardManager.class)).setKeyguardLocked(false);
+        engine.fire(intent(ReminderEngine.BASE,token)); engine.dismissed(1,token);
+        Notification prompt=Shadows.shadowOf(context.getSystemService(NotificationManager.class)).getNotification(-1);
+        Intent action=Shadows.shadowOf(prompt.actions[1].actionIntent).getSavedIntent();
+        engine.save(future(row()).toString()); engine.cleanupAction(action);
+        assertEquals(1,new JSONObject(engine.state()).getJSONArray("reminders").length()); assertFalse(row().optBoolean("archived"));
+        engine.cleanupPrompts(false);
+        JSONObject r=row().put("nextTrigger",token); persist(r);
+        Intent fire=intent(ReminderEngine.BASE,token).putExtra("version",r.getLong("version")); engine.fire(fire); engine.dismissed(1,token);
+        assertNull(Shadows.shadowOf(context.getSystemService(NotificationManager.class)).getNotification(-1));
+    }
+    @Test public void recurringDismissalKeepsFutureOccurrencesUntilExplicitArchive() throws Exception {
+        JSONObject r=row().put("repeat","daily");persist(r);
+        engine.fire(intent(ReminderEngine.BASE,token)); long next=row().getLong("nextTrigger");
+        engine.dismissed(1,token);
+        assertTrue(row().getBoolean("enabled")); assertFalse(row().optBoolean("completed")); assertEquals(next,row().getLong("nextTrigger"));
+        engine.archive(1); assertEquals(0,row().getLong("nextTrigger")); assertFalse(row().getBoolean("enabled"));
+    }
+    @Test public void archiveSurvivesBackupAndEditingExplicitlyReactivatesIt() throws Exception {
+        engine.save(future(row()).toString()); engine.archive(1);
+        JSONObject portable=BackupCodec.decode(engine.exportBackup()).getJSONObject(0);
+        assertTrue(portable.getBoolean("archived"));
+        engine.importBackup(engine.exportBackup()); JSONArray rows=new JSONObject(engine.state()).getJSONArray("reminders");
+        assertEquals(2,rows.length()); assertTrue(rows.getJSONObject(1).getBoolean("archived")); assertFalse(rows.getJSONObject(1).getBoolean("enabled"));
+        engine.save(future(row()).toString()); assertFalse(row().getBoolean("archived")); assertFalse(row().getBoolean("completed")); assertTrue(row().getBoolean("enabled"));
+    }
+    @Test public void aishellUpgradeResetsOnlyVoiceAndPreservesExistingSchedule() throws Exception {
+        JSONObject r=row().put("speechVoice","33").put("speechMode","on"); persist(r);
+        context.getSharedPreferences("memo",0).edit().remove("speechModel").commit();
+        engine=new ReminderEngine(context);
+        assertEquals("228",row().getString("speechVoice")); assertEquals("on",row().getString("speechMode")); assertEquals(token,row().getLong("nextTrigger"));
+    }
     @Test public void speechNotificationDoesNotRingAndBackupFreezesInheritedVoice() throws Exception {
         engine.defaults(new JSONObject().put("speechMode", "on").put("speechVoice", "33").put("speechRate", 0.9).toString());
         JSONObject r = future(row()).put("speechMode", "inherit").put("speechHideLocked", false).put("sound", true);

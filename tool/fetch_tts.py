@@ -1,36 +1,29 @@
-"""Pinned AISHELL-3 inference resources; exclude training weights and large FAR archive."""
+"""Pinned Voine VITS-MNN weights; verify every resource and remove AISHELL assets."""
 import hashlib
 import json
 from pathlib import Path
-import tarfile
 import urllib.request
 
-NAME = 'vits-icefall-zh-aishell3'
-URL = f'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/{NAME}.tar.bz2'
-SHA256 = 'ab468db3a3308cdd861495e0db2f25d79418a0c00639f74944c7cdf5dd8c6ec1'
-FILES = ('model.onnx', 'lexicon.txt', 'tokens.txt', 'phone.fst', 'date.fst', 'number.fst', 'new_heteronym.fst', 'speakers.txt')
-
 def prepare():
-    cache = Path('model-downloads'); cache.mkdir(exist_ok=True)
-    archive = cache / f'{NAME}.tar.bz2'
-    if not archive.exists():
-        temporary = archive.with_suffix('.download')
-        urllib.request.urlretrieve(URL, temporary)
-        temporary.rename(archive)
-    assert hashlib.sha256(archive.read_bytes()).hexdigest() == SHA256, 'AISHELL model archive checksum mismatch'
+    lock = json.loads(Path('tool/vits_model.lock.json').read_text())
     target = Path('assets/tts'); target.mkdir(parents=True, exist_ok=True)
-    manifest = {'model': NAME, 'archive_sha256': SHA256, 'sample_rate': 8000, 'speaker_count': 174, 'files': {}}
-    with tarfile.open(archive) as tar:
-        for name in FILES:
-            member = tar.getmember(f'{NAME}/{name}')
-            assert member.isfile() and member.size < 40 * 1024 * 1024
-            payload = tar.extractfile(member).read()
-            (target / name).write_bytes(payload)
-            manifest['files'][name] = {'bytes': len(payload), 'sha256': hashlib.sha256(payload).hexdigest()}
-    speakers = (target / 'speakers.txt').read_text().splitlines()
-    assert len(speakers) == 174
+    cache = Path('model-downloads/vits-mnn'); cache.mkdir(parents=True, exist_ok=True)
+    manifest = {'model': 'voine-vits-uma-genshin-honkai-mnn', 'commit': lock['upstream_commit'],
+                'sample_rate': 22050, 'speaker_count': 804, 'files': lock['files']}
+    for name, entry in lock['files'].items():
+        f = cache / name
+        if not f.exists() or f.stat().st_size != entry['bytes'] or hashlib.sha256(f.read_bytes()).hexdigest() != entry['sha256']:
+            base = 'raw.githubusercontent.com' if name.endswith('.json') else 'media.githubusercontent.com/media'
+            url = f"https://{base}/Voine/VITS-MNN/{lock['upstream_commit']}/app/src/main/assets/mnn/{name}"
+            temporary = f.with_suffix('.download'); urllib.request.urlretrieve(url, temporary)
+            assert temporary.stat().st_size == entry['bytes'] and hashlib.sha256(temporary.read_bytes()).hexdigest() == entry['sha256'], f'Invalid VITS resource: {name}'
+            temporary.replace(f)
+        (target / name).write_bytes(f.read_bytes())
+    config = json.loads((target / 'config.json').read_text())
+    assert len(config['speakers']) == 804 and config['data']['sampling_rate'] == 22050
+    for old in target.iterdir():
+        if old.name not in lock['files'] and old.name not in ('.keep', 'manifest.json'): old.unlink()
     (target / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
-    print('Prepared AISHELL-3:', sum(v['bytes'] for v in manifest['files'].values()), 'bytes; 174 speakers; FAR excluded')
+    print('Prepared VITS-MNN:', sum(v['bytes'] for v in lock['files'].values()), 'bytes; 804 speaker entries; 22050 Hz')
 
-if __name__ == '__main__':
-    prepare()
+if __name__ == '__main__': prepare()

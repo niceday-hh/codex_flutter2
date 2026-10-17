@@ -26,10 +26,10 @@ public class SpeechSettingsTest {
         assertTrue(SpeechSettings.enabled(new JSONObject().put("speechMode", "on"), new JSONObject()));
     }
     @Test public void acceptsActualSpeakerRangeAndPreservesPrivacyOff() throws Exception {
-        JSONObject r = new JSONObject().put("speechMode", "on").put("speechVoice", "173").put("speechRate", 1.3).put("speechHideLocked", false);
+        JSONObject r = new JSONObject().put("speechMode", "on").put("speechVoice", "803").put("speechRate", 1.3).put("speechHideLocked", false);
         SpeechSettings.validate(r, false);
         assertFalse(SpeechSettings.hideLocked(r, new JSONObject()));
-        for (String voice : new String[]{"174", "-1", "bili22", "../../file"}) {
+        for (String voice : new String[]{"804", "-1", "bili22", "../../file"}) {
             try { SpeechSettings.validate(new JSONObject().put("speechVoice", voice), false); fail(voice); }
             catch (IllegalArgumentException expected) {}
         }
