@@ -1,0 +1,190 @@
+name: Publish verified v0.9.1
+on:
+  push:
+    branches: [release-v0.9.1-publish]
+    paths: [.github/workflows/publish-verified-v091.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: publish-existing-v0.9.1
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: c65398fc92d1134c36abb0bbb32786a6373484b0
+          persist-credentials: false
+      - name: Verify existing build and publish its draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+          import urllib.error
+          import urllib.request
+          
+          REPO = "niceday-hh/codex_flutter2"
+          SOURCE = "c65398fc92d1134c36abb0bbb32786a6373484b0"
+          RUN = 39044382161
+          DRAFT_ID = 415875309
+          DRAFT_TAG = "ci-39044382161"
+          TAG = "v0.9.1"
+          APK = "timed-memo-0.9.1-arm64.apk"
+          CERTIFICATE = "99f09bd9bce2572a966e3daea07718debb0ad4754f43b9742e03812c204f4796"
+          EXPECTED = json.loads(r'''{"BUILD_INFO.json":{"id":650827296,"size":674,"sha256":"1e8197a99a33233244c9f1c63ff10a549089092a67e1203bb8d6618045210920"},"device-alarm-test-results-api33.json":{"id":650862086,"size":3305,"sha256":"6b15a49877bcb6548fe0fd9b9a41b32c6cf018de80eb72bf33345e36ca1f0c82"},"device-alarm-test-results-api35.json":{"id":650845742,"size":2909,"sha256":"516061e93d69a744ca12bdeb5ba9d5001a0587a0ef093f36e8ca56382dadc985"},"device-cleanup-test-results-api33.json":{"id":650862088,"size":142,"sha256":"2d1dcf7e80d5bcd167e21d1f0b241b2dfafc08626619643959dd8a829460296c"},"device-cleanup-test-results-api35.json":{"id":650845739,"size":142,"sha256":"2d1dcf7e80d5bcd167e21d1f0b241b2dfafc08626619643959dd8a829460296c"},"device-guardian-test-results-api33.json":{"id":650862090,"size":9545,"sha256":"039c0b4b4ff8f519978bedc5b294e38a8b7e4c9e0df3eb84334cbe2320e02f4b"},"device-guardian-test-results-api35.json":{"id":650845740,"size":9505,"sha256":"001f2dec983879a61a540b22952885e7a141b28203fb9e11dfa6220a9407f620"},"device-notification-test-results-api33.json":{"id":650862087,"size":635,"sha256":"3751e9eb29ff345bda2739cbf3596acc2a404971a22e5e25987e8357202b6e03"},"device-notification-test-results-api35.json":{"id":650845744,"size":635,"sha256":"e2176d40f365de260df215ceb3f7c35fe5931520a4fb30ee5ca4f95407b2204b"},"device-popup-test-results-api33.json":{"id":650862089,"size":188,"sha256":"8496a0a44afea31cdc3c7030cc63fba5a2c359ba0f16b9a2ce06af45b5ebdfdf"},"device-popup-test-results-api35.json":{"id":650845743,"size":188,"sha256":"8496a0a44afea31cdc3c7030cc63fba5a2c359ba0f16b9a2ce06af45b5ebdfdf"},"device-speech-test-results-api33.json":{"id":650862104,"size":461,"sha256":"4a4825b5eddad5804acaeeef10f6000b8a31dec8dda86c181167452e8028f939"},"device-speech-test-results-api35.json":{"id":650845761,"size":461,"sha256":"d10a6d0ee679d4b7b60e6dbf0aa7f239dfa9ce131bbee892368f0c1758c8c144"},"native-test-results.zip":{"id":650827794,"size":5335,"sha256":"1137aabe103755a3f60bbfe838faf0ef44a84d7cd3edb4936cff12ea682df863"},"SHA256SUMS.txt":{"id":650827297,"size":93,"sha256":"e8f297892241efa1ed1b938fac69caa10be6ea3bdbe7a7467d69f6a0644c810b"},"timed-memo-0.9.1-arm64.apk":{"id":650827295,"size":355660888,"sha256":"356b67988eced401d379aec3586143ecaa2e93b5dfbbf673ffd66cf6dcd33aaf"}}''')
+          
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+          
+          def api(path, method="GET", payload=None, allow_missing=False):
+              data = None if payload is None else json.dumps(payload).encode("utf-8")
+              request = urllib.request.Request(
+                  "https://api.github.com/repos/" + REPO + path,
+                  data=data,
+                  method=method,
+                  headers={
+                      "Authorization": "Bearer " + os.environ["GH_TOKEN"],
+                      "Accept": "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                      "Content-Type": "application/json",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=60) as response:
+                      return json.load(response)
+              except urllib.error.HTTPError as error:
+                  if allow_missing and error.code == 404:
+                      return None
+                  raise RuntimeError(f"GitHub API {method} {path}: HTTP {error.code}") from None
+          
+          def inventory(release):
+              assets = release["assets"]
+              require(len(assets) == len(EXPECTED), "Unexpected release asset count")
+              require({a["name"] for a in assets} == set(EXPECTED), "Release asset names changed")
+              for asset in assets:
+                  expected = EXPECTED[asset["name"]]
+                  require(asset["state"] == "uploaded", "Asset upload incomplete: " + asset["name"])
+                  require(asset["id"] == expected["id"], "Asset identity changed: " + asset["name"])
+                  require(asset["size"] == expected["size"], "Asset size changed: " + asset["name"])
+                  require(asset["digest"] == "sha256:" + expected["sha256"],
+                          "Asset digest changed: " + asset["name"])
+          
+          def verify_tag():
+              ref = api("/git/ref/tags/" + TAG)
+              require(ref["object"]["type"] == "commit" and ref["object"]["sha"] == SOURCE,
+                      "Release tag does not reference the tested application commit")
+          
+          def verify_published(release):
+              require(release["id"] == DRAFT_ID, "Different release already uses this tag")
+              require(release["tag_name"] == TAG and not release["draft"] and release["prerelease"],
+                      "Unexpected published release state")
+              inventory(release)
+              verify_tag()
+          
+          run = api(f"/actions/runs/{RUN}")
+          require(run["head_sha"] == SOURCE and run["status"] == "completed",
+                  "Original test run is incomplete or references another source commit")
+          jobs = api(f"/actions/runs/{RUN}/jobs?filter=latest&per_page=100")["jobs"]
+          required_jobs = {"checks", "prepare", "build", "emulator (33)", "emulator (35)"}
+          for name in required_jobs:
+              matches = [job for job in jobs if job["name"] == name]
+              require(len(matches) == 1 and matches[0]["status"] == "completed"
+                      and matches[0]["conclusion"] == "success",
+                      "Required original verification did not pass: " + name)
+          require(all(job["name"] == "publish" or job["name"] in required_jobs for job in jobs),
+                  "Original run has an unrecognized verification job")
+          print("Original analyzer, Flutter/native checks, signed build and API 33/35 jobs passed.")
+          
+          notes = Path("docs/releases/v0.9.1.md").read_text()
+          require(Path(".release-version").read_text().strip() == TAG,
+                  "Source release version changed")
+          existing = api("/releases/tags/" + TAG, allow_missing=True)
+          if existing:
+              verify_published(existing)
+              require(existing["body"] == notes, "Existing release notes differ from source")
+              print("Release already published and verified:", existing["html_url"])
+              raise SystemExit(0)
+          
+          draft = api(f"/releases/{DRAFT_ID}")
+          require(draft["draft"] and draft["tag_name"] == DRAFT_TAG,
+                  "Original CI draft changed")
+          require(draft["target_commitish"] == SOURCE, "Draft source commit changed")
+          inventory(draft)
+          
+          # Download the existing verified assets; no rebuild, model load or device operation.
+          subprocess.run(["gh", "release", "download", DRAFT_TAG, "--dir", "release"], check=True)
+          directory = Path("release")
+          require({p.name for p in directory.iterdir()} == set(EXPECTED),
+                  "Downloaded asset inventory differs")
+          for name, expected in EXPECTED.items():
+              path = directory / name
+              require(path.stat().st_size == expected["size"], "Downloaded size mismatch: " + name)
+              with path.open("rb") as stream:
+                  digest = hashlib.file_digest(stream, "sha256").hexdigest()
+              require(digest == expected["sha256"], "Downloaded SHA-256 mismatch: " + name)
+          print("All 16 existing assets verified by size and SHA-256.")
+          
+          info = json.loads((directory / "BUILD_INFO.json").read_text())
+          require(info["source_commit"] == SOURCE and info["version"] == "0.9.1"
+                  and info["build"] == 12 and info["package"] == "com.niceday.memo.stable",
+                  "Build metadata does not match the tested version")
+          require(info["signing"] == "release" and info["certificate_sha256"] == CERTIFICATE,
+                  "Fixed signing metadata mismatch")
+          require(info["reboot_tests_run"] is False, "Unexpected reboot test metadata")
+          sums = (directory / "SHA256SUMS.txt").read_text().split()
+          require(sums == [EXPECTED[APK]["sha256"], APK], "APK checksum manifest mismatch")
+          
+          sdk = Path(os.environ.get("ANDROID_SDK_ROOT") or os.environ["ANDROID_HOME"])
+          signers = sorted(sdk.glob("build-tools/*/apksigner"),
+                           key=lambda p: [int(n) for n in re.findall(r"\d+", p.parent.name)])
+          require(bool(signers), "Android apksigner is unavailable")
+          result = subprocess.run(
+              [str(signers[-1]), "verify", "--verbose", "--print-certs", str(directory / APK)],
+              check=True, capture_output=True, text=True,
+          )
+          match = re.search(r"certificate SHA-256 digest:\s*([0-9a-fA-F]+)", result.stdout)
+          require(match is not None and match.group(1).lower() == CERTIFICATE,
+                  "APK fixed signing certificate changed")
+          print("APK signature and fixed certificate verified:", CERTIFICATE)
+          
+          # Refuse changed assets immediately before publication.
+          inventory(api(f"/releases/{DRAFT_ID}"))
+          ref = api("/git/ref/tags/" + TAG, allow_missing=True)
+          if ref is None:
+              api("/git/refs", "POST", {"ref": "refs/tags/" + TAG, "sha": SOURCE})
+          verify_tag()
+          api(f"/releases/{DRAFT_ID}", "PATCH", {
+              "tag_name": TAG,
+              "target_commitish": SOURCE,
+              "name": "超级提醒 v0.9.1 · 固定签名新版",
+              "body": notes,
+              "draft": False,
+              "prerelease": True,
+              "make_latest": "false",
+          })
+          published = api("/releases/tags/" + TAG)
+          verify_published(published)
+          require(published["body"] == notes, "Published version notes do not match source")
+          print("Published and verified:", published["html_url"])
+          for asset in published["assets"]:
+              if asset["name"] == APK:
+                  print("APK:", asset["browser_download_url"])
+                  print("SHA-256:", asset["digest"])
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("Published the existing fixed-signed v0.9.1 APK after checking the "
+                            "original successful validation jobs, all 16 asset checksums, and "
+                            "the APK certificate. No application rebuild or device reboot.\n\n")
+              summary.write(published["html_url"] + "\n")
+          PY
