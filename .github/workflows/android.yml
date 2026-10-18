@@ -17,7 +17,7 @@ env:
   CI_ASSET_TAG: ci-${{ github.run_id }}
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -48,7 +48,7 @@ jobs:
       - name: Debug fixture snapshot race checks
         run: python3 -m unittest discover -s tool -p '*_unit_test.py' -v
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Prepare private draft asset transfer
@@ -64,7 +64,7 @@ jobs:
           fi
   build:
     needs: [prepare, checks]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     outputs:
       signing: ${{ steps.sign.outputs.signing }}
@@ -148,7 +148,7 @@ jobs:
       fail-fast: false
       matrix:
         api: [33, 35]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -214,7 +214,7 @@ jobs:
   publish:
     needs: [build, emulator]
     if: github.ref == 'refs/heads/main' && needs.build.outputs.signing == 'release'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     concurrency:
       group: release-publish-${{ github.repository }}
