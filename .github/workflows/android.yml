@@ -2,9 +2,14 @@ name: Android build and release
 on:
   push:
     branches: [main, vits-archive]
+    paths-ignore:
+      - .github/release-request.json
+      - .github/workflows/publish-existing.yml
+      - docs/release-automation.md
   workflow_dispatch:
 permissions:
   contents: write
+  actions: read
 concurrency:
   group: android-release-v090-${{ github.ref }}
   cancel-in-progress: true
@@ -210,21 +215,17 @@ jobs:
     needs: [build, emulator]
     if: github.ref == 'refs/heads/main' && needs.build.outputs.signing == 'release'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: release-publish-${{ github.repository }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Publish verified signed APK and version notes
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: |
-          tag="$(cat .release-version)"
-          if gh release view "$tag" >/dev/null 2>&1; then
-            echo "Release exists; bump version before publishing a new build."
-            exit 0
-          fi
-          gh release download "$CI_ASSET_TAG" --dir release
-          (cd release && sha256sum --check SHA256SUMS.txt)
-          gh release create "$tag" --target "$GITHUB_SHA" --title "超级提醒 $tag · 固定签名新版" \
-            --notes-file "docs/releases/$tag.md" --prerelease \
-            release/*.apk release/*.json release/SHA256SUMS.txt release/native-test-results.zip
-          gh release delete "$CI_ASSET_TAG" --yes
+          SOURCE_RUN_ID: ${{ github.run_id }}
+        run: python3 tool/publish_release.py "$SOURCE_RUN_ID"

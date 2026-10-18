@@ -1,0 +1,50 @@
+name: Publish existing verified build
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: '已完成构建与测试的 Android 工作流运行编号'
+        required: true
+        type: string
+  push:
+    branches: [main]
+    paths: [.github/release-request.json]
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: release-publish-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test publication checks without models or devices
+        run: python3 -m unittest discover -s tool -p 'publish_release_unit_test.py' -v
+      - name: Resolve the original build run
+        id: source
+        env:
+          DISPATCH_RUN_ID: ${{ inputs.source_run_id }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          value = os.environ.get('DISPATCH_RUN_ID', '')
+          if not value:
+              value = str(json.loads(Path('.github/release-request.json').read_text())['source_run_id'])
+          if not re.fullmatch(r'[1-9][0-9]*', value):
+              raise SystemExit('A positive original build run ID is required')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('run_id=' + value + '\n')
+          PY
+      - name: Verify and publish existing signed build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_RUN_ID: ${{ steps.source.outputs.run_id }}
+        run: python3 tool/publish_release.py "$SOURCE_RUN_ID"
