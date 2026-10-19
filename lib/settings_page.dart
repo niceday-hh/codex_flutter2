@@ -42,8 +42,9 @@ class _SettingsPageState extends State<SettingsPage> {
     child: Column(children: [for (var i = 0; i < sections.length; i++) ...[
       if (i > 0) const Divider(height: 1, indent: 76, endIndent: 18, color: Color(0xFFF0EFF5)),
       ListTile(key: ValueKey('settings-${sections[i].category.name}'),
+        dense: true,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         leading: Container(width: 43, height: 43, decoration: BoxDecoration(color: lavender, borderRadius: BorderRadius.circular(14)),
           child: Icon(sections[i].icon, color: purple, size: 24)),
         title: Text(sections[i].title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),

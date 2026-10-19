@@ -528,7 +528,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         subtitle: const Text('说完后自动进入确认'),
         value: store.defaults['voiceAutoStop'] as bool? ?? true,
         onChanged: (v) async { store.defaults['voiceAutoStop'] = v; await persistDefaults(); }),
-      settingRow(Icons.timer_outlined, '自动停录等待', "${store.defaults['voiceSilenceSeconds'] ?? 5} 秒 · 单次录音最长45秒", () async {
+      settingRow(Icons.timer_outlined, '自动停录等待', "${store.defaults['voiceSilenceSeconds'] ?? 5} 秒", () async {
         final seconds = await showDialog<int>(context: context, builder: (c) => SimpleDialog(title: const Text('连续无声多久后停录'),
           children: [for (var i = 3; i <= 10; i++) SimpleDialogOption(onPressed: () => Navigator.pop(c, i), child: Text('$i 秒'))]));
         if (seconds != null) { store.defaults['voiceSilenceSeconds'] = seconds; await persistDefaults(); }
@@ -537,9 +537,9 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     settingsHint('单次录音最长45秒，确认过程不播放语音。'),
     section('识别方式', ''), settingsGroup([
       const ListTile(leading: Icon(Icons.shield_outlined, color: purple), title: Text('本机离线'),
-        subtitle: Text('Paraformer int8 + Silero VAD'), trailing: Tag('已内置')),
+        subtitle: Text('录音只在本机识别'), trailing: Tag('已内置')),
     ]),
-    settingsHint('前台复用已加载的识别模型；切到后台、内存紧张或准备播报音频时会释放。'),
+    settingsHint('无需联网。首次准备或从后台返回时，可能需要稍候。'),
     Padding(padding: const EdgeInsets.fromLTRB(20, 24, 20, 4), child: FilledButton.tonalIcon(
       onPressed: () => _settingsAction(sheetContext, 'voice'),
       style: FilledButton.styleFrom(backgroundColor: lavender, foregroundColor: purple),

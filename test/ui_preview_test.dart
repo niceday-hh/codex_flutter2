@@ -15,6 +15,7 @@ const previewKey = ValueKey('ui-preview');
 final previewsEnabled = Platform.environment['MEMO_UI_PREVIEWS'] == '1';
 
 Future<void> capture(WidgetTester tester, String name) async {
+  await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
   final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(previewKey));
   await tester.runAsync(() async {
@@ -34,6 +35,8 @@ void main() {
       final loader = FontLoader(family)..addFont(Future.value(ByteData.sublistView(bytes)));
       await loader.load();
     }
+    final icons = FontLoader('MaterialIcons')..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
+    await icons.load();
   });
   testWidgets('render actual settings overview and voice input sheet', (tester) async {
     tester.view.devicePixelRatio = 2; tester.view.physicalSize = const Size(786, 1704);
@@ -57,13 +60,16 @@ void main() {
       openVoicePage: () {}, onSaved: () async {});
     await flow.reviewText('今天22:30提醒我喝水，休息一下眼睛，每隔3分钟提醒，总共提醒5次，开启语音播报');
     flow.secondsLeft = 18;
-    await tester.pumpWidget(RepaintBoundary(key: previewKey, child: MaterialApp(theme: ThemeData(useMaterial3: true,
+    await tester.pumpWidget(RepaintBoundary(key: previewKey, child: MaterialApp(debugShowCheckedModeBanner: false, theme: ThemeData(useMaterial3: true,
       fontFamily: 'Roboto', colorScheme: ColorScheme.fromSeed(seedColor: purple), scaffoldBackgroundColor: canvas,
       filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(backgroundColor: purple, foregroundColor: Colors.white,
         minimumSize: const Size.fromHeight(52), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))))),
       home: Scaffold(body: VoicePage(flow: flow)))));
     unawaited(showDialog<void>(context: tester.element(find.byType(Scaffold)), barrierColor: ink.withValues(alpha: .20),
       builder: (_) => VoiceConfirmation(flow: flow, onEdit: () async {})));
+    await tester.pump(); await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(VoiceConfirmation), findsOneWidget);
+    expect(find.text('共 5 次（含首次）'), findsOneWidget);
     await capture(tester, 'voice-confirmation');
     await tester.pumpWidget(const SizedBox()); flow.dispose(); await tester.pump();
   }, skip: !previewsEnabled);
