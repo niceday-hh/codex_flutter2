@@ -62,6 +62,12 @@ SDK Manager 能显示版本，但在本工作区的代理连接中无法获取�
 
 详细本地诊断位于 `.codex/state/environment-check.json`、`.codex/state/current-workspace-check.json`、`.codex/state/android-current-workspace-check.json` 和 `.codex/logs/`，均不提交缓存或机器路径日志。未配置固定签名，未执行 Release 发布。
 
+## 最小验证的完整原始输出
+
+按后续检查建议，在同一执行环境中直接调用 SDK 内的 Dart 二进制，分别运行 maps 读取、版本查询和不含依赖的最小程序。结果仍为 maps 读取失败、版本查询成功、最小程序报线程栈错误并以 SIGABRT 中止；完整命令、退出状态及未截断的 stdout/stderr 见 [current-workspace-dart-probe.md](current-workspace-dart-probe.md)。
+
+该结果描述本会话执行沙箱可见的文件与系统接口，不能推断物理主机没有 procfs。本会话不能管理底层挂载或隔离策略，也未进行修复后的因果验证。APK 构建不以模拟器、KVM 或固定发布签名就绪为前提；三类问题分别跟踪。
+
 ## 后续完成条件
 
 1. 当前工作区可继续编辑源码并运行已验证的 Java/Python 检查。完整 APK 构建需要宿主提供官方 Dart VM 所需的正常线程栈信息；普通目录、PATH 或项目依赖配置不能代替这一条件。
