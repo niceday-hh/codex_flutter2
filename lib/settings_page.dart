@@ -1,40 +1,21 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'app_style.dart';
 
-enum SettingsCategory { reminders, voiceInput, speech, background, data, help }
-
-class SettingsSection {
-  final SettingsCategory category;
-  final String title, subtitle, keywords;
-  final IconData icon;
-  const SettingsSection(this.category, this.title, this.subtitle, this.icon, this.keywords);
-  bool matches(String query) => '$title $subtitle $keywords'.toLowerCase().contains(query.toLowerCase());
-}
-
-const settingsSections = [
-  SettingsSection(SettingsCategory.reminders, '提醒与通知', '铃声、振动与再次提醒', Icons.notifications_none_rounded,
-    '默认展示方式 默认锁屏显示 默认样式 系统设置 振动模式 铃声 选择系统铃声 未读再次提醒间隔 提醒总次数 尝试亮屏 亮屏弹窗增强'),
-  SettingsSection(SettingsCategory.voiceInput, '语音录入', '免手预听与自动停录', Icons.mic_none_rounded,
-    '离线语音识别 打开应用后预听语音指令 连续安静后自动结束录音 自动停录等待 静音等待 试用免手输入 本机离线'),
-  SettingsSection(SettingsCategory.speech, '语音播报', '音色、语速与角色组', Icons.volume_up_outlined,
-    '我的角色组 音色 语速 随机 分组 锁屏播报 语音准备状态 重新准备提醒语音 VITS'),
-  SettingsSection(SettingsCategory.background, '后台与权限', '可靠提醒与系统授权', Icons.shield_outlined,
-    '可靠提醒模式 提醒服务状态 通知权限 锁屏内容保护 精确定时权限 后台运行 电池优化 应用系统设置 荣耀应用启动管理'),
-  SettingsSection(SettingsCategory.data, '任务与数据', '历史记录、备份与导入', Icons.storage_outlined,
-    '历史任务 划掉通知后询问整理方式 导出备忘录 合并导入备忘录 数据迁移'),
-  SettingsSection(SettingsCategory.help, '帮助与诊断', '提醒自检与使用帮助', Icons.help_outline_rounded,
-    '检查系统通知与锁屏设置 测试提醒完成后自动删除 15秒后发送测试提醒 系统闹钟排程 最近实际触发 最近恢复排程 导出提醒诊断 通知样式 固定发布签名 使用提示'),
-];
+import 'settings_catalog.dart';
+export 'settings_catalog.dart';
 
 class SettingsPage extends StatefulWidget {
-  final Future<void> Function(SettingsSection) onOpen;
+  final Future<void> Function(SettingsSection, {SettingsEntry? target}) onOpen;
+  final String Function(SettingsEntry) currentValue;
   final String version;
-  const SettingsPage({super.key, required this.onOpen, required this.version});
+  const SettingsPage({super.key, required this.onOpen, required this.version, required this.currentValue});
   @override State<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage> {
   final search = TextEditingController();
+  bool _previewing = false;
   @override void dispose() { search.dispose(); super.dispose(); }
   Widget _group(List<SettingsSection> sections) => Container(
     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(22),
@@ -55,9 +36,40 @@ class _SettingsPageState extends State<SettingsPage> {
     ]]));
   Widget _label(String title) => Padding(padding: const EdgeInsets.fromLTRB(4, 26, 4, 10),
     child: Text(title, style: const TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w600)));
+  Future<void> _preview(SettingsEntry entry) async {
+    if (_previewing) return;
+    _previewing = true; FocusScope.of(context).unfocus();
+    bool? open;
+    try {
+      open = await showDialog<bool>(context: context, builder: (context) => Dialog(
+        clipBehavior: Clip.antiAlias, backgroundColor: Colors.white,
+        child: ConstrainedBox(constraints: BoxConstraints(maxWidth: 440, maxHeight: MediaQuery.sizeOf(context).height * .8),
+          child: SingleChildScrollView(padding: const EdgeInsets.all(24), child: Column(
+            mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text(entry.section.title, style: const TextStyle(color: purple, fontSize: 12)),
+              const SizedBox(height: 12), Text(entry.title, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 18), Container(padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: lavender, borderRadius: BorderRadius.circular(16)),
+                child: Text('当前：${widget.currentValue(entry)}', style: const TextStyle(color: ink, fontWeight: FontWeight.w600))),
+              const SizedBox(height: 18), Text(entry.description, style: const TextStyle(color: muted, height: 1.6)),
+              const SizedBox(height: 24), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('前往设置')),
+              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('关闭预览')),
+            ])))));
+    } finally { _previewing = false; }
+    if (mounted && open == true) await widget.onOpen(entry.section, target: entry);
+  }
+  Widget _result(SettingsEntry entry) => Padding(padding: const EdgeInsets.only(bottom: 10),
+    child: Material(color: Colors.white, borderRadius: BorderRadius.circular(20), clipBehavior: Clip.antiAlias,
+      child: ListTile(key: ValueKey('settings-result-${entry.id}'), contentPadding: const EdgeInsets.all(16),
+        title: Text(entry.title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+        subtitle: Padding(padding: const EdgeInsets.only(top: 8), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('${entry.section.title} · 当前：${widget.currentValue(entry)}', style: const TextStyle(color: purple, fontSize: 12)),
+          const SizedBox(height: 5), Text(entry.description, maxLines: 2, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: muted, fontSize: 12, height: 1.5)),
+        ])), trailing: const Icon(Icons.preview_outlined, color: purple, size: 22), onTap: () => _preview(entry))));
   @override Widget build(BuildContext context) {
     final query = search.text.trim();
-    final matches = settingsSections.where((s) => s.matches(query)).toList();
+    final matches = settingsEntries.where((s) => s.matches(query)).toList();
     return ListView(key: const PageStorageKey('settings-overview'), padding: const EdgeInsets.fromLTRB(22, 26, 22, 24), children: [
       Text('设置', style: Theme.of(context).textTheme.headlineLarge), const SizedBox(height: 8),
       const Text('让提醒，更适合你。', style: TextStyle(color: muted)), const SizedBox(height: 24),
@@ -70,8 +82,8 @@ class _SettingsPageState extends State<SettingsPage> {
         _label('偏好设置'), _group(settingsSections.take(4).toList()),
         _label('管理与支持'), _group(settingsSections.skip(4).toList()),
       ] else ...[
-        _label('搜索结果 · ${matches.length} 个分类'),
-        if (matches.isNotEmpty) _group(matches)
+        _label('搜索结果 · ${matches.length} 个子项 · 点击预览'),
+        if (matches.isNotEmpty) ...matches.map(_result)
         else const Padding(padding: EdgeInsets.symmetric(vertical: 36), child: Text('没有找到相关设置，试试“铃声”或“语音”。',
           textAlign: TextAlign.center, style: TextStyle(color: muted))),
       ],
@@ -81,25 +93,78 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 }
 
-class SettingsSheet extends StatelessWidget {
+class SettingsSheet extends StatefulWidget {
   final SettingsSection section;
   final Listenable changes;
   final List<Widget> Function(BuildContext) items;
-  const SettingsSheet({super.key, required this.section, required this.changes, required this.items});
-  @override Widget build(BuildContext context) => DraggableScrollableSheet(
-    initialChildSize: .88, minChildSize: .55, maxChildSize: .97, expand: false,
-    builder: (context, controller) => FrostedPanel(child: Column(children: [
+  final GlobalKey<ScaffoldMessengerState> messengerKey;
+  final GlobalKey? targetKey;
+  final SettingsEntry? target;
+  const SettingsSheet({super.key, required this.section, required this.changes, required this.items,
+    required this.messengerKey, this.targetKey, this.target});
+  @override State<SettingsSheet> createState() => _SettingsSheetState();
+}
+
+class _SettingsSheetState extends State<SettingsSheet> {
+  final controller = ScrollController();
+  @override void initState() {
+    super.initState();
+    if (widget.targetKey != null) WidgetsBinding.instance.addPostFrameCallback((_) { unawaited(_reveal()); });
+  }
+  Future<void> _reveal() async {
+    if (!mounted) return;
+    if (widget.targetKey?.currentContext == null && controller.hasClients) {
+      controller.jumpTo(controller.position.maxScrollExtent);
+      await WidgetsBinding.instance.endOfFrame;
+    }
+    if (!mounted) return;
+    final target = widget.targetKey?.currentContext;
+    if (target != null) await Scrollable.ensureVisible(target, alignment: .15);
+  }
+  @override void dispose() { controller.dispose(); super.dispose(); }
+  @override Widget build(BuildContext context) => FractionallySizedBox(heightFactor: .92,
+    child: RepaintBoundary(child: FrostedPanel(blur: false,
+      child: ScaffoldMessenger(key: widget.messengerKey, child: Scaffold(backgroundColor: Colors.transparent,
+        resizeToAvoidBottomInset: false, body: SafeArea(top: false, child: Column(children: [
       Padding(padding: const EdgeInsets.only(top: 10, bottom: 10), child: Container(width: 34, height: 4,
         decoration: BoxDecoration(color: const Color(0xFFD5D2DF), borderRadius: BorderRadius.circular(4)))),
       Padding(padding: const EdgeInsets.fromLTRB(23, 0, 14, 14), child: Row(children: [
-        Expanded(child: Text(section.title, style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w800))),
+        Expanded(child: Text(widget.section.title, style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w800))),
         IconButton.filledTonal(tooltip: '关闭设置分类', onPressed: () {
           if (ModalRoute.of(context)?.isCurrent == true) Navigator.pop(context);
         },
           style: IconButton.styleFrom(backgroundColor: lavender, foregroundColor: muted), icon: const Icon(Icons.close_rounded)),
       ])),
-      Expanded(child: AnimatedBuilder(animation: changes, builder: (context, _) => ListView(
-        key: ValueKey('settings-sheet-${section.category.name}'), controller: controller,
-        padding: const EdgeInsets.only(bottom: 32), children: items(context)))),
-    ])));
+      if (widget.target != null) Padding(padding: const EdgeInsets.fromLTRB(23, 0, 23, 12),
+        child: Row(children: [const Icon(Icons.search_rounded, size: 16, color: purple), const SizedBox(width: 7),
+          Expanded(child: Text('已定位：${widget.target!.title}', style: const TextStyle(color: purple, fontSize: 12)))])),
+      Expanded(child: AnimatedBuilder(animation: widget.changes, builder: (context, _) => ListView(
+        key: ValueKey('settings-sheet-${widget.section.category.name}'), controller: controller,
+        padding: const EdgeInsets.only(bottom: 28), children: widget.items(context)))),
+    ])))))));
+}
+
+class SettingsActionTile extends StatefulWidget {
+  final IconData icon;
+  final String title, value;
+  final Future<void> Function() action;
+  final bool highlighted;
+  const SettingsActionTile({super.key, required this.icon, required this.title, required this.value,
+    required this.action, this.highlighted = false});
+  @override State<SettingsActionTile> createState() => _SettingsActionTileState();
+}
+class _SettingsActionTileState extends State<SettingsActionTile> {
+  bool busy = false;
+  Future<void> _run() async {
+    if (busy) return;
+    setState(() => busy = true);
+    try { await widget.action(); }
+    finally { if (mounted) setState(() => busy = false); }
+  }
+  @override Widget build(BuildContext context) => ListTile(
+    tileColor: widget.highlighted ? lavender : null,
+    leading: Icon(widget.icon, color: purple), title: Text(widget.title),
+    subtitle: Text(widget.value, style: const TextStyle(color: muted, fontSize: 12)),
+    trailing: busy ? const SizedBox(width: 19, height: 19, child: CircularProgressIndicator(strokeWidth: 2))
+      : const Icon(Icons.chevron_right, color: muted), onTap: busy ? null : _run);
 }

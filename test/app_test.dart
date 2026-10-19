@@ -176,8 +176,10 @@ void main() {
       onPressed: () async { selected = await chooseVibration(context, 'once'); }, child: const Text('打开振动模式'))))));
     await tester.tap(find.text('打开振动模式')); await tester.pumpAndSettle();
     expect(find.textContaining('次数由系统决定'), findsOneWidget);
+    await tester.ensureVisible(find.byTooltip('试振振动三次'));
     await tester.tap(find.byTooltip('试振振动三次')); await tester.pumpAndSettle();
     expect(previewed, 'three'); expect(selected, isNull); expect(find.text('振动模式'), findsOneWidget);
+    await tester.ensureVisible(find.text('振动两次'));
     await tester.tap(find.text('振动两次')); await tester.pumpAndSettle();
     expect(selected, 'twice'); expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox()); await tester.pump();

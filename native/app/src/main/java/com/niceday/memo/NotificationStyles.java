@@ -6,6 +6,9 @@ import android.media.*;
 import android.net.Uri;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.os.Build;
+import android.os.VibratorManager;
+import android.provider.Settings;
 import org.json.*;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -76,13 +79,23 @@ final class NotificationStyles {
             case "strong" -> new long[]{0, 700, 250, 700}; default -> new long[]{0, 200, 200, 200, 200, 200};
         };
     }
-    static void preview(Context context, String mode) {
+    static JSONObject preview(Context context, String mode) throws JSONException {
         if (!Arrays.asList("once", "twice", "three", "strong").contains(mode))
             throw new IllegalArgumentException("系统默认节奏请使用15秒通知测试");
         Vibrator vibrator = context.getSystemService(Vibrator.class);
+        if (Build.VERSION.SDK_INT >= 31) {
+            VibratorManager service = context.getSystemService(VibratorManager.class);
+            if (service != null) vibrator = service.getDefaultVibrator();
+        }
         if (vibrator == null || !vibrator.hasVibrator()) throw new IllegalStateException("此设备没有可用振动器");
-        vibrator.vibrate(VibrationEffect.createWaveform(pattern(mode), -1), new AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_NOTIFICATION).build());
+        if (Settings.System.getInt(context.getContentResolver(), Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) == 0)
+            throw new IllegalStateException("系统触感反馈已关闭，请在手机声音与振动设置中开启后再试；实际通知可使用15秒提醒测试");
+        long[] timings = pattern(mode);
+        vibrator.vibrate(VibrationEffect.createWaveform(timings, -1), new AudioAttributes.Builder()
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION).build());
+        long duration = 0; for (long value : timings) duration += value;
+        return new JSONObject().put("requested", true).put("pulses", timings.length / 2).put("durationMs", duration);
     }
     private String actualVibration(NotificationChannel c) {
         if (!c.shouldVibrate()) return "系统实际：振动已关闭";

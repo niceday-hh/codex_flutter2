@@ -14,6 +14,8 @@ import 'voice_page.dart';
 import 'voice_groups_page.dart';
 import 'app_style.dart';
 import 'settings_page.dart';
+import 'vibration_picker.dart';
+export 'vibration_picker.dart' show chooseVibration, vibrationLabel;
 export 'app_style.dart' show purple, ink, muted, canvas;
 
 void main() {
@@ -73,6 +75,9 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   bool _dialogScheduled = false, _wasPaused = false, _entryPending = true;
   bool _initialized = false, _foreground = true, _checkingEntry = false, _entryAgain = false, _suppressVoiceEntry = false;
   bool _taskLibraryOpen = false, _settingsSheetOpen = false;
+  final _settingsMessenger = GlobalKey<ScaffoldMessengerState>();
+  GlobalKey? _settingsTargetKey;
+  String? _settingsTargetTitle;
   int _entryEpoch = 0, _lifecycleEpoch = 0;
   DateTime selectedDate = DateTime.now();
   DateTime calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
@@ -203,13 +208,24 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   Future<void> reload() async {
     try {
       await store.load();
-      if (mounted) setState(() { loading = false; error = null; });
+      if (mounted) {
+        if (_settingsSheetOpen) { loading = false; error = null; }
+        else { setState(() { loading = false; error = null; }); }
+      }
     } catch (e) {
-      if (mounted) setState(() { loading = false; error = niceError(e); });
+      if (mounted) {
+        if (_settingsSheetOpen) { loading = false; error = niceError(e); toast(error!); }
+        else { setState(() { loading = false; error = niceError(e); }); }
+      }
     }
   }
   void toast(String s) {
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s)));
+    if (!mounted) return;
+    final local = _settingsMessenger.currentState;
+    final messenger = local != null && ModalRoute.of(local.context)?.isCurrent == true
+      ? local : ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(content: Text(s), behavior: SnackBarBehavior.floating));
   }
   Future<void> edit([Reminder? existing]) async {
     await voice.pause(keepDraft: false);
@@ -361,7 +377,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       const SliverToBoxAdapter(child: SizedBox(height: 90)),
     ]));
   }
-  Widget section(String title, String subtitle) => Padding(padding: const EdgeInsets.fromLTRB(24, 26, 24, 12),
+  Key? settingKey(String title) => title == _settingsTargetTitle ? _settingsTargetKey : null;
+  Widget section(String title, String subtitle) => Padding(key: settingKey(title), padding: const EdgeInsets.fromLTRB(24, 26, 24, 12),
     child: Row(children: [Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
       const Spacer(), Text(subtitle, style: const TextStyle(color: muted, fontSize: 12))]));
   Widget permissionBanner() => Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
@@ -443,14 +460,16 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       const SliverToBoxAdapter(child: SizedBox(height: 90)),
     ]);
   }
-  Widget settingsPage() => SettingsPage(onOpen: _openSettingsSection,
+  Widget settingsPage() => SettingsPage(onOpen: _openSettingsSection, currentValue: _settingValue,
     version: (store.status['version'] as String? ?? '').isEmpty ? '本机离线' : 'v${store.status['version']}');
   void _settingsAction(BuildContext sheetContext, String action) {
     if (ModalRoute.of(sheetContext)?.isCurrent == true) Navigator.pop(sheetContext, action);
   }
-  Future<void> _openSettingsSection(SettingsSection section) async {
+  Future<void> _openSettingsSection(SettingsSection section, {SettingsEntry? target}) async {
     if (!mounted || _settingsSheetOpen) return;
     _settingsSheetOpen = true; _entryPending = false; _entryEpoch++;
+    _settingsTargetTitle = target?.anchor;
+    _settingsTargetKey = target == null ? null : GlobalKey();
     if (voice.active || voice.pending != null) {
       unawaited(voice.pause(keepDraft: false).catchError((Object e) { toast(niceError(e)); }));
     }
@@ -459,11 +478,56 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       action = await showModalBottomSheet<String>(context: context, isScrollControlled: true,
         useSafeArea: true, backgroundColor: Colors.transparent, barrierColor: ink.withValues(alpha: .20),
         builder: (_) => SettingsSheet(section: section, changes: store,
+          messengerKey: _settingsMessenger, targetKey: _settingsTargetKey, target: target,
           items: (sheetContext) => _settingsItems(section.category, sheetContext)));
-    } finally { _settingsSheetOpen = false; _entryPending = false; _entryEpoch++; }
+    } finally {
+      _settingsSheetOpen = false; _entryPending = false; _entryEpoch++;
+      _settingsTargetTitle = null; _settingsTargetKey = null;
+      if (mounted) setState(() {});
+    }
     if (!mounted) return;
     if (action == 'history') await taskLibrary();
     if (action == 'voice' && _foreground) { setState(() => tab = 0); await voice.startCommands(); }
+  }
+  String _settingValue(SettingsEntry entry) {
+    final d = store.defaults, s = store.status;
+    String toggle(bool value) => value ? '已开启' : '已关闭';
+    return switch (entry.id) {
+      'presentation' => d['presentation'] == 'drawer' ? '仅通知栏' : '横幅和通知栏',
+      'lockscreen' => d['lockscreen'] == 'hidden' ? '不在锁屏显示' : '隐藏正文',
+      'vibration' => vibrationLabel(d['vibration'] as String? ?? 'three'),
+      'sound' => toggle(d['sound'] as bool? ?? true),
+      'ringtone' => (d['ringtone'] as String? ?? '').isEmpty ? '系统默认' : '已选择铃声',
+      'interval' => '${d['intervalMinutes'] ?? 5} 分钟',
+      'count' => '${d['totalCount'] ?? 3} 次（含首次）',
+      'wake' => toggle(d['wakeScreen'] as bool? ?? true),
+      'popup' => s['popupEnabled'] != true ? '已关闭' : s['popupPermission'] == true ? '已开启' : '等待悬浮窗授权',
+      'handsFree' => toggle(d['handsFree'] as bool? ?? false),
+      'autoStop' => toggle(d['voiceAutoStop'] as bool? ?? true),
+      'silence' => '${d['voiceSilenceSeconds'] ?? 5} 秒',
+      'offline' => '已内置 · 无需联网',
+      'groups' => '${store.voiceGroups.length} 个角色组',
+      'speechMode' => toggle(d['speechMode'] == 'on'),
+      'speechVoice' => d['speechRandom'] == true ? '随机音色' : '固定音色',
+      'speechRate' => '${d['speechRate'] ?? 1.0} 倍速',
+      'speechLock' => d['speechHideLocked'] == false ? '允许播报正文' : '隐藏播报正文',
+      'speechRepeat' => toggle(d['speechRepeat'] as bool? ?? true),
+      'speechStatus' || 'prepareSpeech' => speech.status.value,
+      'reliable' => toggle(s['reliableMode'] as bool? ?? true),
+      'service' => s['guardianRunning'] == true ? '正在维护提醒' : '当前未运行',
+      'notifications' => s['notifications'] == true ? '已授权' : '未授权',
+      'exact' || 'schedule' => s['exact'] == true ? '精确定时已可用' : '需授权',
+      'battery' => s['battery'] == true ? '不受电池优化' : '请检查系统设置',
+      'history' => '${store.reminders.where((r) => r.archived || r.completed).length} 条记录',
+      'cleanup' => toggle(s['cleanupPrompts'] as bool? ?? true),
+      'testDelete' => toggle(s['testAutoDelete'] as bool? ?? true),
+      'test' => '按当前默认样式测试一次',
+      'lastReceived' => eventTime(s['lastReceived']),
+      'lastRestored' => eventTime(s['lastRestored']),
+      'styles' => '${(s['notificationStyles'] as List? ?? []).length} 种样式',
+      'signing' => '固定签名 · 支持覆盖更新',
+      _ => '点击前往查看',
+    };
   }
   List<Widget> _settingsItems(SettingsCategory category, BuildContext sheetContext) => switch (category) {
     SettingsCategory.reminders => [
@@ -480,7 +544,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         final v = await chooseVibration(context, store.defaults['vibration'] as String? ?? 'three');
         if (v != null) { store.defaults['vibration'] = v; await persistDefaults(); }
       }),
-      SwitchListTile(title: const Text('铃声'), subtitle: const Text('到时播放系统通知铃声'),
+      SwitchListTile(key: settingKey('铃声'), title: const Text('铃声'), subtitle: const Text('到时播放系统通知铃声'),
         value: store.defaults['sound'] as bool? ?? true, onChanged: (v) async { store.defaults['sound'] = v; await persistDefaults(); }),
       settingRow(Icons.music_note_outlined, '选择系统铃声', (store.defaults['ringtone'] as String? ?? '').isEmpty ? '系统默认' : '已选择', () async {
         try {
@@ -496,19 +560,20 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         final n = await numberDialog(context, '提醒总次数（包含第一次）', store.defaults['totalCount'] as int? ?? 3, 1, 20);
         if (n != null) { store.defaults['totalCount'] = n; await persistDefaults(); }
       }),
-      SwitchListTile(title: const Text('尝试亮屏'), subtitle: const Text('不解锁屏幕，受手机系统设置影响'),
+      SwitchListTile(key: settingKey('尝试亮屏'), title: const Text('尝试亮屏'), subtitle: const Text('不解锁屏幕，受手机系统设置影响'),
         value: store.defaults['wakeScreen'] as bool? ?? true, onChanged: (v) async { store.defaults['wakeScreen'] = v; await persistDefaults(); }),
     ]),
     section('亮屏弹窗', '在其他应用或桌面也显示提醒小卡片'),
     settingsGroup([
-      SwitchListTile(title: const Text('亮屏弹窗增强'),
+      SwitchListTile(key: settingKey('亮屏弹窗增强'), title: const Text('亮屏弹窗增强'),
         subtitle: Text(store.status['popupEnabled'] == true
           ? store.status['popupPermission'] == true ? '已授权：仅解锁亮屏显示，10秒自动收起，未读仍会重试' : '等待悬浮窗授权：请重新开启并在系统页面允许'
           : '开启后需允许“显示在其他应用上层”；锁屏不显示浮窗正文'),
         value: store.status['popupEnabled'] as bool? ?? false,
         onChanged: (enabled) async {
           try { await native.invokeMethod('popupMode', enabled); await reload(); }
-          catch (e) { await reload(); toast(niceError(e)); }
+          catch (e) { await reload(); toast(niceError(e)); return; }
+          toast(enabled ? store.status['popupPermission'] == true ? '亮屏弹窗增强已开启' : '已保存，请在系统页面允许悬浮窗权限' : '亮屏弹窗增强已关闭');
         }),
       const ListTile(subtitle: Text('适用于“横幅和通知栏”提醒。点击已读或横向滑动确认；收起及自动消失均保持未读。系统横幅仍需在对应通知样式中允许，部分应用可限制悬浮窗。')),
       if ((store.status['popupError'] as String? ?? '').isNotEmpty)
@@ -517,14 +582,14 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     ],
     SettingsCategory.voiceInput => [
     section('免手操作', ''), settingsGroup([
-      SwitchListTile(title: const Text('打开应用后预听'),
+      SwitchListTile(key: settingKey('打开应用后预听'), title: const Text('打开应用后预听'),
         subtitle: const Text('从桌面或其他应用返回后预听15秒'),
         value: store.defaults['handsFree'] as bool? ?? false,
         onChanged: (v) async { store.defaults['handsFree'] = v; await persistDefaults(); }),
     ]),
     settingsHint('说“开始录音”后进入正式录入。切换Tab不会重新开麦，编辑和待确认内容不被打断。'),
     section('录音', ''), settingsGroup([
-      SwitchListTile(title: const Text('静音后自动结束'),
+      SwitchListTile(key: settingKey('静音后自动结束'), title: const Text('静音后自动结束'),
         subtitle: const Text('说完后自动进入确认'),
         value: store.defaults['voiceAutoStop'] as bool? ?? true,
         onChanged: (v) async { store.defaults['voiceAutoStop'] = v; await persistDefaults(); }),
@@ -536,11 +601,11 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     ]),
     settingsHint('单次录音最长45秒，确认过程不播放语音。'),
     section('识别方式', ''), settingsGroup([
-      const ListTile(leading: Icon(Icons.shield_outlined, color: purple), title: Text('本机离线'),
-        subtitle: Text('录音只在本机识别'), trailing: Tag('已内置')),
+      ListTile(key: settingKey('本机离线'), leading: const Icon(Icons.shield_outlined, color: purple), title: const Text('本机离线'),
+        subtitle: const Text('录音只在本机识别'), trailing: const Tag('已内置')),
     ]),
     settingsHint('无需联网。首次准备或从后台返回时，可能需要稍候。'),
-    Padding(padding: const EdgeInsets.fromLTRB(20, 24, 20, 4), child: FilledButton.tonalIcon(
+    Padding(padding: const EdgeInsets.fromLTRB(20, 24, 20, 4), child: FilledButton.tonalIcon(key: settingKey('试用免手输入'),
       onPressed: () => _settingsAction(sheetContext, 'voice'),
       style: FilledButton.styleFrom(backgroundColor: lavender, foregroundColor: purple),
       icon: const Icon(Icons.mic_none_rounded), label: const Text('试用免手输入'))),
@@ -552,9 +617,11 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         await reload();
       }),
       defaultSpeechOptions(),
-      ValueListenableBuilder<String>(valueListenable: speech.status, builder: (_, value, child) => ListTile(
+      ValueListenableBuilder<String>(valueListenable: speech.status, builder: (_, value, child) => ListTile(key: settingKey('语音准备状态'),
         leading: const Icon(Icons.graphic_eq, color: purple), title: const Text('语音准备状态'), subtitle: Text(value))),
-      settingRow(Icons.refresh, '重新准备提醒语音', '补齐未完成的音频，不改变提醒时间', () => speech.preparePending(retry: true)),
+      settingRow(Icons.refresh, '重新准备提醒语音', '补齐未完成的音频，不改变提醒时间', () async {
+        await speech.preparePending(retry: true); await reload(); toast(speech.status.value);
+      }),
       if (((store.status['speech'] as Map?)?['error'] as String? ?? '').isNotEmpty)
         ListTile(subtitle: Text((store.status['speech'] as Map)['error'] as String)),
     ]),
@@ -562,14 +629,14 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     SettingsCategory.background => [
     section('后台可靠性', '增强最近任务关闭后的提醒维护'),
     settingsGroup([
-      SwitchListTile(title: const Text('可靠提醒模式'),
+      SwitchListTile(key: settingKey('可靠提醒模式'), title: const Text('可靠提醒模式'),
         subtitle: const Text('有待触发任务时显示静默常驻通知，提高后台可靠性；不能绕过系统强行停止'),
         value: store.status['reliableMode'] as bool? ?? true,
         onChanged: (enabled) async {
-          try { await native.invokeMethod('reliableMode', enabled); await reload(); }
+          try { await native.invokeMethod('reliableMode', enabled); await reload(); toast(enabled ? '可靠提醒模式已开启' : '可靠提醒模式已关闭'); }
           catch (e) { await reload(); toast(niceError(e)); }
         }),
-      ListTile(leading: const Icon(Icons.shield_outlined, color: purple), title: const Text('提醒服务状态'),
+      ListTile(leading: const Icon(Icons.shield_outlined, color: purple), key: settingKey('提醒服务状态'), title: const Text('提醒服务状态'),
         subtitle: Text(store.status['reliableMode'] == false ? '可靠模式已关闭，仍保留系统闹钟'
           : store.status['guardianRunning'] == true ? '正在维护待触发提醒'
           : ((store.status['pending'] as Map?)?['count'] as int? ?? 0) == 0 ? '没有待触发任务，无需常驻运行'
@@ -579,10 +646,10 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     ]),
     section('隐私与提醒权限', ''),
     settingsGroup([
-      ListTile(leading: const Icon(Icons.notifications_none, color: purple), title: const Text('通知权限'),
+      ListTile(leading: const Icon(Icons.notifications_none, color: purple), key: settingKey('通知权限'), title: const Text('通知权限'),
         subtitle: Text(store.status['notifications'] == true ? '已开启' : '未开启，请在提醒自检中授权')),
-      const ListTile(leading: Icon(Icons.lock_outline, color: purple), title: Text('锁屏内容保护'),
-        subtitle: Text('使用系统锁屏隐私保护，解锁自动显示正文；不使用全屏通知')),
+      ListTile(key: settingKey('锁屏内容保护'), leading: const Icon(Icons.lock_outline, color: purple), title: const Text('锁屏内容保护'),
+        subtitle: const Text('使用系统锁屏隐私保护，解锁自动显示正文；不使用全屏通知')),
       settingRow(Icons.alarm_on_rounded, '精确定时权限', store.status['exact'] == true ? '已开启' : '需开启', () => native.invokeMethod('requestExact')),
       settingRow(Icons.battery_saver_outlined, '后台运行', store.status['battery'] == true ? '不受电池优化' : '检查电池优化', () => native.invokeMethod('batterySettings')),
       settingRow(Icons.phonelink_setup_rounded, '应用系统设置', '荣耀应用启动管理', () => native.invokeMethod('appSettings')),
@@ -591,12 +658,12 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     SettingsCategory.data => [
     section('任务整理', '完成记录自动收起，保留以后使用'),
     settingsGroup([
-      ListTile(title: const Text('历史任务'), subtitle: const Text('完成与主动保留的记录合并显示；编辑保存后重新启用'),
+      ListTile(key: settingKey('历史任务'), title: const Text('历史任务'), subtitle: const Text('完成与主动保留的记录合并显示；编辑保存后重新启用'),
         leading: const Icon(Icons.inventory_2_outlined, color: purple), trailing: const Icon(Icons.chevron_right), onTap: () => _settingsAction(sheetContext, 'history')),
-      SwitchListTile(title: const Text('划掉通知后询问整理方式'),
+      SwitchListTile(key: settingKey('划掉通知后询问整理方式'), title: const Text('划掉通知后询问整理方式'),
         subtitle: const Text('划掉通知先结束本轮，再询问保留或删除；不选择时保留记录与循环，自检自动清理时不再询问'),
         value: store.status['cleanupPrompts'] as bool? ?? true, onChanged: (v) async {
-          try { await native.invokeMethod('cleanupPrompts', v); await reload(); } catch (e) { toast(niceError(e)); }
+          try { await native.invokeMethod('cleanupPrompts', v); await reload(); toast('整理方式设置已保存'); } catch (e) { toast(niceError(e)); }
         }),
     ]),
     section('数据迁移', ''), settingsGroup([
@@ -613,7 +680,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         if (proceed != true) { return; }
         await native.invokeMethod('requestNotifications');
         final count = await native.invokeMethod<int>('importBackup');
-        if (count != null) { unawaited(speech.preparePending()); toast('已合并导入 $count 条提醒'); }
+        if (count != null) { unawaited(speech.preparePending()); await reload(); toast('已合并导入 $count 条提醒'); }
       }),
     ]),
     ],
@@ -623,29 +690,31 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         if (store.status['notifications'] != true) { await native.invokeMethod('requestNotifications'); }
         await native.invokeMethod('notificationSettings');
       }),
-      SwitchListTile(title: const Text('测试提醒完成后自动删除'),
+      SwitchListTile(key: settingKey('测试提醒完成后自动删除'), title: const Text('测试提醒完成后自动删除'),
         subtitle: const Text('仅作用于新建的15秒自检提醒；确认或划掉通知后删除，未确认时保留。普通备忘录不受影响。'),
         value: store.status['testAutoDelete'] as bool? ?? true, onChanged: (v) async {
-          try { await native.invokeMethod('testAutoDelete', v); await reload(); } catch (e) { toast(niceError(e)); }
+          try { await native.invokeMethod('testAutoDelete', v); await reload(); toast('测试提醒清理设置已保存'); } catch (e) { toast(niceError(e)); }
         }),
       settingRow(Icons.notifications_active_outlined, '15秒后发送测试提醒', '使用当前默认样式；语音未就绪时使用备用提醒', () async {
-        await native.invokeMethod('requestNotifications');
+        final allowed = await native.invokeMethod<bool>('requestNotifications');
+        if (allowed == false) { toast('请先开启通知权限后再测试'); return; }
         await native.invokeMethod('testReminder');
         toast('测试提醒已设置，请返回桌面等待15秒');
+        await reload();
       }),
-      ListTile(leading: const Icon(Icons.alarm_on, color: purple), title: const Text('系统闹钟排程'),
+      ListTile(key: settingKey('系统闹钟排程'), leading: const Icon(Icons.alarm_on, color: purple), title: const Text('系统闹钟排程'),
         subtitle: Text(store.status['exact'] == true ? '精确定时已可用，状态栏可能显示下一闹钟' : '尚未允许精确定时，提醒不会静默降级')),
-      ListTile(leading: const Icon(Icons.schedule, color: purple), title: const Text('最近实际触发'),
+      ListTile(key: settingKey('最近实际触发'), leading: const Icon(Icons.schedule, color: purple), title: const Text('最近实际触发'),
         subtitle: Text(eventTime(store.status['lastReceived']))),
-      ListTile(leading: const Icon(Icons.restart_alt, color: purple), title: const Text('最近恢复排程'),
+      ListTile(key: settingKey('最近恢复排程'), leading: const Icon(Icons.restart_alt, color: purple), title: const Text('最近恢复排程'),
         subtitle: Text(eventTime(store.status['lastRestored']))),
       settingRow(Icons.bug_report_outlined, '导出提醒诊断', '包含排程、启动前快照与进程退出原因；不含备忘正文', () async {
         final ok = await native.invokeMethod<bool>('exportDiagnostics');
         if (ok == true) { toast('诊断已导出，可用于排查后台提醒问题'); }
       }),
       notificationStylesList(),
-      const ListTile(leading: Icon(Icons.security, color: purple), title: Text('固定发布签名'),
-        subtitle: Text('同一固定签名的版本可覆盖更新，数据保存在本机')),
+      ListTile(key: settingKey('固定发布签名'), leading: const Icon(Icons.security, color: purple), title: const Text('固定发布签名'),
+        subtitle: const Text('同一固定签名的版本可覆盖更新，数据保存在本机')),
     ]),
     section('使用提示', ''), Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Surface(child: const Text(
       '• 手动划掉系统通知或点击已读后结束本轮重提醒；App 中结束并保留会停用后续提醒。点开通知、横幅自动收起不算已读。\n\n'
@@ -677,7 +746,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     });
   }
   Future<void> persistDefaults() async {
-    try { await store.saveDefaults(); await reload(); }
+    try { await store.saveDefaults(); await reload(); toast('设置已保存'); }
     catch (e) { await reload(); toast(niceError(e)); }
   }
   Widget notificationStylesList() {
@@ -685,7 +754,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       .map((v) => Map<String, dynamic>.from(v as Map)).toList()
       ..sort((a, b) => (b['isDefault'] == true ? 1 : 0).compareTo(a['isDefault'] == true ? 1 : 0));
     final hidden = store.status['hiddenChannelCount'] as int? ?? 0;
-    return ExpansionTile(key: const PageStorageKey('notification-styles'),
+    return ExpansionTile(key: settingKey('通知样式') ?? const PageStorageKey('notification-styles'),
       leading: const Icon(Icons.tune_rounded, color: purple),
       title: Text('通知样式（${styles.length}种）'), subtitle: const Text('按展示、振动和铃声分组'),
       children: [
@@ -706,10 +775,10 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     child: Surface(padding: const EdgeInsets.symmetric(vertical: 4), child: Column(children: children)));
   Widget settingsHint(String text) => Padding(padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
     child: Text(text, style: const TextStyle(color: muted, fontSize: 12, height: 1.6)));
-  Widget settingRow(IconData icon, String title, String value, Future<void> Function() action) => ListTile(
-    leading: Icon(icon, color: purple), title: Text(title), subtitle: Text(value, style: const TextStyle(color: muted, fontSize: 12)),
-    trailing: const Icon(Icons.chevron_right, color: muted), onTap: () async {
-      try { await action(); await reload(); } catch (e) { toast(niceError(e)); }
+  Widget settingRow(IconData icon, String title, String value, Future<void> Function() action) => SettingsActionTile(
+    key: settingKey(title), icon: icon, title: title, value: value, highlighted: title == _settingsTargetTitle,
+    action: () async {
+      try { await action(); } catch (e) { toast(niceError(e)); }
     });
 }
 
@@ -790,36 +859,6 @@ class NotificationDisplayOptions extends StatelessWidget {
     const Padding(padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: Text('实际显示受系统设置控制。隐藏正文时，请同时在系统通知设置中关闭“显示敏感内容”；解锁后由系统显示正文。', style: TextStyle(color: muted, fontSize: 12))),
   ]);
-}
-const vibrations = {'system': '系统默认', 'off': '关闭', 'once': '振动一次', 'twice': '振动两次', 'three': '振动三次', 'strong': '长振动两次'};
-const vibrationHints = {
-  'system': '节奏和次数由系统决定，不导入“三次”节奏', 'off': '不请求通知振动',
-  'once': '1次250毫秒短振动', 'twice': '2次250毫秒短振动，间隔200毫秒',
-  'three': '3次200毫秒短振动，每次间隔200毫秒', 'strong': '2次700毫秒长振动，间隔250毫秒',
-};
-String vibrationLabel(String value) => vibrations[value] ?? '振动三次';
-Future<String?> chooseVibration(BuildContext context, String current) {
-  var message = '试振只预览应用节奏，不修改选择。实际通知受系统通道、静音、勿扰及硬件影响；系统默认请用15秒通知测试。';
-  return showModalBottomSheet<String>(context: context, showDragHandle: true, isScrollControlled: true,
-    builder: (c) => StatefulBuilder(builder: (c, update) => SafeArea(child: ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(c).height * 0.85),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Padding(padding: EdgeInsets.all(12), child: Text('振动模式', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
-        Flexible(child: SingleChildScrollView(child: Column(children: vibrations.entries.map((e) => ListTile(
-          title: Text(e.value), subtitle: Text(vibrationHints[e.key]!, style: const TextStyle(fontSize: 12)),
-          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-            if (e.key == current) const Icon(Icons.check_rounded, color: purple),
-            if (e.key != 'system' && e.key != 'off') IconButton(tooltip: '试振${e.value}',
-              icon: const Icon(Icons.vibration, color: purple), onPressed: () async {
-                try {
-                  await native.invokeMethod('previewVibration', e.key);
-                  if (c.mounted) { update(() => message = '已请求${e.value}。若未振动，请检查静音、勿扰及系统触感设置；实际通知请用15秒测试。'); }
-                } catch (error) { if (c.mounted) { update(() => message = niceError(error)); } }
-              }),
-          ]), onTap: () => Navigator.pop(c, e.key))).toList()))),
-        Padding(padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
-          child: Text(message, style: const TextStyle(color: muted, fontSize: 12))),
-      ])))));
 }
 Future<int?> numberDialog(BuildContext context, String title, int current, int min, int max) async {
   final controller = TextEditingController(text: '$current');

@@ -62,10 +62,15 @@ void main() {
     for (final section in settingsSections) { expect(find.text(section.title), findsOneWidget); }
     expect(find.text('自动停录等待'), findsNothing);
     await tester.enterText(find.byKey(const ValueKey('settings-search')), '自动停录'); await tester.pumpAndSettle();
-    expect(find.text('语音录入'), findsOneWidget); expect(find.text('任务与数据'), findsNothing);
-    await tester.tap(find.text('语音录入')); await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('settings-result-silence')), findsOneWidget);
+    expect(find.text('任务与数据'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('settings-result-silence'))); await tester.pumpAndSettle();
+    expect(find.text('当前：5 秒'), findsOneWidget);
+    expect(find.text('选择连续安静多少秒后结束录音。'), findsWidgets);
+    await tester.tap(find.text('前往设置')); await tester.pumpAndSettle();
     expect(find.byType(SettingsSheet), findsOneWidget);
     expect(find.text('自动停录等待'), findsOneWidget);
+    expect(find.text('已定位：自动停录等待'), findsOneWidget);
     await tester.tap(find.byTooltip('关闭设置分类')); await tester.pumpAndSettle();
     expect(find.byType(SettingsSheet), findsNothing); expect(saves, 0);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
