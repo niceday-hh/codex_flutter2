@@ -70,6 +70,8 @@ SDK Manager 能显示版本，但在本工作区的代理连接中无法获取�
 
 ## 后续完成条件
 
+后续继续尝试了真实 pthread 入口的进程级启动适配：最小 Dart 与 Flutter 版本命令得以运行，但依赖准备及实际 APK 构建又在可执行文件路径查询中发生 SIGSEGV；`/proc/self/exe` 在当前沙箱也不可访问。适配未加入默认配置，未生成 APK。完整实际构建日志及边界见 [current-workspace-apk-attempt.md](current-workspace-apk-attempt.md)。
+
 1. 当前工作区可继续编辑源码并运行已验证的 Java/Python 检查。完整 APK 构建需要宿主提供官方 Dart VM 所需的正常线程栈信息；普通目录、PATH 或项目依赖配置不能代替这一条件。
 2. 首先验证 `flutter --version` 能正常返回，再运行项目检查；若仍有线程栈错误，应更换受支持的宿主环境。
 3. 在该环境重新执行 SDK Manager 安装及本地包识别检查，完成 API 33 / 35 镜像和 AVD 配置。
