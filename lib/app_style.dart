@@ -10,16 +10,17 @@ const lavender = Color(0xFFF0ECFF);
 class FrostedPanel extends StatelessWidget {
   final Widget child;
   final double radius;
-  const FrostedPanel({super.key, required this.child, this.radius = 30});
+  final bool blur;
+  const FrostedPanel({super.key, required this.child, this.radius = 30, this.blur = true});
   @override Widget build(BuildContext context) => DecoratedBox(
     decoration: BoxDecoration(borderRadius: BorderRadius.circular(radius), boxShadow: [
-      BoxShadow(color: ink.withValues(alpha: .09), blurRadius: 36, offset: const Offset(0, 12)),
+      BoxShadow(color: ink.withValues(alpha: .09), blurRadius: blur ? 36 : 16, offset: const Offset(0, 8)),
     ]),
-    child: ClipRRect(borderRadius: BorderRadius.circular(radius), child: BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-      child: DecoratedBox(decoration: BoxDecoration(
+    child: ClipRRect(borderRadius: BorderRadius.circular(radius), child: blur ? BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16), child: _surface()) : _surface()));
+  Widget _surface() => DecoratedBox(decoration: BoxDecoration(
         gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
-          colors: [Colors.white.withValues(alpha: .97), const Color(0xFFF9F7FF).withValues(alpha: .93)]),
+          colors: [Colors.white.withValues(alpha: blur ? .97 : 1), const Color(0xFFF9F7FF).withValues(alpha: blur ? .93 : 1)]),
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: Colors.white.withValues(alpha: .85))), child: child))));
+        border: Border.all(color: Colors.white.withValues(alpha: .85))), child: child);
 }

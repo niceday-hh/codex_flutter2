@@ -211,7 +211,11 @@ public final class MainActivity extends FlutterActivity {
                         result.success(null);
                     }
                     case "reliableMode" -> { store.reliableMode((Boolean) call.arguments); result.success(null); }
-                    case "previewVibration" -> { NotificationStyles.preview(this, (String) call.arguments); result.success(null); }
+                    case "previewVibration" -> {
+                        if (!resumed || getSystemService(KeyguardManager.class).isKeyguardLocked())
+                            throw new IllegalStateException("请解锁并保持试振页面打开");
+                        result.success(NotificationStyles.preview(this, (String) call.arguments).toString());
+                    }
                     case "notificationStyleSettings" -> {
                         String id = store.channelForStyle((String) call.arguments);
                         startActivity(new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)

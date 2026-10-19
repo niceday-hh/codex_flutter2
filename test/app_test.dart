@@ -170,14 +170,16 @@ void main() {
   testWidgets('vibration preview does not choose or save a different mode', (tester) async {
     String? previewed, selected;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      native, (call) async { if (call.method == 'previewVibration') { previewed = call.arguments as String; } return null; });
+      native, (call) async { if (call.method == 'previewVibration') { previewed = call.arguments as String; return jsonEncode({'requested': true, 'durationMs': 1000}); } return null; });
     await tester.binding.setSurfaceSize(const Size(393, 852));
     await tester.pumpWidget(MaterialApp(home: Builder(builder: (context) => Scaffold(body: TextButton(
       onPressed: () async { selected = await chooseVibration(context, 'once'); }, child: const Text('打开振动模式'))))));
     await tester.tap(find.text('打开振动模式')); await tester.pumpAndSettle();
     expect(find.textContaining('次数由系统决定'), findsOneWidget);
+    await tester.ensureVisible(find.byTooltip('试振振动三次'));
     await tester.tap(find.byTooltip('试振振动三次')); await tester.pumpAndSettle();
     expect(previewed, 'three'); expect(selected, isNull); expect(find.text('振动模式'), findsOneWidget);
+    await tester.ensureVisible(find.text('振动两次'));
     await tester.tap(find.text('振动两次')); await tester.pumpAndSettle();
     expect(selected, 'twice'); expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox()); await tester.pump();

@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:timed_memo/main.dart';
+import 'package:timed_memo/settings_page.dart';
 import 'package:timed_memo/voice_flow.dart';
 import 'package:timed_memo/voice_page.dart';
 import 'voice_flow_test.dart' show FakeCapture, FakeStore;
@@ -44,12 +45,35 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(393, 852));
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('memo/native'), (call) async => call.method == 'getState'
-        ? jsonEncode({'reminders': [], 'defaults': {'handsFree': true}, 'status': {'version': '0.9.2', 'notifications': true, 'exact': true}}) : null);
+        ? jsonEncode({'reminders': [], 'defaults': {'handsFree': true}, 'status': {'version': '0.9.3', 'notifications': true, 'exact': true}}) : null);
     await tester.pumpWidget(const RepaintBoundary(key: previewKey, child: MemoApp())); await tester.pumpAndSettle();
     await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置'))); await tester.pumpAndSettle();
     await capture(tester, 'settings-overview');
     await tester.tap(find.text('语音录入')); await tester.pumpAndSettle();
     await capture(tester, 'settings-voice-input');
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  }, skip: !previewsEnabled);
+  testWidgets('render child search, preview and feedback in the open settings sheet', (tester) async {
+    tester.view.devicePixelRatio = 2; tester.view.physicalSize = const Size(786, 1704);
+    addTearDown(tester.view.resetDevicePixelRatio); addTearDown(tester.view.resetPhysicalSize);
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('memo/native'), (call) async {
+        if (call.method == 'getState') return jsonEncode({'reminders': [], 'defaults': {}, 'status': {'version': '0.9.3', 'notifications': true, 'exact': true}});
+        if (call.method == 'requestNotifications') return true;
+        if (call.method == 'testReminder') return 1;
+        return null;
+      });
+    await tester.pumpWidget(const RepaintBoundary(key: previewKey, child: MemoApp())); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置'))); await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('settings-search')), '15秒'); await tester.pumpAndSettle();
+    await capture(tester, 'settings-search-results');
+    await tester.tap(find.byKey(const ValueKey('settings-result-test'))); await tester.pumpAndSettle();
+    await capture(tester, 'settings-search-preview');
+    await tester.tap(find.text('前往设置')); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(SettingsSheet), matching: find.text('15秒后发送测试提醒'))); await tester.pumpAndSettle();
+    expect(find.text('测试提醒已设置，请返回桌面等待15秒'), findsOneWidget);
+    await capture(tester, 'settings-test-feedback');
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   }, skip: !previewsEnabled);
   testWidgets('render actual voice confirmation with parsed retry settings', (tester) async {
