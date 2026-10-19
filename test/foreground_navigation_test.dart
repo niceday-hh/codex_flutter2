@@ -18,13 +18,13 @@ void main() {
     });
     await tester.binding.setSurfaceSize(const Size(393, 852));
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
+    final openHistory = tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.inventory_2_outlined)).onPressed!;
     await tester.tap(find.byTooltip('历史任务'));
-    await tester.tap(find.byTooltip('历史任务'));
-    await tester.tap(find.byTooltip('历史任务'));
+    openHistory(); openHistory();
     await tester.pumpAndSettle();
     expect(find.byType(TaskLibraryPage), findsOneWidget);
     expect(cancellations, 1);
-    await tester.pageBack(); await tester.pumpAndSettle();
+    await tester.tap(find.byType(BackButton)); await tester.pumpAndSettle();
     expect(find.byType(TaskLibraryPage), findsNothing);
     expect(find.byType(NavigationBar), findsOneWidget);
     stopped.complete(); await tester.pump();
@@ -44,7 +44,7 @@ void main() {
     await tester.tap(find.byTooltip('历史任务')); await tester.pumpAndSettle();
     expect(find.byType(TaskLibraryPage), findsOneWidget);
     assets.complete(null); await tester.pump();
-    await tester.pageBack(); await tester.pumpAndSettle();
+    await tester.tap(find.byType(BackButton)); await tester.pumpAndSettle();
     expect(find.byType(TaskLibraryPage), findsNothing);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
     expect(tester.takeException(), isNull);

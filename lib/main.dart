@@ -516,13 +516,16 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     ]),
     ],
     SettingsCategory.voiceInput => [
-    section('免手语音操作', ''), settingsGroup([
-      SwitchListTile(title: const Text('打开应用后预听语音指令'),
-        subtitle: const Text('仅在从桌面或其他应用返回时预听15秒，切换Tab不会重新启动；编辑和待确认内容不被打断。'),
+    section('免手操作', ''), settingsGroup([
+      SwitchListTile(title: const Text('打开应用后预听'),
+        subtitle: const Text('从桌面或其他应用返回后预听15秒'),
         value: store.defaults['handsFree'] as bool? ?? false,
         onChanged: (v) async { store.defaults['handsFree'] = v; await persistDefaults(); }),
-      SwitchListTile(title: const Text('连续安静后自动结束录音'),
-        subtitle: const Text('按人声活动判断，识别后弹出确认卡片；确认阶段不播放语音。'),
+    ]),
+    settingsHint('说“开始录音”后进入正式录入。切换Tab不会重新开麦，编辑和待确认内容不被打断。'),
+    section('录音', ''), settingsGroup([
+      SwitchListTile(title: const Text('静音后自动结束'),
+        subtitle: const Text('说完后自动进入确认'),
         value: store.defaults['voiceAutoStop'] as bool? ?? true,
         onChanged: (v) async { store.defaults['voiceAutoStop'] = v; await persistDefaults(); }),
       settingRow(Icons.timer_outlined, '自动停录等待', "${store.defaults['voiceSilenceSeconds'] ?? 5} 秒 · 单次录音最长45秒", () async {
@@ -530,15 +533,17 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
           children: [for (var i = 3; i <= 10; i++) SimpleDialogOption(onPressed: () => Navigator.pop(c, i), child: Text('$i 秒'))]));
         if (seconds != null) { store.defaults['voiceSilenceSeconds'] = seconds; await persistDefaults(); }
       }),
-      settingRow(Icons.mic_external_on_outlined, '试用免手输入', '先说“开始录音”，再说时间和事项；确认或重新录音均可语音操作', () async {
-        _settingsAction(sheetContext, 'voice');
-      }),
     ]),
-    section('语音识别', ''), settingsGroup([
-      const ListTile(leading: Icon(Icons.mic_none_rounded, color: purple), title: Text('离线语音识别'),
-        subtitle: Text('Paraformer int8 + Silero VAD · 全程本地'), trailing: Tag('已内置')),
-      const ListTile(subtitle: Text('本次前台使用期间复用已加载的识别模型；切到后台、内存紧张或准备播报音频时会释放。')),
+    settingsHint('单次录音最长45秒，确认过程不播放语音。'),
+    section('识别方式', ''), settingsGroup([
+      const ListTile(leading: Icon(Icons.shield_outlined, color: purple), title: Text('本机离线'),
+        subtitle: Text('Paraformer int8 + Silero VAD'), trailing: Tag('已内置')),
     ]),
+    settingsHint('前台复用已加载的识别模型；切到后台、内存紧张或准备播报音频时会释放。'),
+    Padding(padding: const EdgeInsets.fromLTRB(20, 24, 20, 4), child: FilledButton.tonalIcon(
+      onPressed: () => _settingsAction(sheetContext, 'voice'),
+      style: FilledButton.styleFrom(backgroundColor: lavender, foregroundColor: purple),
+      icon: const Icon(Icons.mic_none_rounded), label: const Text('试用免手输入'))),
     ],
     SettingsCategory.speech => [
     section('离线语音播报', 'VITS-MNN · 804个音色条目'), settingsGroup([
@@ -699,6 +704,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   }
   Widget settingsGroup(List<Widget> children) => Padding(padding: const EdgeInsets.symmetric(horizontal: 20),
     child: Surface(padding: const EdgeInsets.symmetric(vertical: 4), child: Column(children: children)));
+  Widget settingsHint(String text) => Padding(padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
+    child: Text(text, style: const TextStyle(color: muted, fontSize: 12, height: 1.6)));
   Widget settingRow(IconData icon, String title, String value, Future<void> Function() action) => ListTile(
     leading: Icon(icon, color: purple), title: Text(title), subtitle: Text(value, style: const TextStyle(color: muted, fontSize: 12)),
     trailing: const Icon(Icons.chevron_right, color: muted), onTap: () async {

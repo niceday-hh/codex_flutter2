@@ -38,9 +38,8 @@ class VoiceConfirmation extends StatelessWidget {
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: ConstrainedBox(constraints: BoxConstraints(maxWidth: 520,
         maxHeight: (MediaQuery.sizeOf(context).height - MediaQuery.viewInsetsOf(context).bottom - 48).clamp(200.0, 1000.0).toDouble()),
-        child: FrostedPanel(child: Padding(padding: const EdgeInsets.fromLTRB(22, 26, 22, 10),
+        child: FrostedPanel(child: SingleChildScrollView(child: Padding(padding: const EdgeInsets.fromLTRB(22, 26, 22, 10),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Flexible(child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Container(width: 44, height: 44, decoration: const BoxDecoration(color: lavender, shape: BoxShape.circle),
                   child: const Icon(Icons.schedule_rounded, color: purple, size: 27)), const SizedBox(width: 14),
@@ -78,7 +77,6 @@ class VoiceConfirmation extends StatelessWidget {
                 decoration: BoxDecoration(color: const Color(0xFFFFEFE5), borderRadius: BorderRadius.circular(12)),
                 child: Text(error, style: const TextStyle(color: Color(0xFFA75A28), fontSize: 13, height: 1.5))),
               const SizedBox(height: 20),
-            ]))),
             Container(padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
               decoration: BoxDecoration(color: lavender, borderRadius: BorderRadius.circular(15)),
               child: Row(children: [Icon(listening ? Icons.mic_rounded : Icons.info_outline_rounded, color: purple, size: 21),
@@ -103,6 +101,6 @@ class VoiceConfirmation extends StatelessWidget {
               child: Text(saving ? '正在保存…' : '确认创建', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16))),
             const SizedBox(height: 3), TextButton(onPressed: saving ? null : flow.cancel,
               child: const Text('取消', style: TextStyle(color: muted))),
-          ]))))));
+          ])))))));
   });
 }
