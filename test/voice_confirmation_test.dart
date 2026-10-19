@@ -11,7 +11,9 @@ void main() {
     await flow.reviewText('五分钟后提醒我喝水');
     await tester.binding.setSurfaceSize(const Size(393, 852));
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: VoiceConfirmation(flow: flow, onEdit: () async {}))));
-    expect(find.text('确认提醒'), findsOneWidget);
+    expect(find.text('确认提醒'), findsNothing);
+    expect(find.text('首次提醒'), findsOneWidget);
+    expect(find.text('共 3 次（含首次）'), findsOneWidget);
     expect(find.text('喝水'), findsOneWidget);
     expect(find.textContaining('可说“确认”'), findsOneWidget);
     await tester.tap(find.text('确认创建')); await tester.tap(find.text('确认创建'));

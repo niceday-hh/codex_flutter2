@@ -12,11 +12,9 @@ import 'voice_flow.dart';
 import 'app_error.dart';
 import 'voice_page.dart';
 import 'voice_groups_page.dart';
-
-const purple = Color(0xFF7252F6);
-const ink = Color(0xFF25213A);
-const muted = Color(0xFF8A859C);
-const canvas = Color(0xFFF8F6FC);
+import 'app_style.dart';
+import 'settings_page.dart';
+export 'app_style.dart' show purple, ink, muted, canvas;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,6 +48,10 @@ class MemoApp extends StatelessWidget {
         backgroundColor: purple, foregroundColor: Colors.white,
         minimumSize: const Size(double.infinity, 52),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)))),
+      outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(
+        foregroundColor: purple, side: BorderSide(color: purple.withValues(alpha: .60)),
+        minimumSize: const Size(0, 48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)))),
     ),
     home: const MemoHome(),
   );
@@ -70,19 +72,23 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   DialogRoute<void>? _voiceDialog;
   bool _dialogScheduled = false, _wasPaused = false, _entryPending = true;
   bool _initialized = false, _foreground = true, _checkingEntry = false, _entryAgain = false, _suppressVoiceEntry = false;
+  bool _taskLibraryOpen = false, _settingsSheetOpen = false;
+  int _entryEpoch = 0, _lifecycleEpoch = 0;
   DateTime selectedDate = DateTime.now();
   DateTime calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
 
   @override void initState() {
     super.initState(); WidgetsBinding.instance.addObserver(this);
+    asr.setForeground(true);
     voice.addListener(_voiceChanged);
     native.setMethodCallHandler((call) async {
       if (call.method == 'openReminder') {
-        _suppressVoiceEntry = true; _entryPending = false;
+        _suppressVoiceEntry = true; _entryPending = false; _entryEpoch++;
         await voice.cancel(); await reload(); if (mounted) openById(call.arguments as int);
       }
       if (call.method == 'voiceEntry') {
-        _suppressVoiceEntry = false; _entryPending = true;
+        if (voice.active || voice.pending != null) return;
+        _suppressVoiceEntry = false; _entryPending = true; _entryEpoch++;
         await _maybeStartHandsFree();
       }
       if (call.method == 'stateChanged') { await reload(); }
@@ -105,8 +111,10 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     if (_checkingEntry) { _entryAgain = true; return; }
     if (!_canStartHandsFree) return;
     _checkingEntry = true;
+    final ticket = _entryEpoch;
     try {
-      if (await native.invokeMethod<bool>('voiceEntryAllowed') == true && _canStartHandsFree) {
+      if (await native.invokeMethod<bool>('voiceEntryAllowed') == true &&
+          ticket == _entryEpoch && _canStartHandsFree) {
         _entryPending = false;
         setState(() => tab = 0);
         await voice.startCommands();
@@ -121,39 +129,43 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     }
   }
   bool get _canStartHandsFree => mounted && _initialized && _foreground && _entryPending &&
-    !_suppressVoiceEntry && !voice.active && voice.pending == null &&
+    !_suppressVoiceEntry && !_taskLibraryOpen && !_settingsSheetOpen && !voice.active && voice.pending == null &&
     store.defaults['handsFree'] == true && !Navigator.of(context).canPop();
   void _warmManualTab() {
     if (!mounted || !_foreground || tab != 2 || voice.active) return;
     unawaited(asr.prewarm().catchError((Object _) {}));
   }
   void _selectTab(int i) {
-    _entryPending = false; speech.stopPreview();
-    final stopped = voice.pause(keepDraft: false);
+    if (i == tab) return;
+    _entryPending = false; _entryEpoch++; speech.stopPreview();
+    final stopped = voice.active || voice.pending != null ? voice.pause(keepDraft: false) : Future<void>.value();
     setState(() => tab = i);
     unawaited(stopped.then((_) async {
       if (!mounted || !_foreground || tab != i || voice.active) return;
       if (i == 2) _warmManualTab();
-      if (i == 0) { _entryPending = true; await _maybeStartHandsFree(); }
     }).catchError((Object e) { toast(niceError(e)); }));
   }
   Future<void> _pauseForBackground() async {
+    final ticket = ++_lifecycleEpoch;
+    asr.setForeground(false);
     try { await voice.pause(); } catch (_) {}
-    finally { asr.release(); }
+    finally { if (!_foreground && ticket == _lifecycleEpoch) asr.release(); }
   }
   @override void dispose() {
     voice.removeListener(_voiceChanged); voice.dispose();
-    asr.release();
+    asr.setForeground(false); asr.release();
     WidgetsBinding.instance.removeObserver(this); native.setMethodCallHandler(null); super.dispose();
   }
   @override void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
       _foreground = false; _wasPaused = true; _suppressVoiceEntry = false;
+      _entryPending = false; _entryEpoch++;
       unawaited(_pauseForBackground());
     }
     if (state == AppLifecycleState.resumed) {
       _foreground = true;
-      if (_wasPaused) { _wasPaused = false; _entryPending = true; }
+      _lifecycleEpoch++; asr.setForeground(true);
+      if (_wasPaused) { _wasPaused = false; _entryPending = true; _entryEpoch++; }
       unawaited(reload().then((_) async { await _maybeStartHandsFree(); _warmManualTab(); }));
     }
   }
@@ -171,6 +183,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         if (route != null && route.isActive) Navigator.of(context).removeRoute(route);
       } else if (_voiceDialog == null) {
         final route = DialogRoute<void>(context: context, barrierDismissible: false,
+          barrierColor: ink.withValues(alpha: .20),
           builder: (_) => VoiceConfirmation(flow: voice, onEdit: _editVoiceDraft));
         _voiceDialog = route;
         Navigator.of(context).push(route).whenComplete(() { if (identical(_voiceDialog, route)) _voiceDialog = null; });
@@ -258,11 +271,15 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     } catch (e) { toast(niceError(e)); }
   }
   Future<void> taskLibrary() async {
-    await voice.pause(keepDraft: false);
-    if (!mounted) return;
-    await Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => TaskLibraryPage(
-      store: store, card: reminderCard)));
-    await reload();
+    if (!mounted || _taskLibraryOpen) return;
+    // Acquire before any await; the page must not wait for a cold ASR load.
+    _taskLibraryOpen = true; _entryPending = false; _entryEpoch++;
+    unawaited(voice.pause(keepDraft: false).catchError((Object e) { toast(niceError(e)); }));
+    try {
+      await Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => TaskLibraryPage(
+        store: store, card: reminderCard)));
+    } finally { _taskLibraryOpen = false; }
+    if (mounted) await reload();
   }
   @override Widget build(BuildContext context) => Scaffold(
     body: SafeArea(child: Column(children: [
@@ -279,14 +296,19 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     floatingActionButton: !loading && error == null && (tab == 0 || tab == 1)
       ? FloatingActionButton(onPressed: () => edit(), backgroundColor: purple,
           foregroundColor: Colors.white, tooltip: '新建提醒', child: const Icon(Icons.add_rounded, size: 32)) : null,
-    bottomNavigationBar: NavigationBar(backgroundColor: Colors.white,
+    bottomNavigationBar: SafeArea(top: false, child: Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: const Color(0xFFF0EDF6))),
+      child: ClipRRect(borderRadius: BorderRadius.circular(26), child: NavigationBar(backgroundColor: Colors.white,
+      height: 72,
       selectedIndex: tab, indicatorColor: const Color(0xFFECE5FF),
       onDestinationSelected: _selectTab, destinations: const [
         NavigationDestination(icon: Icon(Icons.description_outlined), selectedIcon: Icon(Icons.description_rounded), label: '备忘录'),
         NavigationDestination(icon: Icon(Icons.calendar_month_outlined), label: '日历'),
         NavigationDestination(icon: Icon(Icons.mic_none_rounded), selectedIcon: Icon(Icons.mic_rounded), label: '语音'),
         NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings_rounded), label: '设置'),
-      ]),
+      ])))),
   );
   Widget header(String title, String subtitle, {Widget? trailing}) => Padding(
     padding: const EdgeInsets.fromLTRB(24, 22, 24, 22), child: Row(children: [
@@ -343,7 +365,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     child: Row(children: [Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
       const Spacer(), Text(subtitle, style: const TextStyle(color: muted, fontSize: 12))]));
   Widget permissionBanner() => Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-    child: InkWell(onTap: () { unawaited(voice.pause(keepDraft: false)); setState(() => tab = 3); }, borderRadius: BorderRadius.circular(18),
+    child: InkWell(onTap: () => _selectTab(3), borderRadius: BorderRadius.circular(18),
       child: Container(padding: const EdgeInsets.all(15), decoration: BoxDecoration(color: const Color(0xFFFFF0E4), borderRadius: BorderRadius.circular(18)),
         child: const Row(children: [Icon(Icons.info_outline, color: Color(0xFFB96C29)), SizedBox(width: 10),
           Expanded(child: Text('请在设置中开启通知与精确定时权限', style: TextStyle(fontSize: 13))), Icon(Icons.chevron_right)]))));
@@ -421,57 +443,30 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       const SliverToBoxAdapter(child: SizedBox(height: 90)),
     ]);
   }
-  Widget settingsPage() => ListView(padding: const EdgeInsets.only(bottom: 30), children: [
-    header('设置', '让提醒，更适合你'),
-    Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Surface(child: Row(children: [
-      Container(width: 54, height: 54, decoration: BoxDecoration(color: purple, borderRadius: BorderRadius.circular(17)),
-        child: const Icon(Icons.notifications_rounded, color: Colors.white, size: 32)),
-      const SizedBox(width: 16), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('超级提醒', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-        Text('v0.9.0 · 本地保存 · 离线语音', style: TextStyle(color: muted, fontSize: 12))])),
-    ]))),
-    section('任务整理', '完成记录自动收起，保留以后使用'),
-    settingsGroup([
-      ListTile(title: const Text('历史任务'), subtitle: const Text('完成与主动保留的记录合并显示；编辑保存后重新启用'),
-        leading: const Icon(Icons.inventory_2_outlined, color: purple), trailing: const Icon(Icons.chevron_right), onTap: taskLibrary),
-      SwitchListTile(title: const Text('划掉通知后询问整理方式'),
-        subtitle: const Text('划掉通知先结束本轮，再询问保留或删除；不选择时保留记录与循环，自检自动清理时不再询问'),
-        value: store.status['cleanupPrompts'] as bool? ?? true, onChanged: (v) async {
-          try { await native.invokeMethod('cleanupPrompts', v); await reload(); } catch (e) { toast(niceError(e)); }
-        }),
-    ]),
-    section('后台可靠性', '增强最近任务关闭后的提醒维护'),
-    settingsGroup([
-      SwitchListTile(title: const Text('可靠提醒模式'),
-        subtitle: const Text('有待触发任务时显示静默常驻通知，提高后台可靠性；不能绕过系统强行停止'),
-        value: store.status['reliableMode'] as bool? ?? true,
-        onChanged: (enabled) async {
-          try { await native.invokeMethod('reliableMode', enabled); await reload(); }
-          catch (e) { await reload(); toast(niceError(e)); }
-        }),
-      ListTile(leading: const Icon(Icons.shield_outlined, color: purple), title: const Text('提醒服务状态'),
-        subtitle: Text(store.status['reliableMode'] == false ? '可靠模式已关闭，仍保留系统闹钟'
-          : store.status['guardianRunning'] == true ? '正在维护待触发提醒'
-          : ((store.status['pending'] as Map?)?['count'] as int? ?? 0) == 0 ? '没有待触发任务，无需常驻运行'
-          : '尚未检测到运行，请检查下方系统提示')),
-      if ((store.status['guardianError'] as String? ?? '').isNotEmpty) Padding(padding: const EdgeInsets.all(16),
-        child: Text(store.status['guardianError'] as String, style: const TextStyle(color: muted, fontSize: 12))),
-    ]),
-    section('亮屏弹窗', '在其他应用或桌面也显示提醒小卡片'),
-    settingsGroup([
-      SwitchListTile(title: const Text('亮屏弹窗增强'),
-        subtitle: Text(store.status['popupEnabled'] == true
-          ? store.status['popupPermission'] == true ? '已授权：仅解锁亮屏显示，10秒自动收起，未读仍会重试' : '等待悬浮窗授权：请重新开启并在系统页面允许'
-          : '开启后需允许“显示在其他应用上层”；锁屏不显示浮窗正文'),
-        value: store.status['popupEnabled'] as bool? ?? false,
-        onChanged: (enabled) async {
-          try { await native.invokeMethod('popupMode', enabled); await reload(); }
-          catch (e) { await reload(); toast(niceError(e)); }
-        }),
-      const ListTile(subtitle: Text('适用于“横幅和通知栏”提醒。点击已读或横向滑动确认；收起及自动消失均保持未读。系统横幅仍需在对应通知样式中允许，部分应用可限制悬浮窗。')),
-      if ((store.status['popupError'] as String? ?? '').isNotEmpty)
-        Padding(padding: const EdgeInsets.all(16), child: Text(store.status['popupError'] as String)),
-    ]),
+  Widget settingsPage() => SettingsPage(onOpen: _openSettingsSection,
+    version: (store.status['version'] as String? ?? '').isEmpty ? '本机离线' : 'v${store.status['version']}');
+  void _settingsAction(BuildContext sheetContext, String action) {
+    if (ModalRoute.of(sheetContext)?.isCurrent == true) Navigator.pop(sheetContext, action);
+  }
+  Future<void> _openSettingsSection(SettingsSection section) async {
+    if (!mounted || _settingsSheetOpen) return;
+    _settingsSheetOpen = true; _entryPending = false; _entryEpoch++;
+    if (voice.active || voice.pending != null) {
+      unawaited(voice.pause(keepDraft: false).catchError((Object e) { toast(niceError(e)); }));
+    }
+    String? action;
+    try {
+      action = await showModalBottomSheet<String>(context: context, isScrollControlled: true,
+        useSafeArea: true, backgroundColor: Colors.transparent, barrierColor: ink.withValues(alpha: .20),
+        builder: (_) => SettingsSheet(section: section, changes: store,
+          items: (sheetContext) => _settingsItems(section.category, sheetContext)));
+    } finally { _settingsSheetOpen = false; _entryPending = false; _entryEpoch++; }
+    if (!mounted) return;
+    if (action == 'history') await taskLibrary();
+    if (action == 'voice' && _foreground) { setState(() => tab = 0); await voice.startCommands(); }
+  }
+  List<Widget> _settingsItems(SettingsCategory category, BuildContext sheetContext) => switch (category) {
+    SettingsCategory.reminders => [
     section('默认提醒', '新提醒使用这些设置'),
     settingsGroup([
       NotificationDisplayOptions(defaultSettings: true,
@@ -504,6 +499,79 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       SwitchListTile(title: const Text('尝试亮屏'), subtitle: const Text('不解锁屏幕，受手机系统设置影响'),
         value: store.defaults['wakeScreen'] as bool? ?? true, onChanged: (v) async { store.defaults['wakeScreen'] = v; await persistDefaults(); }),
     ]),
+    section('亮屏弹窗', '在其他应用或桌面也显示提醒小卡片'),
+    settingsGroup([
+      SwitchListTile(title: const Text('亮屏弹窗增强'),
+        subtitle: Text(store.status['popupEnabled'] == true
+          ? store.status['popupPermission'] == true ? '已授权：仅解锁亮屏显示，10秒自动收起，未读仍会重试' : '等待悬浮窗授权：请重新开启并在系统页面允许'
+          : '开启后需允许“显示在其他应用上层”；锁屏不显示浮窗正文'),
+        value: store.status['popupEnabled'] as bool? ?? false,
+        onChanged: (enabled) async {
+          try { await native.invokeMethod('popupMode', enabled); await reload(); }
+          catch (e) { await reload(); toast(niceError(e)); }
+        }),
+      const ListTile(subtitle: Text('适用于“横幅和通知栏”提醒。点击已读或横向滑动确认；收起及自动消失均保持未读。系统横幅仍需在对应通知样式中允许，部分应用可限制悬浮窗。')),
+      if ((store.status['popupError'] as String? ?? '').isNotEmpty)
+        Padding(padding: const EdgeInsets.all(16), child: Text(store.status['popupError'] as String)),
+    ]),
+    ],
+    SettingsCategory.voiceInput => [
+    section('免手语音操作', ''), settingsGroup([
+      SwitchListTile(title: const Text('打开应用后预听语音指令'),
+        subtitle: const Text('仅在从桌面或其他应用返回时预听15秒，切换Tab不会重新启动；编辑和待确认内容不被打断。'),
+        value: store.defaults['handsFree'] as bool? ?? false,
+        onChanged: (v) async { store.defaults['handsFree'] = v; await persistDefaults(); }),
+      SwitchListTile(title: const Text('连续安静后自动结束录音'),
+        subtitle: const Text('按人声活动判断，识别后弹出确认卡片；确认阶段不播放语音。'),
+        value: store.defaults['voiceAutoStop'] as bool? ?? true,
+        onChanged: (v) async { store.defaults['voiceAutoStop'] = v; await persistDefaults(); }),
+      settingRow(Icons.timer_outlined, '自动停录等待', "${store.defaults['voiceSilenceSeconds'] ?? 5} 秒 · 单次录音最长45秒", () async {
+        final seconds = await showDialog<int>(context: context, builder: (c) => SimpleDialog(title: const Text('连续无声多久后停录'),
+          children: [for (var i = 3; i <= 10; i++) SimpleDialogOption(onPressed: () => Navigator.pop(c, i), child: Text('$i 秒'))]));
+        if (seconds != null) { store.defaults['voiceSilenceSeconds'] = seconds; await persistDefaults(); }
+      }),
+      settingRow(Icons.mic_external_on_outlined, '试用免手输入', '先说“开始录音”，再说时间和事项；确认或重新录音均可语音操作', () async {
+        _settingsAction(sheetContext, 'voice');
+      }),
+    ]),
+    section('语音识别', ''), settingsGroup([
+      const ListTile(leading: Icon(Icons.mic_none_rounded, color: purple), title: Text('离线语音识别'),
+        subtitle: Text('Paraformer int8 + Silero VAD · 全程本地'), trailing: Tag('已内置')),
+      const ListTile(subtitle: Text('本次前台使用期间复用已加载的识别模型；切到后台、内存紧张或准备播报音频时会释放。')),
+    ]),
+    ],
+    SettingsCategory.speech => [
+    section('离线语音播报', 'VITS-MNN · 804个音色条目'), settingsGroup([
+      settingRow(Icons.groups_outlined, '我的角色组', '${store.voiceGroups.length} 个组 · 创建专属随机音色范围', () async {
+        await Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => VoiceGroupsPage(store: store)));
+        await reload();
+      }),
+      defaultSpeechOptions(),
+      ValueListenableBuilder<String>(valueListenable: speech.status, builder: (_, value, child) => ListTile(
+        leading: const Icon(Icons.graphic_eq, color: purple), title: const Text('语音准备状态'), subtitle: Text(value))),
+      settingRow(Icons.refresh, '重新准备提醒语音', '补齐未完成的音频，不改变提醒时间', () => speech.preparePending(retry: true)),
+      if (((store.status['speech'] as Map?)?['error'] as String? ?? '').isNotEmpty)
+        ListTile(subtitle: Text((store.status['speech'] as Map)['error'] as String)),
+    ]),
+    ],
+    SettingsCategory.background => [
+    section('后台可靠性', '增强最近任务关闭后的提醒维护'),
+    settingsGroup([
+      SwitchListTile(title: const Text('可靠提醒模式'),
+        subtitle: const Text('有待触发任务时显示静默常驻通知，提高后台可靠性；不能绕过系统强行停止'),
+        value: store.status['reliableMode'] as bool? ?? true,
+        onChanged: (enabled) async {
+          try { await native.invokeMethod('reliableMode', enabled); await reload(); }
+          catch (e) { await reload(); toast(niceError(e)); }
+        }),
+      ListTile(leading: const Icon(Icons.shield_outlined, color: purple), title: const Text('提醒服务状态'),
+        subtitle: Text(store.status['reliableMode'] == false ? '可靠模式已关闭，仍保留系统闹钟'
+          : store.status['guardianRunning'] == true ? '正在维护待触发提醒'
+          : ((store.status['pending'] as Map?)?['count'] as int? ?? 0) == 0 ? '没有待触发任务，无需常驻运行'
+          : '尚未检测到运行，请检查下方系统提示')),
+      if ((store.status['guardianError'] as String? ?? '').isNotEmpty) Padding(padding: const EdgeInsets.all(16),
+        child: Text(store.status['guardianError'] as String, style: const TextStyle(color: muted, fontSize: 12))),
+    ]),
     section('隐私与提醒权限', ''),
     settingsGroup([
       ListTile(leading: const Icon(Icons.notifications_none, color: purple), title: const Text('通知权限'),
@@ -513,6 +581,18 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       settingRow(Icons.alarm_on_rounded, '精确定时权限', store.status['exact'] == true ? '已开启' : '需开启', () => native.invokeMethod('requestExact')),
       settingRow(Icons.battery_saver_outlined, '后台运行', store.status['battery'] == true ? '不受电池优化' : '检查电池优化', () => native.invokeMethod('batterySettings')),
       settingRow(Icons.phonelink_setup_rounded, '应用系统设置', '荣耀应用启动管理', () => native.invokeMethod('appSettings')),
+    ]),
+    ],
+    SettingsCategory.data => [
+    section('任务整理', '完成记录自动收起，保留以后使用'),
+    settingsGroup([
+      ListTile(title: const Text('历史任务'), subtitle: const Text('完成与主动保留的记录合并显示；编辑保存后重新启用'),
+        leading: const Icon(Icons.inventory_2_outlined, color: purple), trailing: const Icon(Icons.chevron_right), onTap: () => _settingsAction(sheetContext, 'history')),
+      SwitchListTile(title: const Text('划掉通知后询问整理方式'),
+        subtitle: const Text('划掉通知先结束本轮，再询问保留或删除；不选择时保留记录与循环，自检自动清理时不再询问'),
+        value: store.status['cleanupPrompts'] as bool? ?? true, onChanged: (v) async {
+          try { await native.invokeMethod('cleanupPrompts', v); await reload(); } catch (e) { toast(niceError(e)); }
+        }),
     ]),
     section('数据迁移', ''), settingsGroup([
       settingRow(Icons.file_upload_outlined, '导出备忘录', '保存到你选择的位置', () async {
@@ -531,6 +611,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         if (count != null) { unawaited(speech.preparePending()); toast('已合并导入 $count 条提醒'); }
       }),
     ]),
+    ],
+    SettingsCategory.help => [
     section('提醒自检', ''), settingsGroup([
       settingRow(Icons.view_agenda_outlined, '检查系统通知与锁屏设置', '查看应用通知总开关；各样式可在下方单独管理', () async {
         if (store.status['notifications'] != true) { await native.invokeMethod('requestNotifications'); }
@@ -560,40 +642,6 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       const ListTile(leading: Icon(Icons.security, color: purple), title: Text('固定发布签名'),
         subtitle: Text('同一固定签名的版本可覆盖更新，数据保存在本机')),
     ]),
-    section('语音识别', ''), settingsGroup([
-      const ListTile(leading: Icon(Icons.mic_none_rounded, color: purple), title: Text('离线语音识别'),
-        subtitle: Text('Paraformer int8 + Silero VAD · 全程本地'), trailing: Tag('已内置')),
-    ]),
-    section('免手语音操作', ''), settingsGroup([
-      SwitchListTile(title: const Text('打开应用后预听语音指令'),
-        subtitle: const Text('打开应用或从桌面、其他应用返回时，在首页预听15秒；听到“开始录音”后自动切换。编辑或待确认内容不会被打断。'),
-        value: store.defaults['handsFree'] as bool? ?? false,
-        onChanged: (v) async { store.defaults['handsFree'] = v; await persistDefaults(); }),
-      SwitchListTile(title: const Text('连续安静后自动结束录音'),
-        subtitle: const Text('按人声活动判断，识别后弹出确认卡片；确认阶段不播放语音。'),
-        value: store.defaults['voiceAutoStop'] as bool? ?? true,
-        onChanged: (v) async { store.defaults['voiceAutoStop'] = v; await persistDefaults(); }),
-      settingRow(Icons.timer_outlined, '自动停录等待', "${store.defaults['voiceSilenceSeconds'] ?? 5} 秒 · 单次录音最长45秒", () async {
-        final seconds = await showDialog<int>(context: context, builder: (c) => SimpleDialog(title: const Text('连续无声多久后停录'),
-          children: [for (var i = 3; i <= 10; i++) SimpleDialogOption(onPressed: () => Navigator.pop(c, i), child: Text('$i 秒'))]));
-        if (seconds != null) { store.defaults['voiceSilenceSeconds'] = seconds; await persistDefaults(); }
-      }),
-      settingRow(Icons.mic_external_on_outlined, '试用免手输入', '先说“开始录音”，再说时间和事项；确认或重新录音均可语音操作', () async {
-        setState(() => tab = 0); await voice.startCommands();
-      }),
-    ]),
-    section('离线语音播报', 'VITS-MNN · 804个音色条目'), settingsGroup([
-      settingRow(Icons.groups_outlined, '我的角色组', '${store.voiceGroups.length} 个组 · 创建专属随机音色范围', () async {
-        await Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => VoiceGroupsPage(store: store)));
-        await reload();
-      }),
-      defaultSpeechOptions(),
-      ValueListenableBuilder<String>(valueListenable: speech.status, builder: (_, value, child) => ListTile(
-        leading: const Icon(Icons.graphic_eq, color: purple), title: const Text('语音准备状态'), subtitle: Text(value))),
-      settingRow(Icons.refresh, '重新准备提醒语音', '补齐未完成的音频，不改变提醒时间', () => speech.preparePending(retry: true)),
-      if (((store.status['speech'] as Map?)?['error'] as String? ?? '').isNotEmpty)
-        ListTile(subtitle: Text((store.status['speech'] as Map)['error'] as String)),
-    ]),
     section('使用提示', ''), Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Surface(child: const Text(
       '• 手动划掉系统通知或点击已读后结束本轮重提醒；App 中结束并保留会停用后续提醒。点开通知、横幅自动收起不算已读。\n\n'
       '• 达到总次数后停止再次提醒，但仍保留未读状态。下一次每日／每周提醒重新计数。\n\n'
@@ -603,7 +651,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       style: TextStyle(color: muted, fontSize: 13, height: 1.7)))),
     if ((store.status['lastError'] as String? ?? '').isNotEmpty) Padding(padding: const EdgeInsets.all(24),
       child: Text('最近的系统提示：${store.status['lastError']}', style: const TextStyle(color: muted, fontSize: 12))),
-  ]);
+    ],
+  };
   Widget defaultSpeechOptions() {
     final config = Reminder(
       speechMode: store.defaults['speechMode'] as String? ?? 'off',
