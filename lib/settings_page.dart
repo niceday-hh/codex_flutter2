@@ -119,7 +119,7 @@ class _SettingsSheetState extends State<SettingsSheet> {
     }
     if (!mounted) return;
     final target = widget.targetKey?.currentContext;
-    if (target != null) await Scrollable.ensureVisible(target, alignment: .15);
+    if (target != null && target.mounted) await Scrollable.ensureVisible(target, alignment: .15);
   }
   @override void dispose() { controller.dispose(); super.dispose(); }
   @override Widget build(BuildContext context) => FractionallySizedBox(heightFactor: .92,
