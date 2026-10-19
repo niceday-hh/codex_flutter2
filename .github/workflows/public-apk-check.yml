@@ -1,0 +1,97 @@
+name: Public repository APK build check
+
+on:
+  push:
+    branches: [build-check/public-actions-20261019]
+    paths:
+      - .github/workflows/public-apk-check.yml
+      - lib/**
+      - native/**
+      - tool/**
+      - pubspec.yaml
+      - pubspec.lock
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-apk-check-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.7'
+          channel: stable
+          cache: true
+      - name: Verify Flutter and Dart execution
+        shell: bash
+        run: |
+          flutter --version
+          printf '%s\n' 'void main() { print("dart-ok"); }' > "$RUNNER_TEMP/dart_probe.dart"
+          dart "$RUNNER_TEMP/dart_probe.dart"
+      - uses: actions/cache@v4
+        with:
+          path: model-downloads
+          key: offline-models-build-${{ hashFiles('tool/fetch_model.py', 'tool/fetch_vad.py', 'tool/fetch_mnn.py', 'tool/vits_model.lock.json') }}
+      - name: Prepare project and pinned models
+        run: |
+          bash tool/bootstrap.sh
+          python3 tool/fetch_model.py
+          python3 tool/fetch_tts.py
+      - name: Build arm64 Debug APK
+        run: flutter build apk --debug --target-platform android-arm64
+      - name: Verify APK archive and record digest
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, zipfile
+          apk = pathlib.Path('build/app/outputs/flutter-apk/app-debug.apk')
+          required = {
+              'lib/arm64-v8a/libflutter.so',
+              'assets/flutter_assets/assets/models/model.int8.onnx',
+              'assets/flutter_assets/assets/models/tokens.txt',
+              'assets/flutter_assets/assets/vad/silero_vad.onnx',
+              'assets/flutter_assets/assets/tts/manifest.json',
+          }
+          with zipfile.ZipFile(apk) as bundle:
+              missing = required - set(bundle.namelist())
+              if missing:
+                  raise SystemExit(f'Missing APK resources: {sorted(missing)}')
+              bad = bundle.testzip()
+              if bad:
+                  raise SystemExit(f'Invalid ZIP member: {bad}')
+          with apk.open('rb') as stream:
+              digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+          info = {'source_commit': os.environ['GITHUB_SHA'],
+                  'run_id': os.environ['GITHUB_RUN_ID'], 'flavor': 'debug',
+                  'target_platform': 'android-arm64', 'apk': apk.name,
+                  'bytes': apk.stat().st_size, 'sha256': digest,
+                  'release_signing_used': False}
+          (apk.parent / 'PUBLIC_BUILD_INFO.json').write_text(json.dumps(info, indent=2) + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
+              out.write(f'APK build passed: `{apk.name}` ({apk.stat().st_size:,} bytes)\n\n')
+              out.write(f'SHA-256: `{digest}`\n\nSource: `{info["source_commit"]}`\n')
+          print(json.dumps(info, indent=2))
+          PY
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-check-debug-arm64
+          path: |
+            build/app/outputs/flutter-apk/app-debug.apk
+            build/app/outputs/flutter-apk/PUBLIC_BUILD_INFO.json
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
