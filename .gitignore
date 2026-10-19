@@ -22,3 +22,8 @@ vendor/
 assets/vad/*.onnx
 
 tool/test-runtime/
+
+# Local cloud toolchain, caches and verification output; never commit secrets.
+.codex/toolchain/
+.codex/logs/
+.codex/state/
