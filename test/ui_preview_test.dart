@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:timed_memo/main.dart';
+import 'package:timed_memo/settings_page.dart';
 import 'package:timed_memo/voice_flow.dart';
 import 'package:timed_memo/voice_page.dart';
 import 'voice_flow_test.dart' show FakeCapture, FakeStore;
@@ -70,7 +71,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('settings-result-test'))); await tester.pumpAndSettle();
     await capture(tester, 'settings-search-preview');
     await tester.tap(find.text('前往设置')); await tester.pumpAndSettle();
-    await tester.tap(find.text('15秒后发送测试提醒')); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(SettingsSheet), matching: find.text('15秒后发送测试提醒'))); await tester.pumpAndSettle();
     expect(find.text('测试提醒已设置，请返回桌面等待15秒'), findsOneWidget);
     await capture(tester, 'settings-test-feedback');
     await tester.pumpWidget(const SizedBox()); await tester.pump();
