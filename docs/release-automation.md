@@ -48,3 +48,11 @@ Ubuntu 26 迁移和 2FA 横幅均不是本次红色启动错误。正常构建�
 账户所有者需打开 https://github.com/settings/billing，核对 Actions 的 Usage、Budgets and alerts 中的适用支出限制，以及付款/账单是否存在失败。涉及增加支出或支付的修改由账户所有者决定；如果仅为额度用尽且不希望新增费用，可等待额度周期重置。
 
 账户限制处理后，使用 main 上 Publish existing verified build 的 Run workflow 输入原始构建编号，或更新 .github/release-request.json 的 request_id，启动当前配置的补发工作流。无需重新构建已经校验的 APK。
+
+## 2026-10-19 公有仓库构建已恢复
+
+仓库现已改为公有。新建的独立验证运行 [39252580940](https://github.com/niceday-hh/codex_flutter2/actions/runs/39252580940) 在北京时间 20:30 至 20:36 成功分配标准 `ubuntu-24.04` 执行器，并完成 Flutter/Dart 实测、项目准备、arm64 Debug APK 编译、资源/归档校验和产物上传；这不是复用旧构建的绿色状态。
+
+独立工作流 `Public repository APK build check` 仅验证打包，使用只读仓库权限和调试签名，不运行正式发布器。编译成功不等于完整发布验证已通过；发布新版本仍按本文开头的测试、版本号和固定签名流程执行。
+
+[GitHub Actions 计费规则](https://docs.github.com/en/billing/concepts/product-billing/github-actions)说明，公有仓库的标准 GitHub 托管执行器可免费使用。此前私有仓库的启动阻断属于历史记录，不能据此继续认定当前公有仓库不能构建。本次运行的 APK、SHA-256、来源提交与下载入口见 [public-actions-build-check.md](public-actions-build-check.md)。
