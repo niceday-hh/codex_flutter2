@@ -163,8 +163,31 @@ VoiceControls extractVoiceControls(String source, Reminder r) {
   var body = source.trim().replaceAll(RegExp(r'[。！？.!?\s]+$'), '');
   final settings = <String>[];
   var foundSpeech = false, foundSound = false, foundPrivacy = false;
+  var foundInterval = false, foundCount = false;
   String? warning;
+  const number = r'[零〇一二两三四五六七八九十百千万\d]+';
   final rules = <(RegExp, void Function(RegExpMatch))>[
+    (RegExp('再提醒($number)次\$'), (_) {
+      warning = '“再提醒几次”可能不包含首次，请改说“总共提醒几次”，或手动确认总次数。';
+    }),
+    (RegExp('(?:提醒间隔(?:为)?|(?:每隔|每|间隔)(?:为)?)($number)(?:个)?分钟(?:再)?(?:提醒(?:我)?)?\$'), (match) {
+      if (foundInterval) return;
+      final value = chineseNumber(match.group(1)!);
+      if (value == null || value < 1 || value > 1440) {
+        warning = '提醒间隔应为 1—1440 分钟，请重新说明或手动编辑。'; return;
+      }
+      r.intervalMinutes = value; foundInterval = true;
+      settings.add('未确认时：每隔 $value 分钟提醒');
+    }),
+    (RegExp('(?:提醒(?:总共|一共|共)?|(?:总共|一共|共|总计)(?:提醒)?)($number)次(?:提醒)?(?:[（(]含首次[）)])?\$'), (match) {
+      if (foundCount) return;
+      final value = chineseNumber(match.group(1)!);
+      if (value == null || value < 1 || value > 20) {
+        warning = '提醒总次数应为 1—20 次（含首次），请重新说明或手动编辑。'; return;
+      }
+      r.totalCount = value; foundCount = true;
+      settings.add('提醒次数：共 $value 次（含首次）');
+    }),
     (RegExp(r'(?:不要|不用)(?:开启|打开|启用)?(?:语音提醒|语音播报|朗读提醒|读出来|念出来)$'), (_) { if (!foundSpeech) { r.speechMode = 'off'; foundSpeech = true; settings.add('语音播报：关闭'); } }),
     (RegExp(r'(?:关闭|取消|禁用)(?:语音提醒|语音播报|朗读提醒)$'), (_) { if (!foundSpeech) { r.speechMode = 'off'; foundSpeech = true; settings.add('语音播报：关闭'); } }),
     (RegExp(r'(?:(?:开启|打开|启用)(?:语音提醒|语音播报|朗读提醒)|到时候(?:读|念)出来)$'), (_) { if (!foundSpeech) { r.speechMode = 'on'; foundSpeech = true; settings.add('语音播报：开启'); } }),
@@ -181,13 +204,14 @@ VoiceControls extractVoiceControls(String source, Reminder r) {
       final match = rule.$1.firstMatch(body);
       if (match == null) continue;
       final prefix = body.substring(0, match.start);
-      if (RegExp(r'(?:如何|怎么|怎样|是否|能否|学习|研究|教程|方法)(?:去)?$').hasMatch(prefix.trim())) {
-        warning = '末尾可能属于待办正文，已保留；请确认语音播报开关。';
-        return VoiceControls(body, settings, warning);
+      if (RegExp(r'(?:如何|怎么|怎样|是否|能否|学习|研究|教程|方法|不要|不用|不想|不是|取消|关闭|别)(?:去)?$').hasMatch(prefix.trim())) {
+        warning = '末尾可能属于待办正文，已保留；请手动确认提醒设置。';
+        return VoiceControls(body, settings.reversed.toList(), warning);
       }
       // No reminder body means this could be the task itself, not a setting.
       if (prefix.replaceAll(RegExp(r'[，,；;。\s]'), '').isEmpty) continue;
       rule.$2(match);
+      if (warning != null) return VoiceControls(body, settings.reversed.toList(), warning);
       body = prefix.replaceAll(RegExp(r'[，,；;。\s]+$'), '');
       consumed = true;
       break;

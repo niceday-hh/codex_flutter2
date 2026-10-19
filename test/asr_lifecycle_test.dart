@@ -33,6 +33,22 @@ void main() {
     await tester.pump(const Duration(seconds: 1)); expect(session.releases, 1);
     session.release(); session.status.dispose();
   });
+  testWidgets('a foreground visit keeps the model warm across idle tab switches', (tester) async {
+    final session = WarmAsr()..setForeground(true);
+    await session.retainVoice(); session.releaseVoice();
+    await tester.pump(const Duration(minutes: 3));
+    expect(session.releases, 0);
+    session.setForeground(false);
+    await tester.pump(const Duration(seconds: 20));
+    expect(session.releases, 1);
+    session.release(); session.status.dispose();
+  });
+  testWidgets('memory or TTS release still wins over foreground retention', (tester) async {
+    final session = WarmAsr()..setForeground(true);
+    await session.retainVoice(); session.releaseVoice();
+    await session.withoutModel(() async { expect(session.releases, greaterThan(0)); });
+    session.release(); session.status.dispose();
+  });
   testWidgets('TTS evicts a warm unpinned model immediately without waiting for idle expiry', (tester) async {
     final session = WarmAsr();
     await session.retainVoice(); session.releaseVoice();

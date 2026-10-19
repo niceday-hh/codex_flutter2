@@ -91,7 +91,8 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(393, 852));
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
     await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置'))); await tester.pumpAndSettle();
-    final settingsScroll = find.descendant(of: find.byType(IndexedStack), matching: find.byType(Scrollable)).last;
+    await tester.tap(find.text('提醒与通知')); await tester.pumpAndSettle();
+    final settingsScroll = find.byType(Scrollable).last;
     await revealByDragging(tester, find.text('默认展示方式'), settingsScroll);
     await tester.tap(find.text('默认展示方式')); await tester.pumpAndSettle();
     await tester.tap(find.text('仅通知栏').last); await tester.pumpAndSettle();
@@ -99,6 +100,7 @@ void main() {
     await tester.tap(find.text('默认锁屏显示')); await tester.pumpAndSettle();
     await tester.tap(find.text('不在锁屏显示').last); await tester.pumpAndSettle();
     expect(defaults['presentation'], 'drawer'); expect(defaults['lockscreen'], 'hidden');
+    await tester.tap(find.byTooltip('关闭设置分类')); await tester.pumpAndSettle();
     await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('备忘录'))); await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('新建提醒')); await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '验证默认展示设置');
@@ -148,7 +150,8 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(393, 852));
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
     await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置'))); await tester.pumpAndSettle();
-    final settingsScroll = find.descendant(of: find.byType(IndexedStack), matching: find.byType(Scrollable)).last;
+    await tester.tap(find.text('帮助与诊断')); await tester.pumpAndSettle();
+    final settingsScroll = find.byType(Scrollable).last;
     await revealByDragging(tester, find.text('检查系统通知与锁屏设置'), settingsScroll);
     expect(find.text('检查系统通知与锁屏设置'), findsOneWidget);
     expect(find.text('检查通知横幅与锁屏显示'), findsNothing);
@@ -194,12 +197,15 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(393, 852));
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
     await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置'))); await tester.pumpAndSettle();
-    final scroll = find.descendant(of: find.byType(IndexedStack), matching: find.byType(Scrollable)).last;
+    await tester.tap(find.text('后台与权限')); await tester.pumpAndSettle();
+    final scroll = find.byType(Scrollable).last;
     await revealByDragging(tester, find.text('可靠提醒模式'), scroll);
     await tester.tap(find.text('可靠提醒模式')); await tester.pumpAndSettle();
     expect(reliable, isFalse);
     expect(find.text('可靠模式已关闭，仍保留系统闹钟'), findsOneWidget);
-    await revealByDragging(tester, find.text('导出提醒诊断'), scroll);
+    await tester.tap(find.byTooltip('关闭设置分类')); await tester.pumpAndSettle();
+    await tester.tap(find.text('帮助与诊断')); await tester.pumpAndSettle();
+    await revealByDragging(tester, find.text('导出提醒诊断'), find.byType(Scrollable).last);
     await tester.tap(find.text('导出提醒诊断')); await tester.pumpAndSettle();
     expect(calls, contains('exportDiagnostics'));
     expect(calls, isNot(contains('exportBackup'))); expect(calls, isNot(contains('save')));
@@ -287,7 +293,7 @@ void main() {
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
 
-  testWidgets('selecting home explicitly retries the opted-in command listener', (tester) async {
+  testWidgets('internal tab switches and repeated home taps never restart command prelisten', (tester) async {
     var checks = 0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
       if (call.method == 'getState') return jsonEncode({'reminders': [], 'defaults': {'handsFree': true}, 'status': {}});
@@ -299,7 +305,9 @@ void main() {
     await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('日历'))); await tester.pumpAndSettle();
     final before = checks;
     await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('备忘录'))); await tester.pumpAndSettle();
-    expect(checks, greaterThan(before));
+    expect(checks, before);
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('备忘录'))); await tester.pumpAndSettle();
+    expect(checks, before);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
 

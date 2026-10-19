@@ -24,6 +24,7 @@ class AsrSession {
   Future<void>? _preparing;
   final _pending = <int, Completer<String>>{};
   Timer? _idle;
+  bool _keepForeground = false;
   int _serial = 0, _users = 0, _pins = 0, _vadGeneration = 0;
   Completer<void>? _unpinned;
   final vadEvents = StreamController<Map<String, dynamic>>.broadcast(sync: true);
@@ -33,7 +34,7 @@ class AsrSession {
     _pins++; _idle?.cancel();
     try {
       await prepare();
-      if (isCurrent != null && !isCurrent()) { releaseVoice(keepWarm: false); return false; }
+      if (isCurrent != null && !isCurrent()) { releaseVoice(keepWarm: _keepForeground); return false; }
       return true;
     } catch (_) { releaseVoice(keepWarm: false); rethrow; }
   }
@@ -50,6 +51,13 @@ class AsrSession {
   Future<void> prewarm() async {
     if (_suspension != null || _pins > 0 || _preparing != null) return;
     await prepare();
+  }
+  // Retain an already loaded model for this foreground visit without opening
+  // the microphone or eagerly loading it. Explicit memory/TTS release wins.
+  void setForeground(bool foreground) {
+    _keepForeground = foreground;
+    if (foreground) { _idle?.cancel(); }
+    else { _armIdle(); }
   }
   Future<int> startVad(double silence, {bool Function()? isCurrent}) async {
     await prepare();
@@ -173,7 +181,7 @@ class AsrSession {
   }
   void _armIdle() {
     _idle?.cancel();
-    if (_pins == 0) _idle = Timer(idleTimeout, release);
+    if (_pins == 0 && !_keepForeground) _idle = Timer(idleTimeout, release);
   }
   void release() {
     _releaseRequested = true; _idle?.cancel();
