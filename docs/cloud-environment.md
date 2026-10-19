@@ -1,8 +1,8 @@
-# Codex 云端 Android 开发环境
+# Android 开发工具链（当前工作区或独立云主机）
 
 这套配置准备与当前 GitHub CI 对齐的开发工具链，不依赖 GitHub Actions 执行器，也不读取签名密钥或自动发布 APK。
 
-**当前状态：配置已准备，但账号内环境尚未创建；本次工作区的 Flutter 和模拟器启动受阻。** 具体通过项与阻塞见 [2026-10-19 验证记录](cloud-environment-verification.md)。不要把配置已写入仓库理解为构建已通过。
+**当前状态：当前聊天工作区中已安装工具；Java 和主要 Android 工具可运行，Flutter 执行和模拟器启动受宿主限制。** 这套脚本可直接在普通 Ubuntu 主机使用，无须创建 Codex Cloud 环境。具体通过项与阻塞见 [2026-10-19 验证记录](cloud-environment-verification.md)。安装成功不等于构建通过。
 
 ## 版本依据
 
@@ -46,6 +46,18 @@ python3 tool/check_cloud_environment.py --emulator
 
 每个新的终端都先运行 `source tool/cloud_env.sh`。该脚本只设置工具路径、缓存位置及禁止重启测试，不包含任何凭据。
 
+检查器会实际执行一段最小 Dart 程序；仅 `dart --version` 成功不能说明 Flutter 可用。报告同时记录 `/proc/self/maps` 可读性和主线程 `pthread_getattr_np` 返回值，以便区分工具安装问题与宿主兼容性问题。请求 `--emulator` 时，还必须检出两套指定 AVD，空列表不会算通过。
+
+当前聊天工作区的终端入口为：
+
+```bash
+cd /workspace/scratch/22f1bfc18fba/codex_flutter2
+source tool/cloud_env.sh
+python3 tool/check_cloud_environment.py --emulator
+```
+
+该绝对路径只适用于本次工作区；换机器时使用实际仓库目录。聊天工作区可能被清理，工具和缓存应视为可重建数据。
+
 ## 项目检查
 
 ```bash
@@ -80,12 +92,12 @@ emulator -avd memo-api33 -no-window -gpu software -noaudio -no-boot-anim -no-sna
 
 另一个终端连接设备并准备好 CI 专用 debug APK 后，按 `docs/device-testing.md` 运行 `MEMO_RUN_REBOOT_TESTS=0 python3 tool/device_test_suite.py`。API 35 单独运行，避免同时争用内存。缺少 KVM 时，软件模拟可能极慢或受宿主限制，不能因此宣称设备测试通过。
 
-## 保存为账号内可复用云环境
+## 网络与宿主要求
 
-在 ChatGPT 的“设置 → Codex Cloud → Environments → Create environment”中选择本仓库，并使用包含本配置的分支。名称建议 `codex_flutter2-android`，先保持私有。
+使用能运行官方 Dart VM 的 Ubuntu 24.04 x86_64 主机。先执行工具检查，再下载模型和系统镜像；如果最小 Dart 程序已经因线程栈错误中止，继续下载依赖不能解决该宿主问题。不要伪造 `/proc`、修改 VM 线程栈校验或把版本输出当成执行成功。
 
-安装阶段运行上述安装命令，并在新终端加载 `tool/cloud_env.sh`。允许访问依赖所需的官方地址：`storage.googleapis.com`、`pub.dev`、`dl.google.com`、`maven.google.com`、`repo.maven.apache.org`、`repo1.maven.org`、`services.gradle.org`、`downloads.gradle.org`、`plugins.gradle.org`、`plugins-artifacts.gradle.org`、`github.com`、`raw.githubusercontent.com`、`codeload.github.com` 和 GitHub 官方发布资产下载域名。实际重定向域名以失败日志及官方来源为准，不关闭 TLS 校验。
+允许访问依赖所需的官方地址：`storage.googleapis.com`、`pub.dev`、`dl.google.com`、`maven.google.com`、`repo.maven.apache.org`、`repo1.maven.org`、`services.gradle.org`、`downloads.gradle.org`、`plugins.gradle.org`、`plugins-artifacts.gradle.org`、`github.com`、`raw.githubusercontent.com`、`codeload.github.com` 和 GitHub 官方发布资产下载域名。实际重定向域名以失败日志及官方来源为准，不关闭 TLS 校验。
 
-准备和测试完成后，发布云环境快照供新任务复用。把配置文件写入仓库并不等于已在账号内创建或发布云环境，必须以云环境页面显示的状态为准。
+设备测试还需要可实际启动模拟器的宿主。当前工作区未暴露 KVM，且模拟器启动失败；不继续下载 API 33/35 大型镜像。
 
-固定签名及未来 Release 上传授权需在环境的凭据配置中另行提供，不写入此文档、仓库或普通聊天。当前 `tool/publish_release.py` 验证 GitHub Actions 运行记录；采用外部云构建时需独立适配来源与测试证明，不应直接绕过现有校验。
+固定签名及未来 Release 上传授权另行安全配置，不写入此文档或仓库。当前 `tool/publish_release.py` 验证 GitHub Actions 运行记录；采用外部构建时需独立适配来源与测试证明，不应直接绕过现有校验。

@@ -46,12 +46,28 @@ SDK Manager 能显示版本，但在本工作区的代理连接中无法获取�
 
 模拟器的 `-version` 发生段错误，`-accel-check` 提示找不到 emulator-check。官方 ZIP 已通过摘要校验，但程序启动问题尚未完全定位；同时当前宿主无 KVM，不能宣称设备测试可用。没有修改宿主设备权限、挂载虚拟化设备或执行重启操作。
 
+## 19:16（北京时间）当前聊天工作区复验
+
+用户改为直接使用当前聊天工作区，不再创建 Codex Cloud 环境。本轮复用了仍然存在的已安装工具，没有重新下载多 GB 的同版本工具包。
+
+- Java 17、javac、SDK Manager 19.0、ADB 37.0.1、CMake 3.22.1、NDK Clang 18.0.1、aapt2 再次启动通过。
+- `sdkmanager --list_installed` 成功识别 SDK 36、Build Tools 36.0.0、platform-tools 37.0.1；手工解压的 NDK、CMake 等尚无 `package.xml`，未据此宣称 SDK Manager 完整安装成功。
+- **Dart 3.9.2 的版本命令成功，但实际执行最小 Dart 程序仍以 SIGABRT 中止。** 检查器已增加真实执行检查，避免版本输出导致误判。
+- `/proc/self/maps` 读取返回 ENOENT；直接调用主线程的 `pthread_getattr_np` 也返回 2（ENOENT）。这与 Dart 启动失败的位置一致，支持宿主兼容性阻塞的判断。Dart 维护者在 [SDK issue #40405](https://github.com/dart-lang/sdk/issues/40405) 解释了同类问题与该系统文件不可访问的关系。
+- `bash tool/check_cloud_project.sh` 实际执行后，在 `flutter create` 阶段退出 134；尚未进入 Flutter 分析、测试或 Gradle 单元测试。
+- `flutter build apk --debug --target-platform android-arm64` 实际执行后，同样在 VM 启动阶段中止（SIGABRT）；没有生成 APK。
+- Java 排程检查再次 14 项通过，既有 Python 回归再次 31 项通过。
+- 模拟器 `-version` 仍以 SIGSEGV 中止，启动器的 `-accel-check` 仍报找不到辅助程序；直接运行已存在的 `emulator-check accel` 可启动，返回 3 并报告 `KVM requires a CPU that supports vmx or svm`。同时未暴露 `/dev/kvm`。这不等于辅助程序损坏，也不足以认定底层物理 CPU 不支持虚拟化。
+- `emulator -list-avds` 成功退出但返回空列表，API 33/35 AVD **没有就绪**。检查器已修正空列表误算通过的问题，并使 `--emulator` 检查失败时返回非零状态。
+
+详细本地诊断位于 `.codex/state/environment-check.json`、`.codex/state/current-workspace-check.json`、`.codex/state/android-current-workspace-check.json` 和 `.codex/logs/`，均不提交缓存或机器路径日志。未配置固定签名，未执行 Release 发布。
+
 ## 后续完成条件
 
-1. 在已登录的 Codex Cloud 中创建本仓库的私有环境，安装并发布环境快照。
+1. 当前工作区可继续编辑源码并运行已验证的 Java/Python 检查。完整 APK 构建需要宿主提供官方 Dart VM 所需的正常线程栈信息；普通目录、PATH 或项目依赖配置不能代替这一条件。
 2. 首先验证 `flutter --version` 能正常返回，再运行项目检查；若仍有线程栈错误，应更换受支持的宿主环境。
 3. 在该环境重新执行 SDK Manager 安装及本地包识别检查，完成 API 33 / 35 镜像和 AVD 配置。
 4. 验证模拟器实际启动及原有双版本设备测试。缺少 KVM 或模拟器仍不能运行时，设备回归需使用另一可运行的测试环境。
 5. 最后再通过环境凭据配置提供原固定签名；此记录与仓库不存储密钥。
 
-可执行入口和环境创建步骤见 [cloud-environment.md](cloud-environment.md)。
+可执行入口和独立主机安装步骤见 [cloud-environment.md](cloud-environment.md)。
