@@ -58,6 +58,26 @@ void main() {
     expect(tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, '打开应用后预听')).value, true);
     await tester.pumpWidget(const SizedBox()); await tester.pump(); expect(tester.takeException(), isNull);
   });
+  testWidgets('a search preview can reveal a parameter below the first screen without saving', (tester) async {
+    var saves = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+      if (call.method == 'getState') return jsonEncode({'reminders': [], 'defaults': {}, 'status': {'notifications': true, 'exact': true}});
+      if (call.method == 'saveDefaults' || call.method == 'popupMode') saves++;
+      return null;
+    });
+    await openSettings(tester, '提醒与通知');
+    await tester.tap(find.byTooltip('关闭设置分类')); await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('settings-search')), '悬浮窗'); await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('settings-result-popup'))); await tester.pumpAndSettle();
+    expect(find.text('当前：已关闭'), findsOneWidget);
+    await tester.tap(find.text('前往设置')); await tester.pumpAndSettle();
+    final target = find.widgetWithText(SwitchListTile, '亮屏弹窗增强');
+    expect(target, findsOneWidget);
+    final area = tester.getRect(target), sheet = tester.getRect(find.byType(SettingsSheet));
+    expect(area.top, greaterThanOrEqualTo(sheet.top)); expect(area.bottom, lessThanOrEqualTo(852));
+    expect(saves, 0);
+    await tester.pumpWidget(const SizedBox()); await tester.pump(); expect(tester.takeException(), isNull);
+  });
   testWidgets('denied notification permission is explained inside the sheet without creating a test', (tester) async {
     var tests = 0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
