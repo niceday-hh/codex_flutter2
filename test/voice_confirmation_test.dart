@@ -51,6 +51,7 @@ void main() {
     expect(find.text('共 3 次（含首次）'), findsOneWidget);
     expect(find.text('喝水'), findsOneWidget);
     expect(find.textContaining('可说“确认”'), findsOneWidget);
+    await tester.ensureVisible(find.text('确认创建')); await tester.pump();
     await tester.tap(find.text('确认创建')); await tester.tap(find.text('确认创建'));
     await tester.pump();
     expect(store.saved.length, 1);

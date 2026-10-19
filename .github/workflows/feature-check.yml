@@ -34,7 +34,7 @@ jobs:
       - name: Flutter regression tests
         env:
           LD_LIBRARY_PATH: ${{ env.SHERPA_TEST_LIB }}
-        run: flutter test --timeout=45s --fail-fast
+        run: flutter test --timeout=45s
       - name: Prepare Chinese preview font
         run: |
           sudo apt-get update -qq
