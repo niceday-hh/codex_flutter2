@@ -14,6 +14,7 @@ import 'voice_page.dart';
 import 'voice_groups_page.dart';
 import 'app_style.dart';
 import 'settings_page.dart';
+import 'voice_catalog.dart';
 import 'vibration_picker.dart';
 export 'vibration_picker.dart' show chooseVibration, vibrationLabel;
 export 'app_style.dart' show purple, ink, muted, canvas;
@@ -508,7 +509,12 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       'offline' => '已内置 · 无需联网',
       'groups' => '${store.voiceGroups.length} 个角色组',
       'speechMode' => toggle(d['speechMode'] == 'on'),
-      'speechVoice' => d['speechRandom'] == true ? '随机音色' : '固定音色',
+      'speechVoice' => d['speechRandom'] == true ? '随机音色' : speechVoiceLabel(d['speechVoice'] as String? ?? '228'),
+      'speechRandom' => toggle(d['speechRandom'] as bool? ?? false),
+      'speechGroup' => (d['speechRandomGroup'] as String? ?? '').isEmpty ? '全部角色' : '已选择角色组',
+      'speechSource' => voiceLanguages[d['speechRandomLanguage'] ?? 'all'] ?? '不限配音来源',
+      'speechGender' => voiceGenders[d['speechRandomGender'] ?? 'all'] ?? '不限角色性别',
+      'speechPreview' => d['speechRandom'] == true ? '试听随机音色' : '试听固定音色',
       'speechRate' => '${d['speechRate'] ?? 1.0} 倍速',
       'speechLock' => d['speechHideLocked'] == false ? '允许播报正文' : '隐藏播报正文',
       'speechRepeat' => toggle(d['speechRepeat'] as bool? ?? true),

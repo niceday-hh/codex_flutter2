@@ -33,9 +33,8 @@ class _VibrationPickerState extends State<VibrationPicker> {
     setState(() { active = mode; failed = false; message = '正在试振：$label…'; });
     try {
       final response = await native.invokeMethod<String>('previewVibration', mode);
-      final result = response == null ? <String, dynamic>{'requested': true,
-        'durationMs': switch (mode) { 'once' => 250, 'twice' => 700, 'strong' => 1650, _ => 1000 }}
-        : jsonDecode(response) as Map<String, dynamic>;
+      if (response == null) throw StateError('试振没有返回结果，请重试');
+      final result = jsonDecode(response) as Map<String, dynamic>;
       if (result['requested'] != true) throw StateError('试振请求未完成，请重试');
       if (!mounted) return;
       done = Timer(Duration(milliseconds: ((result['durationMs'] as num?)?.toInt() ?? 1000).clamp(1, 2000).toInt()), () {
