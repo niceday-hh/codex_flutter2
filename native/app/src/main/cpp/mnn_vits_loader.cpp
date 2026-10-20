@@ -38,6 +38,7 @@ namespace MNN_VITS {
     static std::shared_ptr<MNN::Express::Module> g_flow_module = nullptr;
     static float length_scale_f = 1.2f;
     static std::mt19937 synthesis_random;
+    static bool legacy_profile = false;
 
     MNN::Express::VARP normal_noise(const std::vector<int>& shape) {
         size_t count = 1;
@@ -120,7 +121,9 @@ namespace MNN_VITS {
         MNN::Express::VARP noise_scale_w = MNN::Express::_Scalar<float>(0.668f);
 
         //zin = np.random.randn(x.shape[0], 2, x.shape[2]).astype(np.float32) * noise_scale_w
-        auto zin = normal_noise({1, 2, size}) * noise_scale_w;
+        auto zin_shape = MNN::Express::_Const(.5f, {1, 2, size}, MNN::Express::NCHW);
+        auto zin = (legacy_profile ? MNN::Express::_RandomUnifom(MNN::Express::_Shape(zin_shape, true), halide_type_of<float>(), 0.0f, 1.0f, 114514, 1919810)
+                                   : normal_noise({1, 2, size})) * noise_scale_w;
 
         MNN_VITS_PRINT("start forward\n");
         std::vector<MNN::Express::VARP> dp_outputs  = g_dp_module->onForward({zin, std::move(xout), std::move(g_expand_outputs), std::move(x_mask)});
@@ -237,7 +240,8 @@ namespace MNN_VITS {
         MNN_VITS_PRINT("start z_p\n");
         // z_p_rand = np.random.randn(m_p.shape[0], m_p.shape[1], m_p.shape[2])
         // z_p = ( m_p + z_p_rand * np.exp(logs_p) * noise_scale)
-        auto rand_z_p = normal_noise(m_p_->getInfo()->dim);
+        auto rand_z_p = legacy_profile ? MNN::Express::_RandomUnifom(MNN::Express::_Shape(m_p_, true), halide_type_of<float>(), 0.0f, 1.0f, 114514, 1919810)
+                                      : normal_noise(m_p_->getInfo()->dim);
 //        auto rand_z_p = MNN::Express::_Const(0.5f, m_p_->getInfo()->dim, MNN::Express::NCHW);
         auto logs_p_exp = MNN::Express::_Exp(std::move(logs_p_));
         auto rand_mul_logs = rand_z_p * logs_p_exp;
@@ -352,9 +356,10 @@ namespace MNN_VITS {
     }
 
     std::vector<float> start_audio_infer(const std::vector<int>& input_seq, int spkid,
-                                       const std::vector<int>& pauses, float rate) {
+                                       const std::vector<int>& pauses, float rate, bool legacy) {
         if (!g_initialized || !g_enc_module || !g_dec_module || !g_dp_module || !g_emb_module || !g_flow_module) throw std::runtime_error("VITS modules not ready");
         MNN::Express::ExecutorScope scope(g_executor);
+        legacy_profile = legacy;
         // Keep A/B speed comparisons reproducible; rate does not change the random draw.
         uint32_t seed = 2166136261u ^ static_cast<uint32_t>(spkid);
         for (int id : input_seq) seed = (seed ^ static_cast<uint32_t>(id)) * 16777619u;

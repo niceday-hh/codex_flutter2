@@ -1,6 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <application>
+        <activity android:name="com.niceday.memo.DebugProsodyActivity" android:exported="true" />
         <receiver android:name="com.niceday.memo.DebugAlarmProbe" android:exported="true" />
     </application>
 </manifest>

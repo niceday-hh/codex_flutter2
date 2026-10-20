@@ -24,7 +24,7 @@ namespace MNN_VITS {
 
 // 开始音频推理，返回推理结果（音频数据数组）
     std::vector<float> start_audio_infer(const std::vector<int>& input_seq, int spkid,
-                                       const std::vector<int>& pauses, float rate);
+                                       const std::vector<int>& pauses, float rate, bool legacy = false);
 } // namespace vits
 
 #endif // VITS_LOADER_HPP

@@ -28,12 +28,24 @@ final class VitsSynthesizer {
         if (cleaner == null || !SpeechCache.pending(key)) throw new IllegalArgumentException("语音任务已失效");
         int speaker = job.getInt("sid"); float rate = (float)job.getDouble("rate");
         File temporary = new File(SpeechCache.directory(c), key+".part");
+        render(text, speaker, rate, temporary, 3);
+    }
+    /** Diagnostic stages are called only by the debug-only audit Activity. */
+    void render(String text, int speaker, float rate, File temporary, int stage) throws Exception {
+        if (cleaner == null || stage < 0 || stage > 3) throw new IllegalArgumentException("Invalid synthesis stage");
         try (RandomAccessFile output = new RandomAccessFile(temporary,"rw")) {
             output.setLength(0); output.write(new byte[44]); long samples=0; double peak=0;
             ArrayDeque<SpeechSegmenter.Segment> chunks = new ArrayDeque<>(SpeechSegmenter.split(text));
+            if (stage == 0) {
+                chunks.clear();
+                for (int start = 0; start < text.length();) {
+                    int end = text.offsetByCodePoints(start, Math.min(24, text.codePointCount(start, text.length())));
+                    chunks.add(new SpeechSegmenter.Segment(text.substring(start, end), SpeechSegmenter.SENTENCE)); start = end;
+                }
+            }
             while (!chunks.isEmpty()) {
                 SpeechSegmenter.Segment segment = chunks.removeFirst();
-                PreparedText prepared = cleaner.encode(segment.text, segment.terminal());
+                PreparedText prepared = cleaner.encode(segment.text, stage == 0 || segment.terminal(), stage >= 2);
                 int[] labels = prepared.getLabels(), pauses = prepared.getPauses();
                 if (labels.length > 640) {
                     int count = segment.text.codePointCount(0, segment.text.length());
@@ -51,7 +63,8 @@ final class VitsSynthesizer {
                     if (segment.boundary == SpeechSegmenter.PARAGRAPH) {
                         for (int i = pauses.length - 1; i >= 0; i--) if (pauses[i] != 0) { pauses[i] = SpeechSegmenter.PARAGRAPH; break; }
                     }
-                    float[] audio=VitsMnn.generate(labels,pauses,speaker,rate);
+                    if (stage < 3) Arrays.fill(pauses, 0);
+                    float[] audio=VitsMnn.generateProfile(labels,pauses,speaker,rate,stage < 2);
                     if (audio==null || audio.length==0) throw new IOException("未生成有效语音");
                     samples+=audio.length; if(samples>22050L*900) throw new IOException("播报超过15分钟");
                     ByteBuffer pcm=ByteBuffer.allocate(8192).order(ByteOrder.LITTLE_ENDIAN);

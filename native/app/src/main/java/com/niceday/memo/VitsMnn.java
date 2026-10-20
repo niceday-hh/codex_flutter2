@@ -4,6 +4,9 @@ package com.niceday.memo;
 final class VitsMnn {
     static { System.loadLibrary("memo_vits"); }
     static native void open(String directory);
-    static native float[] generate(int[] labels, int[] pauses, int speaker, float speed);
+    static float[] generate(int[] labels, int[] pauses, int speaker, float speed) {
+        return generateProfile(labels, pauses, speaker, speed, false);
+    }
+    static native float[] generateProfile(int[] labels, int[] pauses, int speaker, float speed, boolean legacy);
     static native void close();
 }
