@@ -1,6 +1,8 @@
 #include <stdexcept>
 #include <cmath>
 #include <cstring>
+#include <random>
+#include "vits_prosody.hpp"
 // Adapted from Voine/VITS-MNN, Apache-2.0. See docs/third-party-vits.md.
 #include "mnn_vits_loader.hpp"
 #include <iostream>
@@ -35,6 +37,21 @@ namespace MNN_VITS {
     static std::shared_ptr<MNN::Express::Module> g_emb_module = nullptr;
     static std::shared_ptr<MNN::Express::Module> g_flow_module = nullptr;
     static float length_scale_f = 1.2f;
+    static std::mt19937 synthesis_random;
+    static bool legacy_profile = false;
+
+    MNN::Express::VARP normal_noise(const std::vector<int>& shape) {
+        size_t count = 1;
+        for (int dimension : shape) {
+            if (dimension < 1) throw std::runtime_error("Invalid noise shape");
+            count *= static_cast<size_t>(dimension);
+            if (count > 1600000) throw std::runtime_error("Noise tensor exceeds synthesis limit");
+        }
+        std::normal_distribution<float> normal(0.f, 1.f);
+        std::vector<float> values(count);
+        for (auto& value : values) value = normal(synthesis_random);
+        return MNN::Express::_Const(values.data(), shape, MNN::Express::NCHW, halide_type_of<float>());
+    }
 
 
     template <typename T>
@@ -105,7 +122,8 @@ namespace MNN_VITS {
 
         //zin = np.random.randn(x.shape[0], 2, x.shape[2]).astype(np.float32) * noise_scale_w
         auto zin_shape = MNN::Express::_Const(.5f, {1, 2, size}, MNN::Express::NCHW);
-        auto zin = MNN::Express::_RandomUnifom(MNN::Express::_Shape(zin_shape, true), halide_type_of<float>(), 0.0f, 1.0f, 114514, 1919810) * noise_scale_w;
+        auto zin = (legacy_profile ? MNN::Express::_RandomUnifom(MNN::Express::_Shape(zin_shape, true), halide_type_of<float>(), 0.0f, 1.0f, 114514, 1919810)
+                                   : normal_noise({1, 2, size})) * noise_scale_w;
 
         MNN_VITS_PRINT("start forward\n");
         std::vector<MNN::Express::VARP> dp_outputs  = g_dp_module->onForward({zin, std::move(xout), std::move(g_expand_outputs), std::move(x_mask)});
@@ -222,8 +240,8 @@ namespace MNN_VITS {
         MNN_VITS_PRINT("start z_p\n");
         // z_p_rand = np.random.randn(m_p.shape[0], m_p.shape[1], m_p.shape[2])
         // z_p = ( m_p + z_p_rand * np.exp(logs_p) * noise_scale)
-        auto m_p_shape = MNN::Express::_Shape(m_p_, true);
-        auto rand_z_p = MNN::Express::_RandomUnifom(m_p_shape, halide_type_of<float>(), 0.0f, 1.0f, 114514, 1919810);
+        auto rand_z_p = legacy_profile ? MNN::Express::_RandomUnifom(MNN::Express::_Shape(m_p_, true), halide_type_of<float>(), 0.0f, 1.0f, 114514, 1919810)
+                                      : normal_noise(m_p_->getInfo()->dim);
 //        auto rand_z_p = MNN::Express::_Const(0.5f, m_p_->getInfo()->dim, MNN::Express::NCHW);
         auto logs_p_exp = MNN::Express::_Exp(std::move(logs_p_));
         auto rand_mul_logs = rand_z_p * logs_p_exp;
@@ -337,9 +355,15 @@ namespace MNN_VITS {
         g_flow_module = std::shared_ptr<MNN::Express::Module>(MNN::Express::Module::load(input_names_flow, output_names_flow, g_flow_model_path.c_str(), nullptr, &mdconfig));
     }
 
-    std::vector<float> start_audio_infer(const std::vector<int>& input_seq, int spkid) {
+    std::vector<float> start_audio_infer(const std::vector<int>& input_seq, int spkid,
+                                       const std::vector<int>& pauses, float rate, bool legacy) {
         if (!g_initialized || !g_enc_module || !g_dec_module || !g_dp_module || !g_emb_module || !g_flow_module) throw std::runtime_error("VITS modules not ready");
         MNN::Express::ExecutorScope scope(g_executor);
+        legacy_profile = legacy;
+        // Keep A/B speed comparisons reproducible; rate does not change the random draw.
+        uint32_t seed = 2166136261u ^ static_cast<uint32_t>(spkid);
+        for (int id : input_seq) seed = (seed ^ static_cast<uint32_t>(id)) * 16777619u;
+        synthesis_random.seed(seed);
         MNN_VITS_PRINT("Starting audio inference... spkid %d\n", spkid);
         auto enc_outputs = translate_run_encoder(input_seq);
         const auto& logs_p = enc_outputs[0];
@@ -349,6 +373,11 @@ namespace MNN_VITS {
         auto g_expand_outputs = translate_run_emb(spkid);
         auto logw = translate_run_dp((int)input_seq.size(), xout, g_expand_outputs, x_mask);
         auto w_ceil = translate_w_ceil(logw, x_mask);
+        const float* predicted = w_ceil->readMap<float>();
+        if (!predicted) throw std::runtime_error("Duration read failed");
+        std::vector<float> durations(predicted, predicted + input_seq.size());
+        memo_prosody::constrain_pauses(durations, input_seq, pauses, rate);
+        w_ceil = MNN::Express::_Const(durations.data(), {1, 1, static_cast<int>(durations.size())}, MNN::Express::NCHW, halide_type_of<float>());
         auto y_lengths = translate_y_length(w_ceil);
         auto y_mask = translate_y_mask(y_lengths);
         auto attn_mask = translate_attn_mask(x_mask, y_mask);

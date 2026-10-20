@@ -44,8 +44,8 @@ public final class SpeechSettings {
         String voice = r.optString("speechVoice", defaults ? VOICE : "");
         if (!voice.isEmpty() && (!voice.matches("[0-9]{1,3}") || Integer.parseInt(voice) > 803)) throw new IllegalArgumentException("音色编号须为0至803");
         double rate = r.optDouble("speechRate", defaults ? 1 : 0);
-        if (!Double.isFinite(rate) || (rate != 0 && (rate < 0.8 || rate > 1.3)) || (defaults && rate == 0))
-            throw new IllegalArgumentException("语速须为0.8至1.3倍");
+        if (!Double.isFinite(rate) || (rate != 0 && (rate < 0.5 || rate > 1.3)) || (defaults && rate == 0))
+            throw new IllegalArgumentException("语速须为0.5至1.3倍");
         for (String field : Arrays.asList("speechHideLocked", "speechRepeat", "speechRandom"))
             if (r.has(field) && !(r.get(field) instanceof Boolean)) throw new IllegalArgumentException("语音隐私开关无效");
         for(String field: Arrays.asList("speechRandomLanguage","speechRandomGender","speechRandomGroup"))
@@ -64,7 +64,7 @@ public final class SpeechSettings {
     public static String cacheKey(String text, String voice, double rate) {
         try {
             byte[] bytes = MessageDigest.getInstance("SHA-256").digest(
-                ("voine-vits-mnn-6379f381-22k-v1\n" + voice + "\n" + Math.round(rate * 100) + "\n" + text).getBytes(StandardCharsets.UTF_8));
+                ("voine-vits-mnn-6379f381-22k-prosody-v2\n" + voice + "\n" + Math.round(rate * 100) + "\n" + text).getBytes(StandardCharsets.UTF_8));
             StringBuilder hex = new StringBuilder();
             for (byte b : bytes) hex.append(String.format(Locale.ROOT, "%02x", b & 255));
             return hex.toString();

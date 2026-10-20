@@ -144,7 +144,8 @@ Future<double?> chooseSpeechRate(BuildContext context, double current, {required
   return showModalBottomSheet<double>(context: context, showDragHandle: true, builder: (c) => StatefulBuilder(
     builder: (c, update) => SafeArea(child: Padding(padding: const EdgeInsets.all(20), child: Column(mainAxisSize: MainAxisSize.min, children: [
       Text('播报语速 ${rate.toStringAsFixed(1)} 倍', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-      Slider(min: 0.8, max: 1.3, divisions: 5, value: rate, label: rate.toStringAsFixed(1), onChanged: (v) => update(() => rate = v)),
+      Slider(min: 0.5, max: 1.3, divisions: 8, value: rate.clamp(0.5, 1.3).toDouble(), label: rate.toStringAsFixed(1), onChanged: (v) => update(() => rate = v)),
+      const Padding(padding: EdgeInsets.only(bottom: 12), child: Text('较小数值会放慢发音；标点停顿单独优化。仍觉得快时可试 0.6～0.7。单条提醒的独立语速优先于默认值。', style: TextStyle(fontSize: 12, color: Color(0xFF8A859C)))),
       if (allowDefault) TextButton(onPressed: () => Navigator.pop(c, 0.0), child: const Text('跟随默认语速')),
       FilledButton(onPressed: () => Navigator.pop(c, (rate * 10).round() / 10), child: const Text('使用此语速')),
     ])))));
