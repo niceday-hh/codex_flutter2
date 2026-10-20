@@ -4,11 +4,14 @@ import java.text.BreakIterator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Keep sentence context; split long sentences at punctuation before using word boundaries. */
 public final class SpeechSegmenter {
     public static final int CONTINUATION = 0, LIST = 1, CLAUSE = 2, SENTENCE = 3, PARAGRAPH = 4;
     public static final int MAX_CODE_POINTS = 48;
+    private static final Pattern UNITS = Pattern.compile("\\d+(?:(?:[:：./-]|年|月|日|点|时|分|秒)\\d+)*(?:分钟|毫升|年|月|日|点|时|分|秒|%|℃)?|[A-Za-z]+");
     public static final class Segment {
         public final String text;
         public final int boundary;
@@ -55,6 +58,16 @@ public final class SpeechSegmenter {
                             int p = end;
                             while (p > start && Character.isDigit(paragraph.codePointBefore(p))) p -= Character.charCount(paragraph.codePointBefore(p));
                             if (p > start) end = p;
+                        }
+                    }
+                }
+                if (end < paragraph.length()) {
+                    Matcher units = UNITS.matcher(paragraph);
+                    while (units.find()) {
+                        if (units.start() < end && end < units.end()) {
+                            if (units.start() > start) end = units.start();
+                            else if (paragraph.codePointCount(start, units.end()) <= limit) end = units.end();
+                            break;
                         }
                     }
                 }

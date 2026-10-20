@@ -39,4 +39,13 @@ public class SpeechSegmenterTest {
         assertTrue(SpeechSegmenter.split("").isEmpty());
         assertEquals(SpeechSegmenter.LIST, SpeechSegmenter.punctuation('、'));
     }
+    @Test public void forcedFallbackKeepsClockDateDecimalAndUnitsTogether() {
+        for (String unit : new String[]{"8:05", "2026年10月20日", "12.5%", "100毫升", "APP"}) {
+            String text = "请记得核对".repeat(8) + unit + "以后再继续处理其他事项";
+            int limit = 50;
+            var parts = SpeechSegmenter.split(text, limit);
+            assertEquals(text, parts.stream().map(s -> s.text).reduce("", String::concat));
+            assertTrue(unit, parts.stream().anyMatch(s -> s.text.contains(unit)));
+        }
+    }
 }
