@@ -33,12 +33,15 @@ public class SpeechSettingsTest {
             try { SpeechSettings.validate(new JSONObject().put("speechVoice", voice), false); fail(voice); }
             catch (IllegalArgumentException expected) {}
         }
-        for (Object rate : new Object[]{0.7, 1.4, "1.0"}) {
+        for (Object rate : new Object[]{0.4, 1.4, "1.0"}) {
             try { SpeechSettings.validate(new JSONObject().put("speechRate", rate), false); fail(String.valueOf(rate)); }
             catch (IllegalArgumentException expected) {}
         }
     }
     @Test public void voiceAndRateInheritAndAffectCacheIdentity() throws Exception {
+        JSONObject slow = new JSONObject().put("speechRate", .5);
+        SpeechSettings.validate(slow, false);
+        assertEquals(.5, slow.getDouble("speechRate"), .0001);
         JSONObject defaults = new JSONObject().put("speechVoice", "33").put("speechRate", 0.9);
         assertEquals("33", SpeechSettings.voice(new JSONObject(), defaults));
         assertEquals(0.9, SpeechSettings.rate(new JSONObject(), defaults), 0.0001);

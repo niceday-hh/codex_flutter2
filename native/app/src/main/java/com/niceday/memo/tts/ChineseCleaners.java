@@ -6,6 +6,8 @@ import android.util.Log;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.regex.Pattern;
+import java.text.BreakIterator;
+import java.util.Locale;
 
 
 import com.github.houbb.pinyin.constant.enums.PinyinStyleEnum;
@@ -267,6 +269,10 @@ public class ChineseCleaners {
     }
 
     public String chinese_clean_text1(String s) {
+        return chinese_clean_text1(s, true, true);
+    }
+
+    public String chinese_clean_text1(String s, boolean terminal, boolean corrected) {
 
         if (s == null || s.trim().isEmpty()) return "";
         StringBuilder sb = new StringBuilder();
@@ -278,12 +284,14 @@ public class ChineseCleaners {
 
         Long start = System.currentTimeMillis();
         try {
-            pinyin = PinyinHelper.toPinyin(sent, PinyinStyleEnum.NUM_LAST);
+            pinyin = corrected ? wordPinyin(sent) : PinyinHelper.toPinyin(sent, PinyinStyleEnum.NUM_LAST);
         } catch (Exception ignore) {
         }
         Long end = System.currentTimeMillis();
 
         String bopomofo = pinyin_to_prepin(pinyin);
+        if (corrected) bopomofo = bopomofo.replaceAll("([ㄓㄕㄗㄙㄖ]) +(?=[ˉˊˇˋ])", "$1");
+        if (corrected) bopomofo = bopomofo.replaceAll("([ㄔㄘ])ㄖ(?=[ˉˊˇˋ])", "$1");
         String romaji = bopomofo_to_romaji(bopomofo);
 
         romaji = romaji.replaceAll("i([aoe])", "y$1");
@@ -296,12 +304,28 @@ public class ChineseCleaners {
         char lastChar = romaji.charAt(romaji.length() - 1);
         String pattern = "[A-Za-zɯɹəɥ→↓↑]";
 
-        if (Pattern.matches(pattern, String.valueOf(lastChar))) {
+        if (terminal && Pattern.matches(pattern, String.valueOf(lastChar))) {
             romaji += ".";
         }
         sb.append(romaji);
 
         if (debug_flag) sb.append(' ');
         return sb.toString();
+    }
+
+    /** Match the training frontend's within-word joining, retaining spaces between words. */
+    private String wordPinyin(String text) {
+        BreakIterator words = BreakIterator.getWordInstance(Locale.CHINA);
+        words.setText(text);
+        StringBuilder result = new StringBuilder();
+        int start = words.first();
+        for (int end = words.next(); end != BreakIterator.DONE; start = end, end = words.next()) {
+            String word = text.substring(start, end);
+            if (word.matches(".*[\\u4e00-\\u9fff].*")) {
+                if (result.length() > 0) result.append(' ');
+                result.append(PinyinHelper.toPinyin(word, PinyinStyleEnum.NUM_LAST).replace(" ", ""));
+            } else result.append(word);
+        }
+        return result.toString();
     }
 }

@@ -87,10 +87,11 @@ class Normalizer {
         return (if (negative) "负" else "") + integer + (if (parts.size < 2) "" else "点" + parts[1].map { digits[it.digitToInt()] }.joinToString(""))
     }
 
-    fun normalizeText(text: String, punctuation: String): String {
+    @JvmOverloads
+    fun normalizeText(text: String, punctuation: String, preserveListPause: Boolean = false): String {
         val repMap = mapOf(
             "：" to ",", "；" to ",", "，" to ",", "。" to ".", "！" to "!", "？" to "?",
-            "\n" to ".", "·" to ",", "、" to ",", "..." to "…", "$" to ".",
+            "\n" to ".", "·" to ",", "、" to if (preserveListPause) "、" else ",", "..." to "…", "$" to ".",
             "“" to "'", "”" to "'", "\"" to "'", "‘" to "'", "’" to "'",
             "（" to "'", "）" to "'", "(" to "'", ")" to "'",
             "《" to "'", "》" to "'", "【" to "'", "】" to "'", "[" to "'", "]" to "'",

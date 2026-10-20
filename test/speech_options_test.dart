@@ -8,6 +8,18 @@ void main() {
   setUp(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async => null);
   });
+  testWidgets('slower synthesis rates can be selected without changing the existing rate', (tester) async {
+    double? selected;
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: Builder(builder: (c) => TextButton(
+      onPressed: () async { selected = await chooseSpeechRate(c, .8, allowDefault: false); }, child: const Text('打开语速'))))));
+    await tester.tap(find.text('打开语速')); await tester.pumpAndSettle();
+    final slider = tester.widget<Slider>(find.byType(Slider));
+    expect(slider.value, .8); expect(slider.min, .5); expect(slider.max, 1.3);
+    slider.onChanged!(.5); await tester.pump();
+    await tester.tap(find.text('使用此语速')); await tester.pumpAndSettle();
+    expect(selected, .5);
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  });
   testWidgets('lockscreen speech privacy can be disabled independently', (tester) async {
     final r = Reminder(speechMode: 'on', lockscreen: 'private');
     await tester.binding.setSurfaceSize(const Size(393, 1000));

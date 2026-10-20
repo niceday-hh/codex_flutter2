@@ -2,6 +2,8 @@ package com.niceday.memo;
 
 import android.content.Context;
 import com.niceday.memo.tts.ChineseTextUtils;
+import com.niceday.memo.tts.PreparedText;
+import com.niceday.memo.tts.SpeechSegmenter;
 import org.json.*;
 import java.io.*;
 import java.nio.*;
@@ -28,12 +30,28 @@ final class VitsSynthesizer {
         File temporary = new File(SpeechCache.directory(c), key+".part");
         try (RandomAccessFile output = new RandomAccessFile(temporary,"rw")) {
             output.setLength(0); output.write(new byte[44]); long samples=0; double peak=0;
-            for (int start=0;start<text.length();) {
-                int end=text.offsetByCodePoints(start,Math.min(24,text.codePointCount(start,text.length())));
-                String chunk=text.substring(start,end); start=end;
-                for (int[] labels : cleaner.convertText(chunk)) {
+            ArrayDeque<SpeechSegmenter.Segment> chunks = new ArrayDeque<>(SpeechSegmenter.split(text));
+            while (!chunks.isEmpty()) {
+                SpeechSegmenter.Segment segment = chunks.removeFirst();
+                PreparedText prepared = cleaner.encode(segment.text, segment.terminal());
+                int[] labels = prepared.getLabels(), pauses = prepared.getPauses();
+                if (labels.length > 640) {
+                    int count = segment.text.codePointCount(0, segment.text.length());
+                    if (count <= 1) throw new IOException("单个文本单元超过合成上限");
+                    List<SpeechSegmenter.Segment> smaller = SpeechSegmenter.split(segment.text, Math.max(1, count / 2));
+                    for (int i = smaller.size() - 1; i >= 0; i--) {
+                        SpeechSegmenter.Segment child = smaller.get(i);
+                        int boundary = i == smaller.size() - 1 ? segment.boundary : SpeechSegmenter.punctuation(child.text.codePointBefore(child.text.length()));
+                        chunks.addFirst(new SpeechSegmenter.Segment(child.text, boundary));
+                    }
+                    continue;
+                }
+                {
                     if (labels.length < 3) continue;
-                    float[] audio=VitsMnn.generate(labels,speaker,rate);
+                    if (segment.boundary == SpeechSegmenter.PARAGRAPH) {
+                        for (int i = pauses.length - 1; i >= 0; i--) if (pauses[i] != 0) { pauses[i] = SpeechSegmenter.PARAGRAPH; break; }
+                    }
+                    float[] audio=VitsMnn.generate(labels,pauses,speaker,rate);
                     if (audio==null || audio.length==0) throw new IOException("未生成有效语音");
                     samples+=audio.length; if(samples>22050L*900) throw new IOException("播报超过15分钟");
                     ByteBuffer pcm=ByteBuffer.allocate(8192).order(ByteOrder.LITTLE_ENDIAN);
