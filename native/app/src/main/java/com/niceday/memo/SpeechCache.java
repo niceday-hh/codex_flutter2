@@ -54,7 +54,7 @@ final class SpeechCache {
             Lease held = new Lease(job.getString("key"), name, id, SpeechSettings.seed(snapshot), expected);
             if (candidate) {
                 JSONObject generic = textJob(c, SpeechSettings.GENERIC, snapshot);
-                held.keys.add(generic.getString("key")); job.put("companions", new JSONArray().put(generic));
+                if (held.keys.add(generic.getString("key"))) job.put("companions", new JSONArray().put(generic));
             }
             leases.put(token, held);
             return job.put("lease", token).put("filename", name).put("reminderId", id);

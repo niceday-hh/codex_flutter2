@@ -81,6 +81,15 @@ public class SpeechVersionTest {
         SpeechCache.releaseAudio(b.getString("lease")); SpeechCache.prune(c);
         assertEquals(a.getString("key"), acquire(false).getString("key"));
     }
+    @Test public void aBodyIdenticalToThePrivacyPromptNeedsOnlyOneSynthesisJob() throws Exception {
+        JSONObject same = row().put("text", SpeechSettings.GENERIC);
+        c.getSharedPreferences("memo", 0).edit().putString("reminders", new JSONArray().put(same).toString()).commit();
+        JSONObject candidate = acquire(true);
+        assertNull(candidate.optJSONArray("companions"));
+        complete(candidate);
+        SpeechCache.selectAudio(c, candidate.getString("lease"));
+        assertEquals(candidate.getString("key"), acquire(false).getString("key"));
+    }
     @Test public void completedAndSpeechOffRemindersKeepTheirSelectedCacheForExport() throws Exception {
         JSONObject selected = acquire(false); complete(selected);
         SpeechCache.releaseAudio(selected.getString("lease"));

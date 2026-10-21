@@ -26,6 +26,9 @@ def device_clock():
             'elapsed_ms': int(float(shell('cat', '/proc/uptime').split()[0]) * 1000)}
 def seed(seconds):
     response = shell('am', 'broadcast', '--receiver-foreground', '-n', RECEIVER, '-a', 'CORE_SEED', '--ei', 'seconds', str(seconds))
+    if 'reliableMode=false' not in response:
+        print('Core seed response:', response, flush=True)
+        print(shell('logcat', '-d', '-t', '500', check=False), flush=True)
     assert "reliableMode=false" in response, f"Core fixture mode was not acknowledged: {response}"
     row = await_created(response, runtime)
     return row['id'], row['nextTrigger']
