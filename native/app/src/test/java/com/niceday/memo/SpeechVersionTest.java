@@ -81,6 +81,17 @@ public class SpeechVersionTest {
         SpeechCache.releaseAudio(b.getString("lease")); SpeechCache.prune(c);
         assertEquals(a.getString("key"), acquire(false).getString("key"));
     }
+    @Test public void completedAndSpeechOffRemindersKeepTheirSelectedCacheForExport() throws Exception {
+        JSONObject selected = acquire(false); complete(selected);
+        SpeechCache.releaseAudio(selected.getString("lease"));
+        JSONObject completed = row().put("enabled", false).put("completed", true)
+            .put("acknowledged", true).put("speechMode", "off");
+        c.getSharedPreferences("memo", 0).edit().putString("reminders", new JSONArray().put(completed).toString()).commit();
+        SpeechCache.prune(c);
+        JSONObject reopened = acquire(false);
+        assertTrue(reopened.getBoolean("ready"));
+        assertEquals(selected.getString("key"), reopened.getString("key"));
+    }
     @Test public void timingEditsKeepTheVersionAndSynthesisEditsOrDefaultsReplaceIt() throws Exception {
         ReminderEngine engine = new ReminderEngine(c);
         JSONObject first = row(); long seed = first.getLong("speechSeed");

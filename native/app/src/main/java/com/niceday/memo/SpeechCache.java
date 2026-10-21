@@ -164,10 +164,9 @@ final class SpeechCache {
             JSONArray rows = new JSONArray(c.getSharedPreferences("memo", 0).getString("reminders", "[]"));
             for (int i = 0; i < rows.length(); i++) {
                 JSONObject row = rows.getJSONObject(i);
-                if (SpeechSettings.enabled(row, defaults) && (row.optBoolean("enabled", true) || (row.optLong("activeOccurrence") > 0 && !row.optBoolean("acknowledged")))) {
-                    keep.add(file(c, row.optString("text"), row, defaults).getName());
-                    keep.add(file(c, SpeechSettings.GENERIC, row, defaults).getName());
-                }
+                // Saved selections remain available for history preview/export too.
+                keep.add(file(c, row.optString("text"), row, defaults).getName());
+                keep.add(file(c, SpeechSettings.GENERIC, row, defaults).getName());
             }
             File[] files = directory(c).listFiles();
             if (files != null) for (File file : files) {
