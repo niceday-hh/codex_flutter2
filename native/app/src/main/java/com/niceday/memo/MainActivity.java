@@ -60,6 +60,9 @@ public final class MainActivity extends FlutterActivity {
     private MethodChannel.Result permissionResult, ringtoneResult;
     private MethodChannel.Result documentResult;
     private String exportDocument;
+    private InputStream exportAudio;
+    private long speechPreviewToken;
+    private MethodChannel.Result previewResult;
     private final java.util.concurrent.ExecutorService documents = java.util.concurrent.Executors.newSingleThreadExecutor();
     private MediaPlayer speechPreview;
     private final VitsSynthesizer synthesizer = new VitsSynthesizer();
@@ -125,6 +128,21 @@ public final class MainActivity extends FlutterActivity {
                         String key = call.argument("key"), failure = call.argument("error");
                         SpeechCache.finish(this, key, failure == null ? "" : failure); result.success(null);
                     }
+                    case "reminderAudioJob" -> result.success(SpeechCache.reminderAudioJob(this, ((Number)call.arguments).intValue()).toString());
+                    case "reminderAudioReady" -> {
+                        try { SpeechCache.leasedAudio(this, (String)call.arguments); result.success(true); }
+                        catch (IOException e) { result.success(false); }
+                    }
+                    case "releaseReminderAudio" -> { SpeechCache.releaseAudio((String)call.arguments); result.success(null); }
+                    case "exportReminderAudio" -> {
+                        if (documentResult != null) throw new IllegalStateException("文件操作处理中");
+                        if (!resumed || getSystemService(KeyguardManager.class).isKeyguardLocked()) throw new IllegalStateException("请解锁并保持提醒页面打开");
+                        String token = (String)call.arguments;
+                        exportAudio = new FileInputStream(SpeechCache.leasedAudio(this, token));
+                        documentResult = result;
+                        startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("audio/wav")
+                            .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, SpeechCache.audioName(token)), 106);
+                    }
                     case "speechPreviewJob" -> {
                         JSONObject config = new JSONObject((String) call.arguments);
                         SpeechSettings.validate(config, false);
@@ -132,17 +150,32 @@ public final class MainActivity extends FlutterActivity {
                     }
                     case "playSpeechPreview" -> {
                         stopSpeechPreview();
-                        String key = (String)call.arguments;
-                        if (!key.matches("[0-9a-f]{64}\\.wav") || !resumed || getSystemService(KeyguardManager.class).isKeyguardLocked())
+                        String key = call.arguments instanceof String ? (String)call.arguments : call.argument("key");
+                        Number token = call.arguments instanceof String ? 0 : call.argument("token");
+                        if (key == null || !key.matches("[0-9a-f]{64}\\.wav") || !resumed || getSystemService(KeyguardManager.class).isKeyguardLocked())
                             throw new IllegalStateException("请解锁并保持试听页面打开");
                         File audio = new File(SpeechCache.directory(this), key);
                         if (!SpeechCache.ready(audio)) throw new IllegalStateException("试听语音尚未准备");
-                        speechPreview = new MediaPlayer();
+                        speechPreview = new MediaPlayer(); speechPreviewToken = token.longValue();
                         speechPreview.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
-                        speechPreview.setDataSource(audio.getPath());
+                        speechPreview.setDataSource(audio.getPath()); previewResult = result;
                         speechPreview.setOnCompletionListener(p -> stopSpeechPreview());
-                        speechPreview.setOnErrorListener((p, a, b) -> { stopSpeechPreview(); return true; });
-                        speechPreview.setOnPreparedListener(MediaPlayer::start); speechPreview.prepareAsync(); result.success(null);
+                        speechPreview.setOnErrorListener((p, a, b) -> {
+                            if (previewResult != null) { previewResult.error("PLAYBACK", "音频播放失败，请重试", null); previewResult = null; }
+                            if (channel != null) channel.invokeMethod("speechPreviewFailed", speechPreviewToken);
+                            stopSpeechPreview(); return true;
+                        });
+                        speechPreview.setOnPreparedListener(p -> {
+                            if (p != speechPreview) return;
+                            try {
+                                p.start();
+                                if (previewResult != null) { previewResult.success(true); previewResult = null; }
+                            } catch (Exception e) {
+                                if (previewResult != null) { previewResult.error("PLAYBACK", "音频无法播放，请重试", null); previewResult = null; }
+                                stopSpeechPreview();
+                            }
+                        });
+                        speechPreview.prepareAsync();
                     }
                     case "stopSpeechPreview" -> { stopSpeechPreview(); result.success(null); }
                     case "filesDir" -> result.success(getFilesDir().getAbsolutePath());
@@ -250,7 +283,11 @@ public final class MainActivity extends FlutterActivity {
                 }
             } catch (Exception e) {
                 if (ringtoneResult == result) ringtoneResult = null;
-                if (documentResult == result) { documentResult = null; exportDocument = null; }
+                if (documentResult == result) {
+                    documentResult = null; exportDocument = null;
+                    if (exportAudio != null) { try { exportAudio.close(); } catch (IOException ignored) {} exportAudio = null; }
+                }
+                if (previewResult == result) { previewResult = null; stopSpeechPreview(); }
                 result.error("NATIVE", e.getMessage(), null);
             }
         });
@@ -269,7 +306,11 @@ public final class MainActivity extends FlutterActivity {
         }
     }
     private void stopSpeechPreview() {
-        if (speechPreview != null) { speechPreview.release(); speechPreview = null; }
+        if (previewResult != null) { previewResult.success(false); previewResult = null; }
+        if (speechPreview != null) {
+            speechPreview.release(); speechPreview = null;
+            if (channel != null) channel.invokeMethod("speechPreviewEnded", speechPreviewToken);
+        }
     }
     @Override protected void onResume() {
         super.onResume(); resumed = true; foreground = new java.lang.ref.WeakReference<>(this);
@@ -284,6 +325,24 @@ public final class MainActivity extends FlutterActivity {
             Uri uri = resultCode == Activity.RESULT_OK && data != null
                 ? data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI) : null;
             ringtoneResult.success(uri == null ? null : uri.toString()); ringtoneResult = null;
+        }
+        if (request == 106 && documentResult != null) {
+            final MethodChannel.Result result = documentResult;
+            final InputStream source = exportAudio; exportAudio = null; documentResult = null;
+            final Uri uri = resultCode == Activity.RESULT_OK && data != null ? data.getData() : null;
+            if (uri == null) {
+                if (source != null) try { source.close(); } catch (IOException ignored) {}
+                result.success(null); return;
+            }
+            // Copy already prepared bytes independently of the model executor.
+            new Thread(() -> {
+                try {
+                    if (source == null) throw new IOException("音频操作已失效");
+                    SavedReminderAudio.write(getApplicationContext(), source, uri);
+                    runOnUiThread(() -> result.success(true));
+                } catch (Exception e) { runOnUiThread(() -> result.error("EXPORT", "音频保存失败，请选择其它位置重试", null)); }
+            }, "reminder-audio-export").start();
+            return;
         }
         if ((request == 104 || request == 105) && documentResult != null) {
             final MethodChannel.Result result = documentResult;
@@ -396,6 +455,10 @@ public final class MainActivity extends FlutterActivity {
     }
     @Override protected void onDestroy() {
         if (memoPreferences != null && memoListener != null) memoPreferences.unregisterOnSharedPreferenceChangeListener(memoListener);
+        if (exportAudio != null) {
+            try { exportAudio.close(); } catch (IOException ignored) {} exportAudio = null;
+            if (documentResult != null) { documentResult.error("EXPORT", "提醒页面已关闭，请重新保存", null); documentResult = null; }
+        }
         super.onDestroy();
         documents.execute(synthesizer::close); documents.shutdown();
     }

@@ -6,6 +6,7 @@ import 'asr.dart';
 import 'reminder.dart';
 import 'voice_parser.dart';
 import 'speech.dart';
+import 'reminder_audio.dart';
 import 'speech_options.dart';
 import 'task_library.dart';
 import 'voice_flow.dart';
@@ -98,6 +99,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         _suppressVoiceEntry = false; _entryPending = true; _entryEpoch++;
         await _maybeStartHandsFree();
       }
+      if (call.method == 'speechPreviewEnded') speech.previewEnded(call.arguments as int);
+      if (call.method == 'speechPreviewFailed') speech.previewEnded(call.arguments as int, error: '音频播放失败，请重试');
       if (call.method == 'stateChanged') { await reload(); }
       if (call.method == 'prepareSpeech') { await speech.preparePending(retry: true); }
     });
@@ -911,7 +914,7 @@ class _ReminderDetailState extends State<ReminderDetail> {
   bool busy = false;
   @override Widget build(BuildContext context) {
     final r = widget.reminder;
-    return SafeArea(child: Padding(padding: EdgeInsets.fromLTRB(24, 0, 24, 28 + MediaQuery.of(context).viewInsets.bottom),
+    return SafeArea(child: SingleChildScrollView(padding: EdgeInsets.fromLTRB(24, 0, 24, 28 + MediaQuery.of(context).viewInsets.bottom),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(r.time, style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w700, color: purple)),
         Text('${dateLabel(r.displayDate)} · ${r.repeatLabel}', style: const TextStyle(color: muted)),
@@ -928,7 +931,8 @@ class _ReminderDetailState extends State<ReminderDetail> {
             }
           }),
         ] else const Text('到时会通过系统通知提醒你', style: TextStyle(color: muted)),
-        const SizedBox(height: 10), OutlinedButton(onPressed: busy ? null : widget.onEdit, child: const Text('编辑提醒')),
+        const SizedBox(height: 18), ReminderAudioPanel(key: ValueKey('audio-${r.id}'), reminder: r),
+        const SizedBox(height: 16), OutlinedButton(onPressed: busy ? null : widget.onEdit, child: const Text('编辑提醒')),
       ])));
   }
 }
