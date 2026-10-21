@@ -39,11 +39,12 @@ public class VibrationPreviewTest {
         assertArrayEquals(new long[]{0, 200, 200, 200, 200, 200}, Shadows.shadowOf(vibrator).getPattern());
         assertEquals(channels, notifications.getNotificationChannels().size());
     }
-    @Test public void disabledTouchFeedbackHasAnExplicitReasonAndDoesNotVibrate() throws Exception {
+    @Test public void disabledTouchFeedbackDoesNotBlockReminderPreviewOrChangeTheSystemSetting() throws Exception {
         Settings.System.putInt(context.getContentResolver(), Settings.System.HAPTIC_FEEDBACK_ENABLED, 0);
-        try { NotificationStyles.preview(context, "once"); fail("Disabled haptics must be explained"); }
-        catch (IllegalStateException expected) { assertTrue(expected.getMessage().contains("系统触感反馈已关闭")); }
-        assertFalse(Shadows.shadowOf(vibrator).isVibrating());
+        assertTrue(NotificationStyles.preview(context, "once").getBoolean("requested"));
+        assertTrue(Shadows.shadowOf(vibrator).isVibrating());
+        assertArrayEquals(new long[]{0, 250}, Shadows.shadowOf(vibrator).getPattern());
+        assertEquals(0, Settings.System.getInt(context.getContentResolver(), Settings.System.HAPTIC_FEEDBACK_ENABLED));
     }
     @Test public void missingHardwareIsNotReportedAsASuccessfulRequest() throws Exception {
         Shadows.shadowOf(vibrator).setHasVibrator(false);

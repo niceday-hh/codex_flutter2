@@ -12,7 +12,7 @@ import org.json.JSONObject;
 
 /** Isolated foreground model audit; no reminders, Flutter session or production entry point. */
 public final class DebugProsodyActivity extends Activity {
-    static final String TEXT = "关于这个超级提醒APP，目前还有几点需要优化：\n首先第一点就是每次从其他地方进入到界面里都会切到首页并开始录音，这个是可以的，但是在进入界面之后切换到不同tab页，再切回主页tab，它还是会重新开始录音这一部分，其实可以省略的，防止它反复的开始录音、停止录音，造成不必要的开销。其实可以只保留从外部软件或者是桌面切换到该APP时才重新开始准备预听语音指令。";
+    static final String TEXT = "早上七点半，城市刚刚醒来。地铁站里，人们一边看手机，一边快步走向闸机；广播不时提醒：“请站稳扶好，注意脚下安全。”今天的会议安排得有点紧：九点讨论方案，十点半汇报进度，下午两点还要和客户开视频会。小李问：“我们真的能在周五之前完成吗？”老王笑了笑，说：“别急，先把最重要的事做好，剩下的再一件一件处理。”窗外，春雨断断续续地下着，空气里有泥土和青草的味道。2026年4月18日，看起来只是普通的一天，但对团队来说，却可能是最关键的转折点。毕竟，流畅不等于快，自然也不等于随意——该停的时候停，该连的时候连，这才是好的表达。";
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         TextView view = new TextView(this); view.setText("Running offline prosody comparison…"); setContentView(view);
@@ -23,11 +23,11 @@ public final class DebugProsodyActivity extends Activity {
             JSONObject result = new JSONObject(); JSONArray samples = new JSONArray();
             try {
                 synth.open(this, TtsAssets.prepare(this));
-                for (int stage = 0; stage <= 3; stage++) render(synth, directory, samples, stage, .8f);
-                render(synth, directory, samples, 3, .6f);
-                render(synth, directory, samples, 3, .5f);
+                render(synth, directory, samples, 3, .8f);
+                render(synth, directory, samples, 4, .8f);
+                render(synth, directory, samples, 4, .6f);
                 result.put("success", true).put("samples", samples).put("speaker", 228)
-                    .put("physical_audio_verified", false).put("text", TEXT);
+                    .put("physical_audio_verified", false).put("gender", "female").put("text", TEXT);
             } catch (Throwable error) {
                 try { result.put("success", false).put("error", error.toString()).put("samples", samples); } catch (Exception ignored) {}
             } finally {
@@ -41,8 +41,9 @@ public final class DebugProsodyActivity extends Activity {
         String name = "stage-" + stage + "-rate-" + Math.round(rate * 10) + ".wav";
         long start = SystemClock.elapsedRealtime();
         File output = new File(directory, name);
+        synth.audit = new JSONArray();
         synth.render(TEXT, 228, rate, output, stage);
         samples.put(new JSONObject().put("file", name).put("stage", stage).put("rate", rate)
-            .put("elapsed_ms", SystemClock.elapsedRealtime() - start).put("seconds", (output.length() - 44) / 44100.));
+            .put("punctuation", synth.audit).put("elapsed_ms", SystemClock.elapsedRealtime() - start).put("seconds", (output.length() - 44) / 44100.));
     }
 }

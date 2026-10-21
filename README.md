@@ -1,6 +1,6 @@
-## v0.9.4 · 中文长文分段与更慢语速
+## v0.9.5 · 标点停顿与交互修复
 
-保留现有Voine VITS-MNN和804个音色，修正固定24字符切分、句末标记、G2P与推理随机输入；按标点类别局部约束停顿，语速扩展为0.5～1.3。合成缓存升级后重新准备音频，原任务设置保留。详见[版本说明](docs/releases/v0.9.4.md)。
+修正标点旁空格未纳入停顿控制、句末过短、语音准备时点击备忘录等待、后台重复任务和试振触感开关误判；保持模型、音色和固定签名。详见[版本说明](docs/releases/v0.9.5.md)。
 
 ## v0.9.3 · 设置流畅度、搜索预览与即时反馈
 
@@ -36,7 +36,7 @@ Silero VAD v5为固定校验的本地模型，复用现有麦克风与识别线�
 
 面向荣耀100等 arm64 安卓手机的 Flutter 离线语音定时备忘录。四个 Tab：备忘录、日历、语音、设置。
 
-当前工程版本 v0.9.4。源码、GitHub Actions 构建与已发布 APK 位于本仓库；下载见 [Releases](https://github.com/niceday-hh/codex_flutter2/releases)。未经验证的 unsigned 构建不作为安装包发布。
+当前工程版本 v0.9.5。源码、GitHub Actions 构建与已发布 APK 位于本仓库；下载见 [Releases](https://github.com/niceday-hh/codex_flutter2/releases)。未经验证的 unsigned 构建不作为安装包发布。
 
 ## 本版修复与功能
 

@@ -19,7 +19,7 @@ CERTIFICATE = "99f09bd9bce2572a966e3daea07718debb0ad4754f43b9742e03812c204f4796"
 REQUIRED_JOBS = {"prepare", "checks", "build", "emulator (33)", "emulator (35)"}
 REPORTS = {f"device-{kind}-test-results-api{api}.json"
            for api in (33, 35)
-           for kind in ("alarm", "cleanup", "guardian", "notification", "popup", "speech")}
+           for kind in ("alarm", "cleanup", "guardian", "notification", "popup", "speech", "entry")}
 
 
 class ReleaseError(RuntimeError):

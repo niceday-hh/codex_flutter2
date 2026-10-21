@@ -49,6 +49,33 @@ void main() {
     await tester.pumpWidget(const SizedBox()); await tester.pump();
     expect(tester.takeException(), isNull);
   });
+  for (final openEditor in [false, true]) {
+    testWidgets('${openEditor ? 'editor' : 'detail'} opens once while ASR startup and recorder cancellation are pending', (tester) async {
+      final assets = Completer<String?>(), stopped = Completer<void>();
+      var stopCalls = 0;
+      final reminder = Reminder(text: '尚在准备的提醒', speechMode: 'on')..id = 7;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+        if (call.method == 'getState') return jsonEncode({'reminders': [reminder.toJson()], 'defaults': {'handsFree': true}, 'status': {'notifications': true, 'exact': true}});
+        if (call.method == 'voiceEntryAllowed') return true;
+        if (call.method == 'prepareAsr') return assets.future;
+        if (call.method == 'cancelRecording' && ++stopCalls > 1) await stopped.future;
+        return null;
+      });
+      await tester.binding.setSurfaceSize(const Size(393, 852));
+      await tester.pumpWidget(const MemoApp()); await tester.pump(const Duration(milliseconds: 300));
+      final callback = openEditor
+        ? tester.widget<FloatingActionButton>(find.byType(FloatingActionButton)).onPressed!
+        : tester.widget<InkWell>(find.ancestor(of: find.text('尚在准备的提醒').first, matching: find.byType(InkWell)).first).onTap!;
+      callback(); callback(); callback();
+      await tester.pumpAndSettle();
+      expect(find.byType(openEditor ? ReminderEditor : ReminderDetail), findsOneWidget);
+      Navigator.of(tester.element(find.byType(openEditor ? ReminderEditor : ReminderDetail))).pop(); await tester.pumpAndSettle();
+      expect(find.byType(openEditor ? ReminderEditor : ReminderDetail), findsNothing);
+      assets.complete(null); stopped.complete(); await tester.pump();
+      await tester.pumpWidget(const SizedBox()); await tester.pump();
+      expect(tester.takeException(), isNull);
+    });
+  }
   testWidgets('settings categories hide parameters and search opens the matching sheet without saving', (tester) async {
     var saves = 0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {

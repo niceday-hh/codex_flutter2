@@ -110,7 +110,7 @@ class PublicationTest(unittest.TestCase):
         before = copy.deepcopy(self.f.draft["assets"])
         result = self.f.publisher().publish(123)
         self.assertEqual(result["status"], "published")
-        self.assertEqual(result["assets"], 16)
+        self.assertEqual(result["assets"], len(REPORTS) + 4)
         self.assertEqual(self.f.existing["id"], 99)
         self.assertEqual(self.f.existing["assets"], before)
         self.assertEqual(self.f.signature_checks, 1)
