@@ -92,6 +92,71 @@ void main() {
       session.status.dispose(); session.previewState.dispose();
     });
   }
+  testWidgets('candidate preparation requires explicit selection and keeps normal download disabled until decided', (tester) async {
+    final session = SpeechSession(); var selections = 0, released = 0, previews = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+      if (call.method == 'candidateReminderAudio') return jsonEncode({...job, 'ready': true, 'reminderId': 7});
+      if (call.method == 'reminderAudioReady') return true;
+      if (call.method == 'selectReminderAudio') { selections++; return true; }
+      if (call.method == 'releaseReminderAudio') released++;
+      if (call.method == 'playSpeechPreview') { previews++; return true; }
+      return null;
+    });
+    await mount(tester, session); await tester.tap(find.text('换一版')); await tester.pumpAndSettle();
+    expect(find.text('使用此版本'), findsOneWidget); expect(selections, 0); expect(released, 0);
+    expect(tester.widget<OutlinedButton>(find.byKey(const ValueKey('save-reminder-audio'))).onPressed, isNull);
+    await tester.tap(find.text('试听新版本')); await tester.pumpAndSettle(); expect(previews, 1); expect(selections, 0);
+    await tester.tap(find.text('停止试听')); await tester.pumpAndSettle();
+    await tester.tap(find.text('使用此版本')); await tester.pumpAndSettle();
+    expect(selections, 1); expect(released, 1); expect(find.textContaining('已使用此版本'), findsOneWidget);
+    expect(tester.widget<OutlinedButton>(find.byKey(const ValueKey('save-reminder-audio'))).onPressed, isNotNull);
+    await tester.pumpWidget(const SizedBox()); await tester.pump(); session.status.dispose(); session.previewState.dispose();
+  });
+  for (final close in [false, true]) {
+    testWidgets('candidate ${close ? 'closed' : 'discarded'} releases its lease without selecting', (tester) async {
+      final session = SpeechSession(); var selected = 0, released = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+        if (call.method == 'candidateReminderAudio') return jsonEncode({...job, 'ready': true});
+        if (call.method == 'reminderAudioReady') return true;
+        if (call.method == 'selectReminderAudio') selected++;
+        if (call.method == 'releaseReminderAudio') released++;
+        return null;
+      });
+      await mount(tester, session); await tester.tap(find.text('换一版')); await tester.pumpAndSettle();
+      if (close) { await tester.pumpWidget(const SizedBox()); } else { await tester.tap(find.text('放弃新版本')); }
+      await tester.pumpAndSettle(); expect(selected, 0); expect(released, 1);
+      await tester.pumpWidget(const SizedBox()); await tester.pump(); session.status.dispose(); session.previewState.dispose();
+    });
+  }
+  testWidgets('closing during candidate generation never selects or starts later playback', (tester) async {
+    final session = SpeechSession(); final generation = Completer<void>();
+    var ready = false, released = 0, effects = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+      if (call.method == 'candidateReminderAudio') return jsonEncode({...job, 'ready': false});
+      if (call.method == 'reminderAudioReady') return ready;
+      if (call.method == 'generateSpeech') { await generation.future; ready = true; }
+      if (call.method == 'releaseReminderAudio') released++;
+      if (call.method == 'selectReminderAudio' || call.method == 'playSpeechPreview') effects++;
+      return null;
+    });
+    await mount(tester, session); await tester.tap(find.text('换一版')); await tester.pump();
+    await tester.pumpWidget(const SizedBox()); generation.complete(); await tester.pumpAndSettle();
+    expect(effects, 0); expect(released, 1); session.status.dispose(); session.previewState.dispose();
+  });
+  testWidgets('saving after a playback error replaces the old error with current inline feedback', (tester) async {
+    final session = SpeechSession(); int? token;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+      if (call.method == 'reminderAudioJob') return jsonEncode({...job, 'ready': true});
+      if (call.method == 'reminderAudioReady' || call.method == 'exportReminderAudio') return true;
+      if (call.method == 'playSpeechPreview') { token = (call.arguments as Map)['token'] as int; return true; }
+      return null;
+    });
+    await mount(tester, session); await tester.tap(find.text('试听提醒')); await tester.pumpAndSettle();
+    session.previewEnded(token!, error: '播放失败'); await tester.pump(); expect(find.text('播放失败'), findsOneWidget);
+    await tester.tap(find.text('保存音频')); await tester.pumpAndSettle();
+    expect(find.text('音频已保存到所选位置。'), findsOneWidget); expect(find.text('播放失败'), findsNothing);
+    await tester.pumpWidget(const SizedBox()); await tester.pump(); session.status.dispose(); session.previewState.dispose();
+  });
   testWidgets('long saved reminder remains scrollable on a small screen with large text', (tester) async {
     await tester.binding.setSurfaceSize(const Size(320, 568));
     addTearDown(() => tester.binding.setSurfaceSize(null));

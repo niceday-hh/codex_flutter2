@@ -19,6 +19,12 @@ public class SpeechSegmenterTest {
         assertEquals(PARAGRAPH.replace("\n", ""), joined.toString());
         assertTrue(parts.size() < 8);
     }
+    @Test public void theUploadedWebSampleStaysInOneModelInput() {
+        String text = "早上七点半，城市刚刚醒来。地铁站里，人们一边看手机，一边快步走向闸机；广播不时提醒：“请站稳扶好，注意脚下安全。”今天的会议安排得有点紧";
+        assertEquals(68, text.codePointCount(0, text.length()));
+        var parts = SpeechSegmenter.split(text);
+        assertEquals(1, parts.size()); assertEquals(text, parts.get(0).text);
+    }
     @Test public void shortSentenceKeepsCommaContext() {
         List<SpeechSegmenter.Segment> parts = SpeechSegmenter.split("喝水、休息眼睛，然后准备出门。");
         assertEquals(1, parts.size()); assertTrue(parts.get(0).terminal());
@@ -28,7 +34,7 @@ public class SpeechSegmenterTest {
         StringBuilder joined = new StringBuilder(); List<SpeechSegmenter.Segment> parts = SpeechSegmenter.split(text);
         for (int i = 0; i < parts.size(); i++) {
             var part = parts.get(i); joined.append(part.text);
-            assertTrue(part.text.codePointCount(0, part.text.length()) <= 48);
+            assertTrue(part.text.codePointCount(0, part.text.length()) <= SpeechSegmenter.MAX_CODE_POINTS);
             if (i + 1 < parts.size()) assertFalse(part.terminal());
         }
         assertEquals(text, joined.toString());

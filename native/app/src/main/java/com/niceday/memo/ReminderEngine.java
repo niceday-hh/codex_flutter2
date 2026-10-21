@@ -35,7 +35,10 @@ public final class ReminderEngine {
         alarms = (AlarmManager) this.context.getSystemService(Context.ALARM_SERVICE);
         notifications = (NotificationManager) this.context.getSystemService(Context.NOTIFICATION_SERVICE);
         styles = new NotificationStyles(this.context, notifications, runtime);
-        if (unlocked) migrateSpeechModel();
+        if (unlocked) {
+            migrateSpeechModel();
+            try { SpeechSettings.migrateSeeds(this.context); } catch (JSONException e) { error("语音版本初始化失败"); }
+        }
     }
     private void migrateSpeechModel() {
         if ("voine-vits-mnn-v1".equals(prefs.getString("speechModel", ""))) return;
@@ -207,7 +210,13 @@ public final class ReminderEngine {
         VoiceInputSettings.validate(values);
         values.remove("notificationChannelId"); values.remove("notificationStyle");
         ensureChannel(new JSONObject(values.toString()));
-        if (!prefs.edit().putString("defaults", values.toString()).commit()) throw new IllegalStateException("保存失败");
+        JSONObject previous = SpeechSettings.defaults(context);
+        JSONArray rows = new JSONArray(prefs.getString("reminders", "[]"));
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.getJSONObject(i);
+            if (!SpeechSettings.profile(row, previous).equals(SpeechSettings.profile(row, values))) row.put("speechSeed", SpeechSettings.newSeed());
+        }
+        if (!prefs.edit().putString("defaults", values.toString()).putString("reminders", rows.toString()).commit()) throw new IllegalStateException("保存失败");
     }
     public String channelForStyle(String json) throws JSONException {
         JSONObject values = new JSONObject(json);
@@ -226,6 +235,10 @@ public final class ReminderEngine {
         r.put("enabled", true);
         JSONArray rows = read();
         int id = r.optInt("id");
+        JSONObject existing = find(rows, id), speechDefaults = SpeechSettings.defaults(context);
+        if (existing != null && SpeechSettings.profile(existing, speechDefaults).equals(SpeechSettings.profile(r, speechDefaults)))
+            r.put("speechSeed", SpeechSettings.seed(existing));
+        else r.put("speechSeed", SpeechSettings.newSeed());
         if (id == 0) {
             id = prefs.getInt("nextId", 1);
             for (int i = 0; i < rows.length(); i++) id = Math.max(id, rows.getJSONObject(i).getInt("id") + 1);
@@ -530,7 +543,8 @@ public final class ReminderEngine {
             JSONObject r = new JSONObject(rows.getJSONObject(i).toString());
             JSONObject defaults = SpeechSettings.defaults(context);
             r.put("speechMode", SpeechSettings.enabled(r, defaults) ? "on" : "off")
-                .put("speechVoice", SpeechSettings.voice(r, defaults)).put("speechRate", SpeechSettings.rate(r, defaults));
+                .put("speechVoice", SpeechSettings.voice(r, defaults)).put("speechRate", SpeechSettings.rate(r, defaults))
+                .put("speechNoiseScale", SpeechSettings.noise(r, defaults)).put("speechNoiseScaleW", SpeechSettings.noiseW(r, defaults));
             if((r.optBoolean("completed") || r.optBoolean("archived")) && r.optLong("activeOccurrence")>0)
                 r.put("historyScheduledAt",r.getLong("activeOccurrence"));
             r.remove("notificationChannelId"); r.remove("notificationStyle"); portable.put(r);
@@ -604,7 +618,8 @@ public final class ReminderEngine {
             .put("wakeScreen", defaults.getBoolean("wakeScreen")).put("ringtone", defaults.getString("ringtone"))
             .put("presentation", defaults.getString("presentation")).put("lockscreen", defaults.getString("lockscreen"))
             .put("speechMode", defaults.optString("speechMode", "off")).put("speechVoice", defaults.optString("speechVoice", SpeechSettings.VOICE))
-            .put("speechRate", defaults.optDouble("speechRate", 1)).put("speechHideLocked", defaults.optBoolean("speechHideLocked", true))
+            .put("speechRate", defaults.optDouble("speechRate", 1))
+            .put("speechNoiseScale", defaults.optDouble("speechNoiseScale", .6)).put("speechNoiseScaleW", defaults.optDouble("speechNoiseScaleW", .668)).put("speechHideLocked", defaults.optBoolean("speechHideLocked", true))
             .put("speechRepeat", defaults.optBoolean("speechRepeat", true))
             .put("intervalMinutes", 5).put("totalCount", Math.max(1, Math.min(20, totalCount)));
         save(config.toString());

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:timed_memo/reminder.dart';
 import 'package:timed_memo/speech_options.dart';
+import 'package:timed_memo/speech_variation.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -18,6 +19,24 @@ void main() {
     slider.onChanged!(.5); await tester.pump();
     await tester.tap(find.text('使用此语速')); await tester.pumpAndSettle();
     expect(selected, .5);
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  });
+  testWidgets('advanced noise controls preserve defaults, allow overrides and round-trip values', (tester) async {
+    SpeechVariation? selected;
+    await tester.binding.setSurfaceSize(const Size(393, 1000));
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: Builder(builder: (c) => TextButton(onPressed: () async {
+      selected = await chooseSpeechVariation(c, noise: 0, noiseW: 0, allowDefault: true, defaultNoise: .6, defaultNoiseW: .668);
+    }, child: const Text('高级参数'))))));
+    await tester.tap(find.text('高级参数')); await tester.pumpAndSettle();
+    expect(tester.widget<Slider>(find.byKey(const ValueKey('speech-noise-w'))).value, .668);
+    expect(tester.widget<Slider>(find.byKey(const ValueKey('speech-noise'))).onChanged, isNull);
+    await tester.tap(find.text('跟随默认参数')); await tester.pumpAndSettle();
+    tester.widget<Slider>(find.byKey(const ValueKey('speech-noise'))).onChanged!(.4);
+    tester.widget<Slider>(find.byKey(const ValueKey('speech-noise-w'))).onChanged!(.5);
+    await tester.pump(); await tester.tap(find.text('使用这些参数')); await tester.pumpAndSettle();
+    expect(selected!.noise, .4); expect(selected!.noiseW, .5);
+    final copy = Reminder.fromJson(Reminder(speechNoiseScale: .4, speechNoiseScaleW: .5, speechSeed: 123).toJson());
+    expect(copy.speechNoiseScale, .4); expect(copy.speechNoiseScaleW, .5); expect(copy.speechSeed, 123);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
   testWidgets('lockscreen speech privacy can be disabled independently', (tester) async {

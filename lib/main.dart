@@ -534,6 +534,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       'speechGender' => voiceGenders[d['speechRandomGender'] ?? 'all'] ?? '不限角色性别',
       'speechPreview' => d['speechRandom'] == true ? '试听随机音色' : '试听固定音色',
       'speechRate' => '${d['speechRate'] ?? 1.0} 倍速',
+      'speechVariation' => '声音 ${d['speechNoiseScale'] ?? .6} · 节奏 ${d['speechNoiseScaleW'] ?? .668}',
       'speechLock' => d['speechHideLocked'] == false ? '允许播报正文' : '隐藏播报正文',
       'speechRepeat' => toggle(d['speechRepeat'] as bool? ?? true),
       'speechStatus' || 'prepareSpeech' => speech.status.value,
@@ -756,6 +757,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       speechMode: store.defaults['speechMode'] as String? ?? 'off',
       speechVoice: store.defaults['speechVoice'] as String? ?? '228',
       speechRate: (store.defaults['speechRate'] as num?)?.toDouble() ?? 1.0,
+      speechNoiseScale: (store.defaults['speechNoiseScale'] as num?)?.toDouble() ?? .6,
+      speechNoiseScaleW: (store.defaults['speechNoiseScaleW'] as num?)?.toDouble() ?? .668,
       speechHideLocked: store.defaults['speechHideLocked'] as bool? ?? true,
       speechRepeat: store.defaults['speechRepeat'] as bool? ?? true,
       speechRandom: store.defaults['speechRandom'] as bool? ?? false,
@@ -764,6 +767,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       speechRandomGroup: store.defaults['speechRandomGroup'] as String? ?? '');
     return SpeechOptions(groups: store.voiceGroups, defaultSettings: true, reminder: config, defaults: store.defaults, onChanged: () async {
       store.defaults.addAll({'speechMode': config.speechMode, 'speechVoice': config.speechVoice,
+        'speechNoiseScale': config.speechNoiseScale, 'speechNoiseScaleW': config.speechNoiseScaleW,
         'speechRate': config.speechRate, 'speechHideLocked': config.speechHideLocked, 'speechRepeat': config.speechRepeat,
         'speechRandom': config.speechRandom, 'speechRandomLanguage': config.speechRandomLanguage, 'speechRandomGender': config.speechRandomGender, 'speechRandomGroup': config.speechRandomGroup});
       await persistDefaults();

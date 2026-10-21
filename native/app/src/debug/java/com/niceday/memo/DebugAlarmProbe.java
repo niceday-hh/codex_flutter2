@@ -37,7 +37,7 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
             } else if ("SPEECH_SEED".equals(intent.getAction())) {
                 engine.reliableMode(false);
                 engine.defaults(new JSONObject().put("sound", false).put("vibration", "off").put("wakeScreen", false)
-                    .put("presentation", "drawer").put("speechMode", "on").put("speechVoice", "33").put("speechRate", 1)
+                    .put("presentation", "drawer").put("speechMode", "on").put("speechVoice", "33").put("speechRate", 1).put("speechNoiseScale", .45).put("speechNoiseScaleW", .55)
                     .put("speechHideLocked", intent.getBooleanExtra("hide", true)).toString());
                 int id = engine.createTest(180, 2);
                 JSONArray all = new JSONObject(engine.state()).getJSONArray("reminders");
@@ -132,6 +132,11 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
             }
         } catch (Exception e) { throw new IllegalStateException(e); }
     }
+    private static String hex(byte[] bytes) throws Exception {
+        StringBuilder result = new StringBuilder();
+        for (byte b : java.security.MessageDigest.getInstance("SHA-256").digest(bytes)) result.append(String.format("%02x", b & 255));
+        return result.toString();
+    }
     private static boolean savedBodyMatches(String rows, int id, String text) throws Exception {
         JSONArray all = new JSONArray(rows);
         for (int i = 0; i < all.length(); i++) if (all.getJSONObject(i).getInt("id") == id)
@@ -161,7 +166,8 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
             boolean unchanged = before.equals(context.getSharedPreferences("memo", 0).getString("reminders", "[]"));
             if (!identical || !unchanged) throw new IllegalStateException("Export changed bytes or reminder state");
             JSONObject report = new JSONObject().put("reminderId", id).put("sid", job.getInt("sid"))
-                .put("rate", job.getDouble("rate")).put("body_matches_saved", savedBodyMatches(before, id, job.getString("text")))
+                .put("rate", job.getDouble("rate")).put("seed", job.getLong("seed"))
+                .put("noise", job.getDouble("noise")).put("noiseW", job.getDouble("noiseW")).put("sha256", hex(original)).put("body_matches_saved", savedBodyMatches(before, id, job.getString("text")))
                 .put("bytes", copied).put("export_identical", identical).put("reminder_unchanged", unchanged)
                 .put("content_resolver_roundtrip", true).put("system_picker_ui_tested", false);
             try (java.io.FileOutputStream out = context.openFileOutput("reminder-audio-probe.json", Context.MODE_PRIVATE)) {

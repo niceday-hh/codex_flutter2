@@ -17,7 +17,8 @@ class Reminder {
   bool enabled, sound, wakeScreen;
   String vibration, ringtone, presentation, lockscreen;
   String speechMode, speechVoice, speechState;
-  double speechRate;
+  double speechRate, speechNoiseScale, speechNoiseScaleW;
+  int speechSeed;
   bool speechHideLocked, speechRepeat, speechRandom;
   String speechRandomLanguage, speechRandomGender, speechRandomGroup;
   int intervalMinutes, totalCount;
@@ -33,6 +34,7 @@ class Reminder {
     this.ringtone = '', this.intervalMinutes = 5, this.totalCount = 3,
     this.presentation = 'banner', this.lockscreen = 'private',
     this.speechMode = 'off', this.speechVoice = '', this.speechRate = 0,
+    this.speechNoiseScale = 0, this.speechNoiseScaleW = 0, this.speechSeed = 0,
     this.speechHideLocked = true, this.speechRepeat = true, this.speechState = 'off',
     this.speechRandom = false, this.speechRandomLanguage = 'all', this.speechRandomGender = 'all', this.speechRandomGroup = '',
     this.attempts = 0, this.activeOccurrence = 0, this.nextTrigger = 0,
@@ -57,6 +59,9 @@ class Reminder {
     speechMode: j['speechMode'] as String? ?? 'off',
     speechVoice: j['speechVoice'] as String? ?? '',
     speechRate: (j['speechRate'] as num?)?.toDouble() ?? 0,
+    speechNoiseScale: (j['speechNoiseScale'] as num?)?.toDouble() ?? 0,
+    speechNoiseScaleW: (j['speechNoiseScaleW'] as num?)?.toDouble() ?? 0,
+    speechSeed: (j['speechSeed'] as num?)?.toInt() ?? 0,
     speechHideLocked: j['speechHideLocked'] as bool? ?? true,
     speechRepeat: j['speechRepeat'] as bool? ?? true,
     speechState: j['speechState'] as String? ?? 'off',
@@ -85,6 +90,7 @@ class Reminder {
     'totalCount': totalCount,
     'presentation': presentation, 'lockscreen': lockscreen,
     'speechMode': speechMode, 'speechVoice': speechVoice, 'speechRate': speechRate,
+    'speechNoiseScale': speechNoiseScale, 'speechNoiseScaleW': speechNoiseScaleW, 'speechSeed': speechSeed,
     'speechRandom': speechRandom, 'speechRandomLanguage': speechRandomLanguage, 'speechRandomGender': speechRandomGender, 'speechRandomGroup': speechRandomGroup,
     'speechHideLocked': speechHideLocked, 'speechRepeat': speechRepeat,
     'speechModel': 'voine-vits-mnn-v1',
@@ -94,6 +100,7 @@ class Reminder {
     'sound': sound, 'vibration': vibration, 'ringtone': ringtone,
     'presentation': presentation, 'lockscreen': lockscreen,
     'speechMode': speechMode, 'speechVoice': speechVoice, 'speechRate': speechRate,
+    'speechNoiseScale': speechNoiseScale, 'speechNoiseScaleW': speechNoiseScaleW, 'speechSeed': speechSeed,
     'speechRandom': speechRandom, 'speechRandomLanguage': speechRandomLanguage, 'speechRandomGender': speechRandomGender, 'speechRandomGroup': speechRandomGroup,
     'speechHideLocked': speechHideLocked, 'speechRepeat': speechRepeat,
   };

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'reminder.dart';
 import 'speech.dart';
+import 'speech_variation.dart';
 import 'speech_voices.dart';
 import 'voice_catalog.dart';
 import 'voice_group.dart';
@@ -120,6 +121,15 @@ class _SpeechOptionsState extends State<SpeechOptions> {
         final rate = await chooseSpeechRate(context, r.speechRate, allowDefault: !widget.defaultSettings);
         if (rate != null && mounted) { r.speechRate = rate; await changed(); }
       }),
+    ListTile(leading: const Icon(Icons.tune_rounded, color: _purple), title: const Text('高级语音设置'),
+      subtitle: Text(r.speechNoiseScale == 0 && r.speechNoiseScaleW == 0 ? '声音与节奏变化 · 跟随默认参数'
+        : '声音 ${r.speechNoiseScale.toStringAsFixed(3)} · 节奏 ${r.speechNoiseScaleW.toStringAsFixed(3)}'),
+      trailing: const Icon(Icons.chevron_right), onTap: () async {
+        final selected = await chooseSpeechVariation(context, noise: r.speechNoiseScale, noiseW: r.speechNoiseScaleW,
+          allowDefault: !widget.defaultSettings, defaultNoise: (widget.defaults['speechNoiseScale'] as num?)?.toDouble() ?? .6,
+          defaultNoiseW: (widget.defaults['speechNoiseScaleW'] as num?)?.toDouble() ?? .668);
+        if (selected != null && mounted) { r.speechNoiseScale = selected.noise; r.speechNoiseScaleW = selected.noiseW; await changed(); }
+      }),
     SwitchListTile(title: const Text('锁屏时隐藏播报正文'),
       subtitle: Text(r.speechHideLocked ? '锁屏时只说“你有一条待办提醒”；解锁后的下一轮可朗读正文' : '锁屏时也允许朗读完整内容，请留意周围环境'),
       value: r.speechHideLocked, onChanged: (v) async { r.speechHideLocked = v; await changed(); }),
@@ -134,7 +144,7 @@ class _SpeechOptionsState extends State<SpeechOptions> {
         finally { if (mounted) setState(() => previewing = false); }
       }, icon: const Icon(Icons.play_circle_outline), label: Text(previewing ? '正在生成试听…' : r.speechRandom && widget.defaultSettings ? '试听随机音色' : '试听当前音色'))),
     const Padding(padding: EdgeInsets.fromLTRB(16, 4, 16, 12), child: Text(
-      '保存后异步生成离线语音；请确认“语音已就绪”。到点未就绪时使用原铃声／振动，不会稍后自动补播这一轮。修改正文、音色或语速后需重新生成。试听使用固定短句；锁屏播报与通知显示分别控制。',
+      '保存后异步生成离线语音；请确认“语音已就绪”。到点未就绪时使用原铃声／振动，不会稍后自动补播这一轮。修改正文、音色或语速后需重新生成。此处试听短句每次随机生成；提醒详情可试听正文并换一版。锁屏播报与通知显示分别控制。',
       style: TextStyle(fontSize: 12, color: Color(0xFF8A859C)))),
   ]);
 }

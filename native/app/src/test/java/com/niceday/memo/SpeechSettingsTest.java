@@ -51,4 +51,26 @@ public class SpeechSettingsTest {
         assertNotEquals(key, SpeechSettings.cacheKey("喝水", "33", 1.1));
         assertNotEquals(key, SpeechSettings.cacheKey("吃药", "33", 1));
     }
+    @Test public void variationDefaultsValidationAndIdentityAreExplicit() throws Exception {
+        JSONObject row = new JSONObject(), defaults = new JSONObject().put("speechNoiseScale", .4).put("speechNoiseScaleW", .7);
+        SpeechSettings.validate(row, false);
+        assertEquals(.4, SpeechSettings.noise(row, defaults), .00001);
+        assertEquals(.7, SpeechSettings.noiseW(row, defaults), .00001);
+        row.put("speechNoiseScale", .6).put("speechNoiseScaleW", .668);
+        assertEquals(.6, SpeechSettings.noise(row, defaults), .00001);
+        String key = SpeechSettings.cacheKey("喝水", "228", .8, .6, .668, 123);
+        assertNotEquals(key, SpeechSettings.cacheKey("喝水", "228", .8, .4, .668, 123));
+        assertNotEquals(key, SpeechSettings.cacheKey("喝水", "228", .8, .6, .5, 123));
+        assertNotEquals(key, SpeechSettings.cacheKey("喝水", "228", .8, .6, .668, 124));
+        for (Object bad : new Object[]{"0.6", -.1, .09, 1.1, JSONObject.NULL}) {
+            for (String field : new String[]{"speechNoiseScale", "speechNoiseScaleW"}) {
+                try { SpeechSettings.validate(new JSONObject().put(field, bad), false); fail(); }
+                catch (IllegalArgumentException expected) {}
+            }
+        }
+        for (Object bad : new Object[]{1.5, -1, 2147483648L, "1"}) {
+            try { SpeechSettings.validate(new JSONObject().put("speechSeed", bad), false); fail(); }
+            catch (IllegalArgumentException expected) {}
+        }
+    }
 }

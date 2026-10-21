@@ -1,7 +1,7 @@
 name: Feature checks and UI previews
 on:
   push:
-    branches: [feature/v0.9.2-ui, feature/v0.9.3-settings, feature/v0.9.4-prosody, feature/v0.9.5-fixes, feature/v0.9.5-reminder-audio]
+    branches: [feature/v0.9.2-ui, feature/v0.9.3-settings, feature/v0.9.4-prosody, feature/v0.9.5-fixes, feature/v0.9.5-reminder-audio, feature/v0.9.6-voice-controls]
   workflow_dispatch:
 permissions:
   contents: read
@@ -75,4 +75,4 @@ jobs:
       - name: Native settings and reminder regression tests
         run: cd android && ./gradlew :app:testReleaseUnitTest --no-daemon -Ptarget-platform=android-arm64
       - name: Compile Android MNN inference adapter
-        run: cd android && ./gradlew :app:externalNativeBuildDebug --no-daemon -Ptarget-platform=android-arm64
+        run: cd android && ./gradlew :app:externalNativeBuildDebug :app:compileDebugJavaWithJavac --no-daemon -Ptarget-platform=android-arm64

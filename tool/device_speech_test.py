@@ -118,7 +118,22 @@ try:
     assert exported['body_matches_saved'] and exported['reminder_unchanged'] and exported['export_identical']
     assert exported['bytes'] > 44 and exported['content_resolver_roundtrip']
     result['saved_reminder_audio_export'] = exported
-    print('PASS: on-device VITS-MNN synthesis, process-death cached playback, lock privacy, retry, manual stop and saved WAV export', flush=True)
+    shell('am', 'start', '-n', f'{PACKAGE}/com.niceday.memo.DebugSamplingActivity', '--ei', 'id', str(id))
+    def sampling_report():
+        raw = adb('exec-out', 'run-as', PACKAGE, 'cat', 'files/sampling-audit/result.json', check=False)
+        try: return json.loads(raw) if raw else None
+        except ValueError: return None
+    sampling = wait(sampling_report, 420, 'Sampling/model parameter checks did not complete')
+    result['sampling'] = sampling
+    assert sampling['success'], sampling
+    assert sampling['short_68_char_segments'] == 1 and sampling['long_text_segments'] > 1
+    assert sampling['selected_noise'] == .45 and sampling['selected_noise_w'] == .55
+    probe('REMINDER_AUDIO_EXPORT', '--ei', 'id', str(id))
+    selected_export = json.loads(adb('exec-out', 'run-as', PACKAGE, 'cat', 'files/reminder-audio-probe.json'))
+    assert selected_export['sha256'] == sampling['selected_cache_sha256']
+    assert selected_export['seed'] == sampling['selected_seed'] and selected_export['reminder_unchanged']
+    result['selected_audio_export'] = selected_export
+    print('PASS: on-device VITS-MNN synthesis, process-death cached playback, lock privacy, retry, manual stop, random candidates, parameter controls and selected WAV export', flush=True)
 finally:
     shell('settings', 'put', 'system', 'screen_off_timeout', original_timeout, check=False)
     path.write_text(json.dumps(result, ensure_ascii=False, indent=2))

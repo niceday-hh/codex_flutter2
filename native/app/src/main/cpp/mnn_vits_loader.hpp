@@ -3,6 +3,7 @@
 #include <android/log.h>
 #include <string>
 #include <vector>
+#include <cstdint>
 #define MNN_VITS_PRINT(format, ...)  __android_log_print(ANDROID_LOG_INFO, "MNNJNI", format, ##__VA_ARGS__)
 namespace MNN_VITS {
 
@@ -24,7 +25,7 @@ namespace MNN_VITS {
 
 // 开始音频推理，返回推理结果（音频数据数组）
     std::vector<float> start_audio_infer(const std::vector<int>& input_seq, int spkid,
-                                       const std::vector<int>& pauses, float rate, bool legacy = false, bool bounded_pauses = true);
+                                       const std::vector<int>& pauses, float rate, bool legacy = false, bool bounded_pauses = true, float noise = .6f, float noise_w = .668f, uint32_t seed = 1);
     std::vector<float> last_durations();
 } // namespace vits
 
