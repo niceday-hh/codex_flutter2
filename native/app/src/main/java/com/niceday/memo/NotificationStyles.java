@@ -90,12 +90,12 @@ final class NotificationStyles {
         if (vibrator == null || !vibrator.hasVibrator()) throw new IllegalStateException("此设备没有可用振动器");
         long[] timings = pattern(mode);
         VibrationEffect effect = VibrationEffect.createWaveform(timings, -1);
-        // Preview reminder vibration, not touch feedback. Android applies notification/DND policy.
+        // Match the actual reminder channels (USAGE_ALARM), not touch feedback.
         if (Build.VERSION.SDK_INT >= 33) vibrator.vibrate(effect, new VibrationAttributes.Builder()
-            .setUsage(VibrationAttributes.USAGE_NOTIFICATION).build());
+            .setUsage(VibrationAttributes.USAGE_ALARM).build());
         else vibrator.vibrate(effect, new AudioAttributes.Builder()
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .setUsage(AudioAttributes.USAGE_NOTIFICATION).build());
+            .setUsage(AudioAttributes.USAGE_ALARM).build());
         long duration = 0; for (long value : timings) duration += value;
         return new JSONObject().put("requested", true).put("pulses", timings.length / 2).put("durationMs", duration);
     }

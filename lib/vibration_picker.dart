@@ -39,7 +39,7 @@ class _VibrationPickerState extends State<VibrationPicker> {
       if (!mounted) return;
       done = Timer(Duration(milliseconds: ((result['durationMs'] as num?)?.toInt() ?? 1000).clamp(1, 2000).toInt()), () {
         if (!mounted) return;
-        setState(() { active = null; message = '已发送$label试振请求。没有感到振动？请检查手机的通知振动、静音及勿扰设置。'; });
+        setState(() { active = null; message = '已发送$label试振请求。没有感到振动？请检查手机的提醒振动和勿扰中的闹钟设置。'; });
       });
     } catch (error) {
       if (mounted) setState(() { active = null; failed = true; message = niceError(error); });
@@ -67,7 +67,7 @@ class _VibrationPickerState extends State<VibrationPicker> {
             onPressed: active == null ? () => _preview(e.key, e.value) : null),
         ]), onTap: () => Navigator.pop(context, e.key))).toList()))),
       const Padding(padding: EdgeInsets.fromLTRB(20, 10, 20, 20), child: Text(
-        '试振使用通知振动用途，由系统振动、静音与勿扰设置决定。实际提醒还受通知通道设置控制；系统默认节奏请用15秒通知测试。',
+        '试振和实际提醒使用相同的振动用途，由系统振动与勿扰中的闹钟设置决定。实际提醒还受通知通道设置控制；系统默认节奏请用15秒通知测试。',
         style: TextStyle(color: muted, fontSize: 12, height: 1.5))),
     ])));
 }
