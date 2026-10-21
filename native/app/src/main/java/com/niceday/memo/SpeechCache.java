@@ -10,6 +10,38 @@ final class SpeechCache {
     static final long LIMIT = 128L * 1024 * 1024;
     private static final Set<String> pending = Collections.synchronizedSet(new HashSet<>());
     private static final Map<String, String> errors = new HashMap<>();
+    private static final class Lease {
+        final String key, name; final long created = android.os.SystemClock.elapsedRealtime();
+        Lease(String key, String name) { this.key = key; this.name = name; }
+    }
+    private static final Map<String, Lease> leases = new HashMap<>();
+    static synchronized void releaseAudio(String token) { leases.remove(token); }
+    private static synchronized Lease lease(String token) {
+        Lease held = leases.get(token);
+        if (held == null) throw new IllegalArgumentException("音频操作已失效，请重新试听或保存");
+        return held;
+    }
+    static File leasedAudio(Context c, String token) throws IOException {
+        File file = new File(directory(c), lease(token).key);
+        if (!ready(file)) throw new IOException("提醒音频尚未准备完成，请重试");
+        return file;
+    }
+    static String audioName(String token) { return lease(token).name; }
+    static synchronized JSONObject reminderAudioJob(Context c, int id) throws Exception {
+        JSONArray rows = new JSONArray(c.getSharedPreferences("memo", 0).getString("reminders", "[]"));
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.getJSONObject(i);
+            if (row.optInt("id") != id || id <= 0) continue;
+            String text = row.optString("text");
+            if (text.trim().isEmpty()) throw new IllegalArgumentException("提醒正文为空");
+            JSONObject job = textJob(c, text, row);
+            String token = UUID.randomUUID().toString();
+            String name = "reminder-" + id + "-voice-" + job.getInt("sid") + ".wav";
+            leases.put(token, new Lease(job.getString("key"), name));
+            return job.put("lease", token).put("filename", name).put("reminderId", id);
+        }
+        throw new IllegalArgumentException("这条提醒已不存在，请返回列表刷新");
+    }
     static boolean pending(String key) { return key != null && key.matches("[0-9a-f]{64}\\.wav") && pending.contains(key); }
     static File directory(Context c) { return new File(c.getFilesDir(), "speech-audio"); }
     static File file(Context c, String text, JSONObject row, JSONObject defaults) {
@@ -55,9 +87,11 @@ final class SpeechCache {
         return jobs;
     }
     static JSONObject previewJob(Context c, JSONObject config) throws Exception {
+        return textJob(c, "这是备忘录语音试听，请记得按时完成待办事项。", config);
+    }
+    private static JSONObject textJob(Context c, String text, JSONObject config) throws Exception {
         if (!directory(c).isDirectory() && !directory(c).mkdirs()) throw new IOException("无法建立语音目录");
         JSONObject defaults = SpeechSettings.defaults(c);
-        String text = "这是备忘录语音试听，请记得按时完成待办事项。";
         File target = file(c, text, config, defaults);
         if (!ready(target)) pending.add(target.getName());
         return new JSONObject().put("key", target.getName()).put("text", text)
@@ -86,7 +120,13 @@ final class SpeechCache {
     }
     static void prune(Context c) {
         try {
-            Set<String> keep = new HashSet<>(); JSONObject defaults = SpeechSettings.defaults(c);
+            Set<String> keep = new HashSet<>();
+            synchronized (SpeechCache.class) {
+                long now = android.os.SystemClock.elapsedRealtime();
+                leases.values().removeIf(held -> now - held.created > 3600000L);
+                for (Lease held : leases.values()) keep.add(held.key);
+            }
+            JSONObject defaults = SpeechSettings.defaults(c);
             JSONArray rows = new JSONArray(c.getSharedPreferences("memo", 0).getString("reminders", "[]"));
             for (int i = 0; i < rows.length(); i++) {
                 JSONObject row = rows.getJSONObject(i);

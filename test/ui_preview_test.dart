@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:timed_memo/main.dart';
 import 'package:timed_memo/settings_page.dart';
+import 'package:timed_memo/reminder.dart';
 import 'package:timed_memo/voice_flow.dart';
 import 'package:timed_memo/voice_page.dart';
 import 'voice_flow_test.dart' show FakeCapture, FakeStore;
@@ -74,6 +75,30 @@ void main() {
     await tester.tap(find.descendant(of: find.byType(SettingsSheet), matching: find.text('15秒后发送测试提醒'))); await tester.pumpAndSettle();
     expect(find.text('测试提醒已设置，请返回桌面等待15秒'), findsOneWidget);
     await capture(tester, 'settings-test-feedback');
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  }, skip: !previewsEnabled);
+  testWidgets('render saved reminder detail, audio actions and inline export success', (tester) async {
+    tester.view.devicePixelRatio = 2; tester.view.physicalSize = const Size(786, 1704);
+    addTearDown(tester.view.resetDevicePixelRatio); addTearDown(tester.view.resetPhysicalSize);
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    final row = Reminder(id: 7, text: '喝水，休息一下眼睛。\n为明天的会议准备好资料。', date: DateTime(2030, 1, 1, 22, 30),
+      speechMode: 'on', speechVoice: '228', speechRate: .8, speechState: 'ready');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+      if (call.method == 'getState') {
+        return jsonEncode({'reminders': [row.toJson()..['speechState'] = 'ready'],
+          'defaults': {}, 'status': {'version': '0.9.5', 'notifications': true, 'exact': true}});
+      }
+      if (call.method == 'reminderAudioJob') return jsonEncode({'lease': 'preview-lease', 'ready': true});
+      if (call.method == 'reminderAudioReady' || call.method == 'exportReminderAudio') return true;
+      return null;
+    });
+    await tester.pumpWidget(const RepaintBoundary(key: previewKey, child: MemoApp())); await tester.pumpAndSettle();
+    await tester.tap(find.text(row.text).first); await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('保存音频')); await tester.pumpAndSettle();
+    await capture(tester, 'reminder-audio-actions');
+    await tester.tap(find.text('保存音频')); await tester.pumpAndSettle();
+    expect(find.text('音频已保存到所选位置。'), findsOneWidget);
+    await capture(tester, 'reminder-audio-saved');
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   }, skip: !previewsEnabled);
   testWidgets('render actual voice confirmation with parsed retry settings', (tester) async {

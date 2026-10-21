@@ -112,7 +112,13 @@ try:
     row = current(id)
     assert row['acknowledged'] and row['retryAt'] == 0
     result['unlocked_body_and_manual_stop'] = True
-    print('PASS: on-device VITS-MNN synthesis, process-death cached playback, lock privacy, retry and manual stop', flush=True)
+    probe('REMINDER_AUDIO_EXPORT', '--ei', 'id', str(id))
+    exported = json.loads(adb('exec-out', 'run-as', PACKAGE, 'cat', 'files/reminder-audio-probe.json'))
+    assert exported['reminderId'] == id and exported['sid'] == 33 and exported['rate'] == 1
+    assert exported['body_matches_saved'] and exported['reminder_unchanged'] and exported['export_identical']
+    assert exported['bytes'] > 44 and exported['content_resolver_roundtrip']
+    result['saved_reminder_audio_export'] = exported
+    print('PASS: on-device VITS-MNN synthesis, process-death cached playback, lock privacy, retry, manual stop and saved WAV export', flush=True)
 finally:
     shell('settings', 'put', 'system', 'screen_off_timeout', original_timeout, check=False)
     path.write_text(json.dumps(result, ensure_ascii=False, indent=2))

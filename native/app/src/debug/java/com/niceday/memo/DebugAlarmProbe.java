@@ -48,6 +48,8 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
                 setResultCode(id);
             } else if ("PREPARE_SPEECH".equals(intent.getAction())) {
                 setResultData("preparing=" + MainActivity.requestSpeechPreparation());
+            } else if ("REMINDER_AUDIO_EXPORT".equals(intent.getAction())) {
+                exportReminderAudio(context, intent.getIntExtra("id", 0));
             } else if ("SPEECH_STATUS".equals(intent.getAction())) {
                 try (java.io.FileOutputStream out = context.openFileOutput("speech-probe.json", Context.MODE_PRIVATE)) {
                     out.write(engine.state().getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -129,5 +131,45 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
                 setResultCode(id);
             }
         } catch (Exception e) { throw new IllegalStateException(e); }
+    }
+    private static boolean savedBodyMatches(String rows, int id, String text) throws Exception {
+        JSONArray all = new JSONArray(rows);
+        for (int i = 0; i < all.length(); i++) if (all.getJSONObject(i).getInt("id") == id)
+            return text.equals(all.getJSONObject(i).getString("text"));
+        return false;
+    }
+    private static void exportReminderAudio(Context context, int id) throws Exception {
+        String before = context.getSharedPreferences("memo", 0).getString("reminders", "[]");
+        JSONObject job = SpeechCache.reminderAudioJob(context, id);
+        android.net.Uri uri = null;
+        try {
+            java.io.File source = SpeechCache.leasedAudio(context, job.getString("lease"));
+            android.content.ContentValues values = new android.content.ContentValues();
+            values.put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, "ci-reminder-audio-" + id + ".wav");
+            values.put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "audio/wav");
+            values.put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS);
+            uri = context.getContentResolver().insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            if (uri == null) throw new java.io.IOException("Cannot create test destination");
+            byte[] original = java.nio.file.Files.readAllBytes(source.toPath());
+            long copied = SavedReminderAudio.write(context, new java.io.FileInputStream(source), uri);
+            byte[] exported;
+            try (java.io.InputStream input = context.getContentResolver().openInputStream(uri);
+                 java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
+                SavedReminderAudio.copy(input, output); exported = output.toByteArray();
+            }
+            boolean identical = java.util.Arrays.equals(original, exported);
+            boolean unchanged = before.equals(context.getSharedPreferences("memo", 0).getString("reminders", "[]"));
+            if (!identical || !unchanged) throw new IllegalStateException("Export changed bytes or reminder state");
+            JSONObject report = new JSONObject().put("reminderId", id).put("sid", job.getInt("sid"))
+                .put("rate", job.getDouble("rate")).put("body_matches_saved", savedBodyMatches(before, id, job.getString("text")))
+                .put("bytes", copied).put("export_identical", identical).put("reminder_unchanged", unchanged)
+                .put("content_resolver_roundtrip", true).put("system_picker_ui_tested", false);
+            try (java.io.FileOutputStream out = context.openFileOutput("reminder-audio-probe.json", Context.MODE_PRIVATE)) {
+                out.write(report.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+        } finally {
+            if (uri != null) context.getContentResolver().delete(uri, null, null);
+            SpeechCache.releaseAudio(job.getString("lease"));
+        }
     }
 }
