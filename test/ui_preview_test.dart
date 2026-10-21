@@ -84,8 +84,10 @@ void main() {
     final row = Reminder(id: 7, text: '喝水，休息一下眼睛。\n为明天的会议准备好资料。', date: DateTime(2030, 1, 1, 22, 30),
       speechMode: 'on', speechVoice: '228', speechRate: .8, speechState: 'ready');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
-      if (call.method == 'getState') return jsonEncode({'reminders': [row.toJson()..['speechState'] = 'ready'],
-        'defaults': {}, 'status': {'version': '0.9.5', 'notifications': true, 'exact': true}});
+      if (call.method == 'getState') {
+        return jsonEncode({'reminders': [row.toJson()..['speechState'] = 'ready'],
+          'defaults': {}, 'status': {'version': '0.9.5', 'notifications': true, 'exact': true}});
+      }
       if (call.method == 'reminderAudioJob') return jsonEncode({'lease': 'preview-lease', 'ready': true});
       if (call.method == 'reminderAudioReady' || call.method == 'exportReminderAudio') return true;
       return null;
