@@ -102,9 +102,6 @@ void main() {
     expect(find.text('音频已保存到所选位置。'), findsOneWidget);
     await capture(tester, 'reminder-audio-saved');
     await tester.tap(find.text('换一版')); await tester.pumpAndSettle();
-    // Screenshot capture uses runAsync; let work queued in that real zone settle too.
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
-    await tester.pumpAndSettle();
     expect(find.text('使用此版本'), findsOneWidget,
       reason: tester.widget<Text>(find.byKey(const ValueKey('reminder-audio-feedback'))).data);
     await tester.ensureVisible(find.text('使用此版本')); await tester.pumpAndSettle();

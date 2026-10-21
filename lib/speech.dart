@@ -93,12 +93,14 @@ class SpeechSession {
     if (raw == null) throw StateError('无法准备新版本');
     final job = jsonDecode(raw) as Map<String, dynamic>;
     try {
-      await _serial(() async {
-        if (await native.invokeMethod<bool>('reminderAudioReady', job['lease']) != true) {
-          final companions = (job['companions'] as List? ?? []).cast<Map<String, dynamic>>();
-          await _generate([...companions.where((j) => j['ready'] != true), if (job['ready'] != true) job]);
-        }
-      });
+      if (await native.invokeMethod<bool>('reminderAudioReady', job['lease']) != true) {
+        await _serial(() async {
+          if (await native.invokeMethod<bool>('reminderAudioReady', job['lease']) != true) {
+            final companions = (job['companions'] as List? ?? []).cast<Map<String, dynamic>>();
+            await _generate([...companions.where((j) => j['ready'] != true), if (job['ready'] != true) job]);
+          }
+        });
+      }
       if (await native.invokeMethod<bool>('reminderAudioReady', job['lease']) != true) throw StateError('新版本生成未完成，请重试');
       return job;
     } catch (_) { await releaseAudio(job); rethrow; }
