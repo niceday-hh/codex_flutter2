@@ -14,6 +14,7 @@ import java.util.*;
 final class VitsSynthesizer {
     private ChineseTextUtils cleaner;
     private boolean opened;
+    int lastSegmentCount;
     JSONArray audit; // Only populated by the debug synthesis audit.
     void open(Context c, String directory) throws Exception {
         JSONObject config = new JSONObject(new String(java.nio.file.Files.readAllBytes(new File(directory, "config.json").toPath()), StandardCharsets.UTF_8));
@@ -31,10 +32,14 @@ final class VitsSynthesizer {
         if (cleaner == null || !SpeechCache.pending(key)) throw new IllegalArgumentException("语音任务已失效");
         int speaker = job.getInt("sid"); float rate = (float)job.getDouble("rate");
         File temporary = new File(SpeechCache.directory(c), key+".part");
-        render(text, speaker, rate, temporary, 4);
+        render(text, speaker, rate, temporary, 4, (float)job.optDouble("noise", .6), (float)job.optDouble("noiseW", .668), job.optLong("seed", 1));
     }
     /** Diagnostic stages are called only by the debug-only audit Activity. */
     void render(String text, int speaker, float rate, File temporary, int stage) throws Exception {
+        render(text, speaker, rate, temporary, stage, .6f, .668f, 1);
+    }
+    void render(String text, int speaker, float rate, File temporary, int stage, float noise, float noiseW, long seed) throws Exception {
+        lastSegmentCount = 0;
         if (cleaner == null || stage < 0 || stage > 4) throw new IllegalArgumentException("Invalid synthesis stage");
         try (RandomAccessFile output = new RandomAccessFile(temporary,"rw")) {
             output.setLength(0); output.write(new byte[44]); long samples=0; double peak=0;
@@ -50,7 +55,7 @@ final class VitsSynthesizer {
                 SpeechSegmenter.Segment segment = chunks.removeFirst();
                 PreparedText prepared = cleaner.encode(segment.text, stage == 0 || segment.terminal(), stage >= 2);
                 int[] labels = prepared.getLabels(), pauses = prepared.getPauses();
-                if (labels.length > 640) {
+                if (labels.length > 960) {
                     int count = segment.text.codePointCount(0, segment.text.length());
                     if (count <= 1) throw new IOException("单个文本单元超过合成上限");
                     List<SpeechSegmenter.Segment> smaller = SpeechSegmenter.split(segment.text, Math.max(1, count / 2));
@@ -67,7 +72,9 @@ final class VitsSynthesizer {
                         for (int i = pauses.length - 1; i >= 0; i--) if (pauses[i] != 0) { pauses[i] = SpeechSegmenter.PARAGRAPH; break; }
                     }
                     if (stage < 3) Arrays.fill(pauses, 0);
-                    float[] audio=VitsMnn.generateProfile(labels,pauses,speaker,rate,stage < 2,stage >= 4);
+                    long chunkSeed = (seed + 0x9E3779B9L * lastSegmentCount) & 0xffffffffL;
+                    float[] audio=VitsMnn.generateWithOptions(labels,pauses,speaker,rate,stage < 2,stage >= 4,noise,noiseW,chunkSeed);
+                    lastSegmentCount++;
                     if (audio==null || audio.length==0) throw new IOException("未生成有效语音");
                     if (audit != null) tracePauses(labels, pauses, VitsMnn.lastDurations(), samples, segment.text);
                     samples+=audio.length; if(samples>22050L*900) throw new IOException("播报超过15分钟");

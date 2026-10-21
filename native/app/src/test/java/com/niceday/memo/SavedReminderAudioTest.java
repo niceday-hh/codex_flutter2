@@ -54,6 +54,7 @@ public class SavedReminderAudioTest {
         row(); JSONObject first = acquire(); complete(first); JSONObject second = acquire();
         assertTrue(second.getBoolean("ready"));
         File file = SpeechCache.leasedAudio(c, first.getString("lease"));
+        c.getSharedPreferences("memo", 0).edit().putString("reminders", "[]").commit();
         SpeechCache.prune(c); assertTrue(file.isFile());
         SpeechCache.releaseAudio(first.getString("lease")); SpeechCache.prune(c); assertTrue(file.isFile());
         SpeechCache.releaseAudio(second.getString("lease")); SpeechCache.prune(c); assertFalse(file.exists());
@@ -63,6 +64,7 @@ public class SavedReminderAudioTest {
         File file = SpeechCache.leasedAudio(c, job.getString("lease"));
         byte[] expected = Files.readAllBytes(file.toPath());
         try (InputStream input = new FileInputStream(file); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            c.getSharedPreferences("memo", 0).edit().putString("reminders", "[]").commit();
             SpeechCache.releaseAudio(job.getString("lease")); SpeechCache.prune(c); assertFalse(file.exists());
             assertEquals(expected.length, SavedReminderAudio.copy(input, output));
             assertArrayEquals(expected, output.toByteArray());

@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
 /** Keep sentence context; split long sentences at punctuation before using word boundaries. */
 public final class SpeechSegmenter {
     public static final int CONTINUATION = 0, LIST = 1, CLAUSE = 2, SENTENCE = 3, PARAGRAPH = 4;
-    public static final int MAX_CODE_POINTS = 48;
+    public static final int MAX_CODE_POINTS = 100;
     private static final Pattern UNITS = Pattern.compile("\\d+(?:(?:[:：./-]|年|月|日|点|时|分|秒)\\d+)*(?:分钟|毫升|年|月|日|点|时|分|秒|%|℃)?|[A-Za-z]+");
     public static final class Segment {
         public final String text;

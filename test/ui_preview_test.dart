@@ -88,7 +88,9 @@ void main() {
         return jsonEncode({'reminders': [row.toJson()..['speechState'] = 'ready'],
           'defaults': {}, 'status': {'version': '0.9.5', 'notifications': true, 'exact': true}});
       }
-      if (call.method == 'reminderAudioJob') return jsonEncode({'lease': 'preview-lease', 'ready': true});
+      if (call.method == 'reminderAudioJob' || call.method == 'candidateReminderAudio') {
+        return jsonEncode({'lease': 'preview-lease', 'ready': true, 'key': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.wav', 'reminderId': 7});
+      }
       if (call.method == 'reminderAudioReady' || call.method == 'exportReminderAudio') return true;
       return null;
     });
@@ -99,6 +101,25 @@ void main() {
     await tester.tap(find.text('保存音频')); await tester.pumpAndSettle();
     expect(find.text('音频已保存到所选位置。'), findsOneWidget);
     await capture(tester, 'reminder-audio-saved');
+    await tester.tap(find.text('换一版')); await tester.pumpAndSettle();
+    expect(find.text('使用此版本'), findsOneWidget,
+      reason: tester.widget<Text>(find.byKey(const ValueKey('reminder-audio-feedback'))).data);
+    await tester.ensureVisible(find.text('使用此版本')); await tester.pumpAndSettle();
+    await capture(tester, 'reminder-audio-candidate');
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  }, skip: !previewsEnabled);
+  testWidgets('render advanced voice settings with both noise controls', (tester) async {
+    tester.view.devicePixelRatio = 2; tester.view.physicalSize = const Size(786, 1704);
+    addTearDown(tester.view.resetDevicePixelRatio); addTearDown(tester.view.resetPhysicalSize);
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async => call.method == 'getState'
+      ? jsonEncode({'reminders': [], 'defaults': {}, 'status': {'version': '0.9.6', 'notifications': true, 'exact': true}}) : null);
+    await tester.pumpWidget(const RepaintBoundary(key: previewKey, child: MemoApp())); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置'))); await tester.pumpAndSettle();
+    await tester.tap(find.text('语音播报')); await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('高级语音设置')); await tester.pumpAndSettle();
+    await tester.tap(find.text('高级语音设置')); await tester.pumpAndSettle();
+    await capture(tester, 'speech-advanced-noise');
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   }, skip: !previewsEnabled);
   testWidgets('render actual voice confirmation with parsed retry settings', (tester) async {

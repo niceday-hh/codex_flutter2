@@ -57,6 +57,7 @@ const settingsEntries = [
   SettingsEntry('speechMode', SettingsCategory.speech, '语音播报开关', '控制新提醒默认是否朗读正文。', '开启 关闭 声音', target: '离线语音播报'),
   SettingsEntry('speechVoice', SettingsCategory.speech, '播报音色', '选择提醒使用的声音，也可按角色组随机。', '角色 声音 随机 音色', target: '离线语音播报'),
   SettingsEntry('speechRate', SettingsCategory.speech, '播报语速', '调整提醒朗读速度。', '快 慢 速度', target: '离线语音播报'),
+  SettingsEntry('speechVariation', SettingsCategory.speech, '高级语音设置', '调整声音与节奏变化；新生成时随机，选定后保存并复用。', 'noise_scale noise_scale_w 噪声 声音 节奏 随机 高级', target: '离线语音播报'),
   SettingsEntry('speechRandom', SettingsCategory.speech, '新建任务随机音色', '创建时抽取并保存，同一任务的循环和重提醒保持相同音色。', '随机 开关', target: '离线语音播报'),
   SettingsEntry('speechGroup', SettingsCategory.speech, '随机角色组', '开启随机音色后，选择参与抽取的角色组。', '分组 范围', target: '离线语音播报'),
   SettingsEntry('speechSource', SettingsCategory.speech, '配音来源', '在随机音色中按角色配音来源筛选，不会自动翻译。', '来源 分组 语言', target: '离线语音播报'),

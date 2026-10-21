@@ -39,6 +39,7 @@ namespace MNN_VITS {
     static float length_scale_f = 1.2f;
     static std::mt19937 synthesis_random;
     static bool legacy_profile = false;
+    static float acoustic_noise = .6f, duration_noise = .668f;
 
     MNN::Express::VARP normal_noise(const std::vector<int>& shape) {
         size_t count = 1;
@@ -118,7 +119,7 @@ namespace MNN_VITS {
         std::cout << "Initializing DP..." << std::endl;
         const std::vector<std::string> input_names_dp{"zin", "x", "g", "x_mask"};
         const std::vector<std::string> output_names_dp{"logw"};
-        MNN::Express::VARP noise_scale_w = MNN::Express::_Scalar<float>(0.668f);
+        MNN::Express::VARP noise_scale_w = MNN::Express::_Scalar<float>(duration_noise);
 
         //zin = np.random.randn(x.shape[0], 2, x.shape[2]).astype(np.float32) * noise_scale_w
         auto zin_shape = MNN::Express::_Const(.5f, {1, 2, size}, MNN::Express::NCHW);
@@ -246,7 +247,7 @@ namespace MNN_VITS {
         auto logs_p_exp = MNN::Express::_Exp(std::move(logs_p_));
         auto rand_mul_logs = rand_z_p * logs_p_exp;
         auto shape = rand_mul_logs->getInfo()->dim;
-        auto noise_scale = MNN::Express::_Const(0.6f, shape, MNN::Express::NCHW) ;
+        auto noise_scale = MNN::Express::_Const(acoustic_noise, shape, MNN::Express::NCHW) ;
         auto z_p = rand_mul_logs * noise_scale + MNN::Express::_Cast(m_p_, halide_type_of<float>());
         return z_p;
     }
@@ -358,13 +359,12 @@ namespace MNN_VITS {
     static std::vector<float> observed_durations;
     std::vector<float> last_durations() { return observed_durations; }
     std::vector<float> start_audio_infer(const std::vector<int>& input_seq, int spkid,
-                                       const std::vector<int>& pauses, float rate, bool legacy, bool bounded_pauses) {
+                                       const std::vector<int>& pauses, float rate, bool legacy, bool bounded_pauses, float noise, float noise_w, uint32_t seed) {
         if (!g_initialized || !g_enc_module || !g_dec_module || !g_dp_module || !g_emb_module || !g_flow_module) throw std::runtime_error("VITS modules not ready");
         MNN::Express::ExecutorScope scope(g_executor);
         legacy_profile = legacy;
-        // Keep A/B speed comparisons reproducible; rate does not change the random draw.
-        uint32_t seed = 2166136261u ^ static_cast<uint32_t>(spkid);
-        for (int id : input_seq) seed = (seed ^ static_cast<uint32_t>(id)) * 16777619u;
+        acoustic_noise = noise; duration_noise = noise_w;
+        // A randomly selected, persisted audio version remains reproducible if rebuilt.
         synthesis_random.seed(seed);
         MNN_VITS_PRINT("Starting audio inference... spkid %d\n", spkid);
         auto enc_outputs = translate_run_encoder(input_seq);

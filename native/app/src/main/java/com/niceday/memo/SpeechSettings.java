@@ -10,6 +10,28 @@ import java.util.*;
 public final class SpeechSettings {
     public static final String VOICE = "228";
     public static final String GENERIC = "你有一条待办提醒，请解锁后查看";
+    private static final java.security.SecureRandom RANDOM = new java.security.SecureRandom();
+    public static int newSeed() { return RANDOM.nextInt(Integer.MAX_VALUE - 1) + 1; }
+    public static double noise(JSONObject row, JSONObject defaults) { return parameter(row, defaults, "speechNoiseScale", .6); }
+    public static double noiseW(JSONObject row, JSONObject defaults) { return parameter(row, defaults, "speechNoiseScaleW", .668); }
+    private static double parameter(JSONObject row, JSONObject defaults, String field, double fallback) {
+        double value = row.optDouble(field, 0);
+        return value == 0 ? defaults.optDouble(field, fallback) : value;
+    }
+    public static long seed(JSONObject row) { return row.optLong("speechSeed", 0); }
+    public static String profile(JSONObject row, JSONObject defaults) {
+        return cacheKey(row.optString("text"), voice(row, defaults), rate(row, defaults), noise(row, defaults), noiseW(row, defaults), 0);
+    }
+    /** Upgrade only missing seeds. No schedule/occurrence fields are changed. */
+    public static synchronized void migrateSeeds(Context c) throws JSONException {
+        android.content.SharedPreferences prefs = c.getSharedPreferences("memo", 0);
+        JSONArray rows = new JSONArray(prefs.getString("reminders", "[]")); boolean changed = false;
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.getJSONObject(i);
+            if (seed(row) == 0) { row.put("speechSeed", newSeed()); changed = true; }
+        }
+        if (changed && !prefs.edit().putString("reminders", rows.toString()).commit()) throw new IllegalStateException("无法保存语音版本");
+    }
     private SpeechSettings() {}
     public static JSONObject defaults(Context c) {
         if (!c.getSystemService(android.os.UserManager.class).isUserUnlocked()) return new JSONObject();
@@ -46,6 +68,18 @@ public final class SpeechSettings {
         double rate = r.optDouble("speechRate", defaults ? 1 : 0);
         if (!Double.isFinite(rate) || (rate != 0 && (rate < 0.5 || rate > 1.3)) || (defaults && rate == 0))
             throw new IllegalArgumentException("语速须为0.5至1.3倍");
+        for (String field : Arrays.asList("speechNoiseScale", "speechNoiseScaleW")) {
+            if (r.has(field) && !(r.get(field) instanceof Number)) throw new IllegalArgumentException("语音变化参数类型无效");
+            double value = r.optDouble(field, defaults ? (field.equals("speechNoiseScale") ? .6 : .668) : 0);
+            if (!Double.isFinite(value) || (value != 0 && (value < .1 || value > 1)) || (defaults && value == 0))
+                throw new IllegalArgumentException("语音变化参数须为0.1至1.0");
+            r.put(field, value);
+        }
+        if (r.has("speechSeed")) {
+            Object value = r.get("speechSeed");
+            if (!(value instanceof Integer || value instanceof Long) || ((Number)value).longValue() < 0 || ((Number)value).longValue() > Integer.MAX_VALUE)
+                throw new IllegalArgumentException("语音版本无效");
+        }
         for (String field : Arrays.asList("speechHideLocked", "speechRepeat", "speechRandom"))
             if (r.has(field) && !(r.get(field) instanceof Boolean)) throw new IllegalArgumentException("语音隐私开关无效");
         for(String field: Arrays.asList("speechRandomLanguage","speechRandomGender","speechRandomGroup"))
@@ -61,10 +95,11 @@ public final class SpeechSettings {
         if (!r.has("speechHideLocked")) r.put("speechHideLocked", true);
         if (!r.has("speechRepeat")) r.put("speechRepeat", true);
     }
-    public static String cacheKey(String text, String voice, double rate) {
+    public static String cacheKey(String text, String voice, double rate) { return cacheKey(text, voice, rate, .6, .668, 0); }
+    public static String cacheKey(String text, String voice, double rate, double noise, double noiseW, long seed) {
         try {
             byte[] bytes = MessageDigest.getInstance("SHA-256").digest(
-                ("voine-vits-mnn-6379f381-22k-prosody-v3\n" + voice + "\n" + Math.round(rate * 100) + "\n" + text).getBytes(StandardCharsets.UTF_8));
+                ("voine-vits-mnn-6379f381-22k-prosody-v4\n" + voice + "\n" + Double.toString(rate) + "\n" + Double.toString(noise) + "\n" + Double.toString(noiseW) + "\n" + seed + "\n" + text).getBytes(StandardCharsets.UTF_8));
             StringBuilder hex = new StringBuilder();
             for (byte b : bytes) hex.append(String.format(Locale.ROOT, "%02x", b & 255));
             return hex.toString();

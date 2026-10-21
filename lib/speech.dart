@@ -85,6 +85,34 @@ class SpeechSession {
       try { await native.invokeMethod('releaseReminderAudio', lease); } catch (_) {}
     }
   }
+  Future<void> releaseAudio(Map<String, dynamic> job) async {
+    try { await native.invokeMethod('releaseReminderAudio', job['lease']); } catch (_) {}
+  }
+  Future<Map<String, dynamic>> prepareCandidate(int id) async {
+    final raw = await native.invokeMethod<String>('candidateReminderAudio', id);
+    if (raw == null) throw StateError('无法准备新版本');
+    final job = jsonDecode(raw) as Map<String, dynamic>;
+    try {
+      if (await native.invokeMethod<bool>('reminderAudioReady', job['lease']) != true) {
+        await _serial(() async {
+          if (await native.invokeMethod<bool>('reminderAudioReady', job['lease']) != true) {
+            final companions = (job['companions'] as List? ?? []).cast<Map<String, dynamic>>();
+            await _generate([...companions.where((j) => j['ready'] != true), if (job['ready'] != true) job]);
+          }
+        });
+      }
+      if (await native.invokeMethod<bool>('reminderAudioReady', job['lease']) != true) throw StateError('新版本生成未完成，请重试');
+      return job;
+    } catch (_) { await releaseAudio(job); rethrow; }
+  }
+  Future<bool> previewCandidate(Map<String, dynamic> job, {required Object owner}) async {
+    final ticket = _beginPreview(owner: owner, reminderId: job['reminderId'] as int?);
+    await native.invokeMethod('stopSpeechPreview');
+    return _play(job['key'] as String, ticket);
+  }
+  Future<void> useCandidate(Map<String, dynamic> job) async {
+    if (await native.invokeMethod<bool>('selectReminderAudio', job['lease']) != true) throw StateError('无法保存音频版本');
+  }
   Future<bool> previewReminder(int id, {required Object owner}) async {
     final ticket = _beginPreview(owner: owner, reminderId: id);
     await native.invokeMethod('stopSpeechPreview');

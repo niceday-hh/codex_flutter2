@@ -129,10 +129,9 @@ public final class MainActivity extends FlutterActivity {
                         SpeechCache.finish(this, key, failure == null ? "" : failure); result.success(null);
                     }
                     case "reminderAudioJob" -> result.success(SpeechCache.reminderAudioJob(this, ((Number)call.arguments).intValue()).toString());
-                    case "reminderAudioReady" -> {
-                        try { SpeechCache.leasedAudio(this, (String)call.arguments); result.success(true); }
-                        catch (IOException e) { result.success(false); }
-                    }
+                    case "reminderAudioReady" -> result.success(SpeechCache.audioReady(this, (String)call.arguments));
+                    case "candidateReminderAudio" -> result.success(SpeechCache.candidateAudioJob(this, ((Number)call.arguments).intValue()).toString());
+                    case "selectReminderAudio" -> { SpeechCache.selectAudio(this, (String)call.arguments); result.success(true); }
                     case "releaseReminderAudio" -> { SpeechCache.releaseAudio((String)call.arguments); result.success(null); }
                     case "exportReminderAudio" -> {
                         if (documentResult != null) throw new IllegalStateException("文件操作处理中");
