@@ -2,6 +2,8 @@ name: VITS real model prosody comparison
 on:
   push:
     branches: [feature/v0.9.5-fixes]
+    # UI-only revisions do not change synthesis and can reuse the native audio comparison.
+    paths: ['native/**', 'tool/device_prosody_test.py', 'tool/fetch_tts.py', 'tool/vits_model.lock.json']
   workflow_dispatch:
 permissions:
   contents: read

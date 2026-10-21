@@ -76,6 +76,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   bool _dialogScheduled = false, _wasPaused = false, _entryPending = true;
   bool _initialized = false, _foreground = true, _checkingEntry = false, _entryAgain = false, _suppressVoiceEntry = false;
   bool _taskLibraryOpen = false, _settingsSheetOpen = false, _detailOpen = false, _editorOpen = false;
+  ValueNotifier<Reminder>? _detailSelection;
   final _settingsMessenger = GlobalKey<ScaffoldMessengerState>();
   GlobalKey? _settingsTargetKey;
   String? _settingsTargetTitle;
@@ -236,39 +237,45 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     if (!mounted || _editorOpen) return;
     _editorOpen = true; _pauseForNavigation();
     try {
-    final draft = existing == null ? store.draft() : Reminder.fromJson({...existing.toJson()});
-    draft.enabled = true;
-    draft.completed = false;
-    draft.archived = false;
-    if (existing != null && (existing.archived || existing.completed) && draft.repeat == 'none' && !draft.date.isAfter(DateTime.now())) {
-      draft.date = DateTime.now().add(const Duration(hours: 1));
-    }
-    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => ReminderEditor(reminder: draft, store: store)));
-    if (saved == true) {
-      if (mounted && existing != null && (existing.archived || existing.completed)) {
-        Navigator.of(context).popUntil((route) => route.isFirst);
-        setState(() => tab = 0);
+      final draft = existing == null ? store.draft() : Reminder.fromJson({...existing.toJson()});
+      draft.enabled = true;
+      draft.completed = false;
+      draft.archived = false;
+      if (existing != null && (existing.archived || existing.completed) && draft.repeat == 'none' && !draft.date.isAfter(DateTime.now())) {
+        draft.date = DateTime.now().add(const Duration(hours: 1));
       }
-      await reload(); toast('提醒已保存');
-    }
+      final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => ReminderEditor(reminder: draft, store: store)));
+      if (saved == true) {
+        if (mounted && existing != null && (existing.archived || existing.completed)) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+          setState(() => tab = 0);
+        }
+        await reload(); toast('提醒已保存');
+      }
     } finally { _editorOpen = false; }
   }
   void openById(int id) {
     final matches = store.reminders.where((r) => r.id == id);
-    if (matches.isNotEmpty) viewReminder(matches.first);
+    if (matches.isEmpty) return;
+    if (_editorOpen) { toast('请先完成当前编辑，再打开提醒'); return; }
+    final selection = _detailSelection;
+    if (selection != null) { selection.value = matches.first; return; }
+    viewReminder(matches.first);
   }
   Future<void> viewReminder(Reminder r) async {
     if (!mounted || _detailOpen || _editorOpen) return;
     _detailOpen = true; _pauseForNavigation();
+    final selection = _detailSelection = ValueNotifier(r);
     try {
-    await showModalBottomSheet<void>(context: context, isScrollControlled: true,
-      backgroundColor: Colors.white, showDragHandle: true,
-      builder: (sheetContext) => ReminderDetail(reminder: r, onAck: () async {
-        await store.ack(r);
-        if (sheetContext.mounted) Navigator.pop(sheetContext);
-        await reload();
-      }, onEdit: () { Navigator.pop(sheetContext); edit(r); }));
-    } finally { _detailOpen = false; }
+      await showModalBottomSheet<void>(context: context, isScrollControlled: true,
+        backgroundColor: Colors.white, showDragHandle: true,
+        builder: (sheetContext) => ValueListenableBuilder<Reminder>(valueListenable: selection,
+          builder: (_, current, _) => ReminderDetail(key: ValueKey(current.id), reminder: current, onAck: () async {
+          await store.ack(current);
+          if (sheetContext.mounted) Navigator.pop(sheetContext);
+          await reload();
+        }, onEdit: () { Navigator.pop(sheetContext); edit(current); })));
+    } finally { _detailOpen = false; _detailSelection = null; selection.dispose(); }
   }
   Future<void> remove(Reminder r) async {
     final yes = await showDialog<bool>(context: context, builder: (c) => AlertDialog(
