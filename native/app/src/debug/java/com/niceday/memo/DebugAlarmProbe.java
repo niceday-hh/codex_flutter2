@@ -10,6 +10,27 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
             ReminderEngine engine = new ReminderEngine(context);
             if ("PING".equals(intent.getAction())) {
                 setResultCode(1); setResultData("probeReady=true");
+            } else if ("ENTRY_PREPARE".equals(intent.getAction())) {
+                engine.reliableMode(false); engine.defaults(new JSONObject().put("handsFree", false).toString());
+            } else if ("ENTRY_SNAPSHOT".equals(intent.getAction())) {
+                JSONArray tasks = new JSONArray();
+                for (ActivityManager.AppTask task : context.getSystemService(ActivityManager.class).getAppTasks()) {
+                    ActivityManager.RecentTaskInfo t = task.getTaskInfo();
+                    tasks.put(new JSONObject().put("taskId", t.taskId).put("activities", t.numActivities)
+                        .put("base", t.baseActivity == null ? "" : t.baseActivity.getClassName()));
+                }
+                try (java.io.FileOutputStream out = context.openFileOutput("entry-probe.json", Context.MODE_PRIVATE)) {
+                    out.write(tasks.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                }
+            } else if ("VIBRATION_PREVIEW".equals(intent.getAction())) {
+                JSONObject requested;
+                try { requested = NotificationStyles.preview(context, "once"); }
+                catch (IllegalStateException e) {
+                    requested = new JSONObject().put("requested", false).put("hardware_absent", e.getMessage().contains("没有可用振动器"));
+                }
+                try (java.io.FileOutputStream out = context.openFileOutput("vibration-probe.json", Context.MODE_PRIVATE)) {
+                    out.write(requested.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                }
             } else if ("CLEAR".equals(intent.getAction())) {
                 JSONArray rows = new JSONObject(engine.state()).getJSONArray("reminders");
                 for (int i = 0; i < rows.length(); i++) engine.delete(rows.getJSONObject(i).getInt("id"));

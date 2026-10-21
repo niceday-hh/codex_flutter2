@@ -21,9 +21,16 @@ public final class SpeechSegmenter {
     private SpeechSegmenter() {}
     public static int punctuation(int cp) {
         if (cp == '、') return LIST;
-        if (cp == ',' || cp == '，' || cp == ';' || cp == '；' || cp == ':' || cp == '：') return CLAUSE;
+        if (cp == '-' || cp == '—' || cp == '~' || cp == '～' || cp == ',' || cp == '，' || cp == ';' || cp == '；' || cp == ':' || cp == '：') return CLAUSE;
         if (cp == '.' || cp == '。' || cp == '!' || cp == '！' || cp == '?' || cp == '？' || cp == '…') return SENTENCE;
         return 0;
+    }
+    private static boolean closing(int cp) { return "”’」』）》】\"'".indexOf(cp) >= 0; }
+    public static int trailingBoundary(String text) {
+        int end = text.length();
+        while (end > 0 && (closing(text.codePointBefore(end)) || Character.isWhitespace(text.codePointBefore(end))))
+            end -= Character.charCount(text.codePointBefore(end));
+        return end == 0 ? CONTINUATION : punctuation(text.codePointBefore(end));
     }
     public static List<Segment> split(String text) { return split(text, MAX_CODE_POINTS); }
     public static List<Segment> split(String text, int limit) {
@@ -71,8 +78,10 @@ public final class SpeechSegmenter {
                         }
                     }
                 }
+                // A closing quote belongs to the sentence before it, not the next synthesis call.
+                while (end < paragraph.length() && closing(paragraph.codePointAt(end))) end += Character.charCount(paragraph.codePointAt(end));
                 String part = paragraph.substring(start, end);
-                int boundary = end == paragraph.length() ? PARAGRAPH : punctuation(part.codePointBefore(part.length()));
+                int boundary = end == paragraph.length() ? PARAGRAPH : trailingBoundary(part);
                 out.add(new Segment(part, boundary)); start = end;
             }
         }

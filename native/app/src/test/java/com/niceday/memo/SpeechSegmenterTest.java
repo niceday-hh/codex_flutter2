@@ -48,4 +48,12 @@ public class SpeechSegmenterTest {
             assertTrue(unit, parts.stream().anyMatch(s -> s.text.contains(unit)));
         }
     }
+    @Test public void closingQuotesStayWithTheirSentenceAndRetainSentenceBoundary() {
+        java.util.List<SpeechSegmenter.Segment> parts = SpeechSegmenter.split("他说：“请站稳。”今天继续出发，明天再见。", 10);
+        assertEquals("他说：“请站稳。”", parts.get(0).text);
+        assertEquals(SpeechSegmenter.SENTENCE, parts.get(0).boundary);
+        assertEquals(SpeechSegmenter.CLAUSE, SpeechSegmenter.punctuation('—'));
+        assertEquals(SpeechSegmenter.SENTENCE, SpeechSegmenter.trailingBoundary("安全。”"));
+    }
+
 }

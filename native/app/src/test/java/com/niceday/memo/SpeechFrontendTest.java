@@ -45,4 +45,9 @@ public class SpeechFrontendTest {
         assertEquals("八点零五分喝水、休息", new Normalizer().normalizeText("8:05喝水、休息", "!?…,.'、-", true));
         assertTrue(frontend().encode("8:05喝水", true).getLabels().length > 3);
     }
+    @Test public void quotationMarksDoNotShiftCommaOrSentenceMetadata() {
+        PreparedText p = frontend().encode("小李问：“今天出发吗？”老王说：“别急，先休息。”", true);
+        assertArrayEquals(new int[]{2,3,2,2,3}, Arrays.stream(p.getPauses()).filter(k -> k != 0).toArray());
+    }
+
 }

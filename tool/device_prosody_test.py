@@ -1,4 +1,4 @@
-"""Generate six real-model WAV comparisons in an isolated debug-only Android Activity."""
+"""Generate v0.9.4-cap / bounded-pause real-model WAV comparisons in an isolated debug-only Android Activity."""
 import array
 import io
 import json
@@ -39,10 +39,10 @@ if report is None:
     raise AssertionError('Prosody model audit did not complete')
 (out / 'result.json').write_text(json.dumps(report, ensure_ascii=False, indent=2))
 assert report.get('success'), report
-assert len(report['samples']) == 6
+assert len(report['samples']) == 3
 for sample in report['samples']:
     name = sample['file']
-    assert re.fullmatch(r'stage-[0-3]-rate-[568]\.wav', name)
+    assert re.fullmatch(r'stage-[34]-rate-[68]\.wav', name)
     raw = adb('exec-out', 'run-as', PACKAGE, 'cat', 'files/prosody-audit/' + name, binary=True)
     (out / name).write_bytes(raw)
     with wave.open(io.BytesIO(raw)) as wav:
@@ -66,9 +66,21 @@ for sample in report['samples']:
             start = None
     sample['low_energy_gaps'] = spans
 samples = {(s['stage'], round(s['rate'], 1)): s for s in report['samples']}
-assert samples[3, .5]['frames'] > samples[3, .8]['frames'] * 1.15, 'Slower rate did not meaningfully lengthen speech'
-assert samples[3, .6]['frames'] > samples[3, .8]['frames'], '0.6 did not lengthen speech'
+assert samples[4, .6]['frames'] > samples[4, .8]['frames'], '0.6 did not lengthen speech'
+for (stage, rate), sample in samples.items():
+    if stage != 4:
+        continue
+    kinds = set()
+    for pause in sample['punctuation']:
+        kind = pause['kind']; kinds.add(kind)
+        floors = {1: 0, 2: 0, 3: .32, 4: .46}
+        caps = {1: .14, 2: .26, 3: .46, 4: .65}
+        quantum = 256 / 22050
+        assert pause['seconds'] + 1e-5 >= floors[kind] / math.sqrt(rate), pause
+        assert pause['seconds'] <= caps[kind] / math.sqrt(rate) + quantum + 1e-5, pause
+    assert {2, 3} <= kinds, 'Must exercise both clause and sentence windows'
 report['slower_rate_verified'] = True
+report['synthesized_pause_ranges_verified'] = True
 report['source_commit'] = os.environ.get('GITHUB_SHA', '')
 (out / 'result.json').write_text(json.dumps(report, ensure_ascii=False, indent=2))
 print(json.dumps(report, ensure_ascii=False, indent=2), flush=True)

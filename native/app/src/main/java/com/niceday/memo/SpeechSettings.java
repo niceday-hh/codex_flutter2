@@ -64,7 +64,7 @@ public final class SpeechSettings {
     public static String cacheKey(String text, String voice, double rate) {
         try {
             byte[] bytes = MessageDigest.getInstance("SHA-256").digest(
-                ("voine-vits-mnn-6379f381-22k-prosody-v2\n" + voice + "\n" + Math.round(rate * 100) + "\n" + text).getBytes(StandardCharsets.UTF_8));
+                ("voine-vits-mnn-6379f381-22k-prosody-v3\n" + voice + "\n" + Math.round(rate * 100) + "\n" + text).getBytes(StandardCharsets.UTF_8));
             StringBuilder hex = new StringBuilder();
             for (byte b : bytes) hex.append(String.format(Locale.ROOT, "%02x", b & 255));
             return hex.toString();

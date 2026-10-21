@@ -355,8 +355,10 @@ namespace MNN_VITS {
         g_flow_module = std::shared_ptr<MNN::Express::Module>(MNN::Express::Module::load(input_names_flow, output_names_flow, g_flow_model_path.c_str(), nullptr, &mdconfig));
     }
 
+    static std::vector<float> observed_durations;
+    std::vector<float> last_durations() { return observed_durations; }
     std::vector<float> start_audio_infer(const std::vector<int>& input_seq, int spkid,
-                                       const std::vector<int>& pauses, float rate, bool legacy) {
+                                       const std::vector<int>& pauses, float rate, bool legacy, bool bounded_pauses) {
         if (!g_initialized || !g_enc_module || !g_dec_module || !g_dp_module || !g_emb_module || !g_flow_module) throw std::runtime_error("VITS modules not ready");
         MNN::Express::ExecutorScope scope(g_executor);
         legacy_profile = legacy;
@@ -376,7 +378,9 @@ namespace MNN_VITS {
         const float* predicted = w_ceil->readMap<float>();
         if (!predicted) throw std::runtime_error("Duration read failed");
         std::vector<float> durations(predicted, predicted + input_seq.size());
-        memo_prosody::constrain_pauses(durations, input_seq, pauses, rate);
+        if (bounded_pauses) memo_prosody::constrain_pauses(durations, input_seq, pauses, rate);
+        else memo_prosody::legacy_cap_pauses(durations, input_seq, pauses, rate);
+        observed_durations = durations;
         w_ceil = MNN::Express::_Const(durations.data(), {1, 1, static_cast<int>(durations.size())}, MNN::Express::NCHW, halide_type_of<float>());
         auto y_lengths = translate_y_length(w_ceil);
         auto y_mask = translate_y_mask(y_lengths);

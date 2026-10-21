@@ -75,7 +75,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   DialogRoute<void>? _voiceDialog;
   bool _dialogScheduled = false, _wasPaused = false, _entryPending = true;
   bool _initialized = false, _foreground = true, _checkingEntry = false, _entryAgain = false, _suppressVoiceEntry = false;
-  bool _taskLibraryOpen = false, _settingsSheetOpen = false;
+  bool _taskLibraryOpen = false, _settingsSheetOpen = false, _detailOpen = false, _editorOpen = false;
   final _settingsMessenger = GlobalKey<ScaffoldMessengerState>();
   GlobalKey? _settingsTargetKey;
   String? _settingsTargetTitle;
@@ -90,7 +90,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     native.setMethodCallHandler((call) async {
       if (call.method == 'openReminder') {
         _suppressVoiceEntry = true; _entryPending = false; _entryEpoch++;
-        await voice.cancel(); await reload(); if (mounted) openById(call.arguments as int);
+        _pauseForNavigation(); await reload(); if (mounted) openById(call.arguments as int);
       }
       if (call.method == 'voiceEntry') {
         if (voice.active || voice.pending != null) return;
@@ -135,7 +135,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     }
   }
   bool get _canStartHandsFree => mounted && _initialized && _foreground && _entryPending &&
-    !_suppressVoiceEntry && !_taskLibraryOpen && !_settingsSheetOpen && !voice.active && voice.pending == null &&
+    !_suppressVoiceEntry && !_taskLibraryOpen && !_settingsSheetOpen && !_detailOpen && !_editorOpen && !voice.active && voice.pending == null &&
     store.defaults['handsFree'] == true && !Navigator.of(context).canPop();
   void _warmManualTab() {
     if (!mounted || !_foreground || tab != 2 || voice.active) return;
@@ -228,9 +228,14 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(SnackBar(content: Text(s), behavior: SnackBarBehavior.floating));
   }
+  void _pauseForNavigation() {
+    _entryPending = false; _entryEpoch++; speech.stopPreview();
+    unawaited(voice.pause(keepDraft: false).catchError((Object e) { toast(niceError(e)); }));
+  }
   Future<void> edit([Reminder? existing]) async {
-    await voice.pause(keepDraft: false);
-    if (!mounted) return;
+    if (!mounted || _editorOpen) return;
+    _editorOpen = true; _pauseForNavigation();
+    try {
     final draft = existing == null ? store.draft() : Reminder.fromJson({...existing.toJson()});
     draft.enabled = true;
     draft.completed = false;
@@ -246,14 +251,16 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       }
       await reload(); toast('提醒已保存');
     }
+    } finally { _editorOpen = false; }
   }
   void openById(int id) {
     final matches = store.reminders.where((r) => r.id == id);
     if (matches.isNotEmpty) viewReminder(matches.first);
   }
   Future<void> viewReminder(Reminder r) async {
-    await voice.pause(keepDraft: false);
-    if (!mounted) return;
+    if (!mounted || _detailOpen || _editorOpen) return;
+    _detailOpen = true; _pauseForNavigation();
+    try {
     await showModalBottomSheet<void>(context: context, isScrollControlled: true,
       backgroundColor: Colors.white, showDragHandle: true,
       builder: (sheetContext) => ReminderDetail(reminder: r, onAck: () async {
@@ -261,6 +268,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         if (sheetContext.mounted) Navigator.pop(sheetContext);
         await reload();
       }, onEdit: () { Navigator.pop(sheetContext); edit(r); }));
+    } finally { _detailOpen = false; }
   }
   Future<void> remove(Reminder r) async {
     final yes = await showDialog<bool>(context: context, builder: (c) => AlertDialog(
