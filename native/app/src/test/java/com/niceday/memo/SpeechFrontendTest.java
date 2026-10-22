@@ -59,4 +59,13 @@ public class SpeechFrontendTest {
             new com.huaban.analysis.jieba.JiebaSegmenter().sentenceProcess("城市刚刚醒来"));
     }
 
+    // Reference: Space text/cleaners.py zh_ja_mixture_cleaners, [ZH] input;
+    // Python jieba 0.42.1 / pypinyin 0.55.0. Representative fixtures, not full parity.
+    @Test public void representativePhonesMatchWebChineseFrontend() {
+        ChineseCleaners cleaner = new ChineseCleaners();
+        assertEquals("ʦ`ʰəNg↑s`ɹ`↓ k⁼aNg→k⁼aNg→ ʃiNg↓↑lai↑.",
+            cleaner.chinese_clean_text1("城市刚刚醒来", true, true));
+        assertEquals("ei→pʰi→pʰi→.", cleaner.chinese_clean_text1("APP", true, true));
+    }
+
 }

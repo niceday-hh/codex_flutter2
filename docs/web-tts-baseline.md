@@ -18,3 +18,5 @@
 ## 依赖
 
 新增 com.huaban:jieba-analysis:1.0.2，Apache-2.0：https://github.com/huaban/jieba-analysis 。词典随依赖离线打包，不在运行时下载。
+
+验证样例：以网页中文 cleaner（Jieba 0.42.1、pypinyin 0.55.0）生成“城市刚刚醒来”和“APP”的音素作为回归期望。网页运行环境未锁定的词典版本不视为已证明一致。
