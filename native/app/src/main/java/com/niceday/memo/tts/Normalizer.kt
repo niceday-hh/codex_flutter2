@@ -103,7 +103,7 @@ class Normalizer {
         for ((k, v) in repMap) {
             result = result.replace(k, v)
         }
-        val regex = Regex("[^\u4e00-\u9fa5${punctuation}]+")
+        val regex = Regex("[^A-Za-z\u4e00-\u9fa5${punctuation}]+")
         return result.replace(regex, "")
     }
 }

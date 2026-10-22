@@ -1,7 +1,7 @@
 name: VITS real model prosody comparison
 on:
   push:
-    branches: [feature/v0.9.5-fixes]
+    branches: [feature/v0.9.5-fixes, feature/v0.9.7-web-baseline]
     # UI-only revisions do not change synthesis and can reuse the native audio comparison.
     paths:
       - 'native/app/src/main/cpp/**'

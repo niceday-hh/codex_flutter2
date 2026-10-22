@@ -33,7 +33,7 @@ public class SpeechSettingsTest {
             try { SpeechSettings.validate(new JSONObject().put("speechVoice", voice), false); fail(voice); }
             catch (IllegalArgumentException expected) {}
         }
-        for (Object rate : new Object[]{0.4, 1.4, "1.0"}) {
+        for (Object rate : new Object[]{0.4, 10.1, "1.0"}) {
             try { SpeechSettings.validate(new JSONObject().put("speechRate", rate), false); fail(String.valueOf(rate)); }
             catch (IllegalArgumentException expected) {}
         }
@@ -73,4 +73,12 @@ public class SpeechSettingsTest {
             catch (IllegalArgumentException expected) {}
         }
     }
+    @Test public void webLengthScaleEndpointsAndDefaultRoundTrip() throws Exception {
+        for (double length : new double[]{.1, 1.2, 2}) {
+            JSONObject row = new JSONObject().put("speechRate", 1 / length);
+            SpeechSettings.validate(row, false);
+            assertEquals(length, 1 / SpeechSettings.rate(row, new JSONObject()), .000001);
+        }
+    }
+
 }
