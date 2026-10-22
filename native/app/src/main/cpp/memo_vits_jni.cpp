@@ -19,7 +19,7 @@ extern "C" JNIEXPORT void JNICALL Java_com_niceday_memo_VitsMnn_open(JNIEnv* env
 extern "C" JNIEXPORT jfloatArray JNICALL Java_com_niceday_memo_VitsMnn_generateWithOptions(JNIEnv* env, jclass, jintArray ids, jintArray pause_ids, jint speaker, jfloat speed, jboolean legacy, jboolean bounded_pauses, jfloat noise, jfloat noise_w, jlong seed) {
     try {
         const jsize length = env->GetArrayLength(ids);
-        if (!pause_ids || env->GetArrayLength(pause_ids) != length || length < 3 || length > 1024 || speaker < 0 || speaker >= 804 || !std::isfinite(speed) || speed < .5f || speed > 1.3f) throw std::runtime_error("Invalid synthesis input");
+        if (!pause_ids || env->GetArrayLength(pause_ids) != length || length < 3 || length > 1024 || speaker < 0 || speaker >= 804 || !std::isfinite(speed) || speed < .5f || speed > 10.f) throw std::runtime_error("Invalid synthesis input");
         if (!std::isfinite(noise) || !std::isfinite(noise_w) || noise < .1f || noise > 1.f || noise_w < .1f || noise_w > 1.f || seed < 0 || seed > 4294967295LL)
             throw std::runtime_error("Invalid synthesis variation");
         std::vector<int> input(length); env->GetIntArrayRegion(ids,0,length,reinterpret_cast<jint*>(input.data()));

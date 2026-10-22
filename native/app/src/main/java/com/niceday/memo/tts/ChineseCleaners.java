@@ -6,8 +6,6 @@ import android.util.Log;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.regex.Pattern;
-import java.text.BreakIterator;
-import java.util.Locale;
 
 
 import com.github.houbb.pinyin.constant.enums.PinyinStyleEnum;
@@ -216,7 +214,7 @@ public class ChineseCleaners {
         add(new ArrayList<>(Arrays.asList("ˊ", "↑")));
         add(new ArrayList<>(Arrays.asList("ˇ", "↓↑")));
         add(new ArrayList<>(Arrays.asList("ˋ", "↓")));
-        add(new ArrayList<>(Arrays.asList("˙", " ")));
+        add(new ArrayList<>(Arrays.asList("˙", "")));
         add(new ArrayList<>(Arrays.asList("、", ",")));
         add(new ArrayList<>(Arrays.asList("、", ",")));
         add(new ArrayList<>(Arrays.asList("，", ",")));
@@ -230,7 +228,7 @@ public class ChineseCleaners {
     public String latin_to_bopomofo(String s) {
         String ans = s;
         for (ArrayList<String> i : latin_map) {
-            ans = ans.replaceAll(i.get(0), i.get(1));
+            ans = ans.replaceAll("(?i)" + i.get(0), i.get(1));
         }
         return ans;
     }
@@ -314,13 +312,12 @@ public class ChineseCleaners {
     }
 
     /** Match the training frontend's within-word joining, retaining spaces between words. */
+    private static final class JiebaHolder {
+        static final com.huaban.analysis.jieba.JiebaSegmenter SEGMENTER = new com.huaban.analysis.jieba.JiebaSegmenter();
+    }
     private String wordPinyin(String text) {
-        BreakIterator words = BreakIterator.getWordInstance(Locale.CHINA);
-        words.setText(text);
         StringBuilder result = new StringBuilder();
-        int start = words.first();
-        for (int end = words.next(); end != BreakIterator.DONE; start = end, end = words.next()) {
-            String word = text.substring(start, end);
+        for (String word : JiebaHolder.SEGMENTER.sentenceProcess(text)) {
             if (word.matches(".*[\\u4e00-\\u9fff].*")) {
                 if (result.length() > 0) result.append(' ');
                 result.append(PinyinHelper.toPinyin(word, PinyinStyleEnum.NUM_LAST).replace(" ", ""));

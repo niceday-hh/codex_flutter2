@@ -55,6 +55,7 @@ android {
 flutter { source = "../.." }
 dependencies {
     implementation("com.github.houbb:pinyin:0.4.0")
+    implementation("com.huaban:jieba-analysis:1.0.2")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")
 }

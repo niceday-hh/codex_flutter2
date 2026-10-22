@@ -50,4 +50,13 @@ public class SpeechFrontendTest {
         assertArrayEquals(new int[]{2,3,2,2,3}, Arrays.stream(p.getPauses()).filter(k -> k != 0).toArray());
     }
 
+    @Test public void latinLettersAreRetainedForChineseLetterNames() {
+        assertEquals("APP提醒", new Normalizer().normalizeText("APP提醒", "!?…,.'、-", true));
+        assertTrue(frontend().encode("APP", true).getLabels().length > 3);
+    }
+    @Test public void jiebaKeepsCommonPhraseBoundaries() {
+        assertEquals(Arrays.asList("城市", "刚刚", "醒来"),
+            new com.huaban.analysis.jieba.JiebaSegmenter().sentenceProcess("城市刚刚醒来"));
+    }
+
 }

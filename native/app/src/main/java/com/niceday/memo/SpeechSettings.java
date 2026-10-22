@@ -66,8 +66,8 @@ public final class SpeechSettings {
         String voice = r.optString("speechVoice", defaults ? VOICE : "");
         if (!voice.isEmpty() && (!voice.matches("[0-9]{1,3}") || Integer.parseInt(voice) > 803)) throw new IllegalArgumentException("音色编号须为0至803");
         double rate = r.optDouble("speechRate", defaults ? 1 : 0);
-        if (!Double.isFinite(rate) || (rate != 0 && (rate < 0.5 || rate > 1.3)) || (defaults && rate == 0))
-            throw new IllegalArgumentException("语速须为0.5至1.3倍");
+        if (!Double.isFinite(rate) || (rate != 0 && (rate < 0.5 || rate > 10)) || (defaults && rate == 0))
+            throw new IllegalArgumentException("语速须为0.5至10倍");
         for (String field : Arrays.asList("speechNoiseScale", "speechNoiseScaleW")) {
             if (r.has(field) && !(r.get(field) instanceof Number)) throw new IllegalArgumentException("语音变化参数类型无效");
             double value = r.optDouble(field, defaults ? (field.equals("speechNoiseScale") ? .6 : .668) : 0);
@@ -99,7 +99,7 @@ public final class SpeechSettings {
     public static String cacheKey(String text, String voice, double rate, double noise, double noiseW, long seed) {
         try {
             byte[] bytes = MessageDigest.getInstance("SHA-256").digest(
-                ("voine-vits-mnn-6379f381-22k-prosody-v4\n" + voice + "\n" + Double.toString(rate) + "\n" + Double.toString(noise) + "\n" + Double.toString(noiseW) + "\n" + seed + "\n" + text).getBytes(StandardCharsets.UTF_8));
+                ("voine-vits-mnn-6379f381-22k-web-baseline-v5\n" + voice + "\n" + Double.toString(rate) + "\n" + Double.toString(noise) + "\n" + Double.toString(noiseW) + "\n" + seed + "\n" + text).getBytes(StandardCharsets.UTF_8));
             StringBuilder hex = new StringBuilder();
             for (byte b : bytes) hex.append(String.format(Locale.ROOT, "%02x", b & 255));
             return hex.toString();

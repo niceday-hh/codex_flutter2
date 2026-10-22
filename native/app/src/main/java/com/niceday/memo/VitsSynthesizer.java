@@ -32,7 +32,7 @@ final class VitsSynthesizer {
         if (cleaner == null || !SpeechCache.pending(key)) throw new IllegalArgumentException("语音任务已失效");
         int speaker = job.getInt("sid"); float rate = (float)job.getDouble("rate");
         File temporary = new File(SpeechCache.directory(c), key+".part");
-        render(text, speaker, rate, temporary, 4, (float)job.optDouble("noise", .6), (float)job.optDouble("noiseW", .668), job.optLong("seed", 1));
+        render(text, speaker, rate, temporary, 5, (float)job.optDouble("noise", .6), (float)job.optDouble("noiseW", .668), job.optLong("seed", 1));
     }
     /** Diagnostic stages are called only by the debug-only audit Activity. */
     void render(String text, int speaker, float rate, File temporary, int stage) throws Exception {
@@ -40,7 +40,7 @@ final class VitsSynthesizer {
     }
     void render(String text, int speaker, float rate, File temporary, int stage, float noise, float noiseW, long seed) throws Exception {
         lastSegmentCount = 0;
-        if (cleaner == null || stage < 0 || stage > 4) throw new IllegalArgumentException("Invalid synthesis stage");
+        if (cleaner == null || stage < 0 || stage > 5) throw new IllegalArgumentException("Invalid synthesis stage");
         try (RandomAccessFile output = new RandomAccessFile(temporary,"rw")) {
             output.setLength(0); output.write(new byte[44]); long samples=0; double peak=0;
             ArrayDeque<SpeechSegmenter.Segment> chunks = new ArrayDeque<>(SpeechSegmenter.split(text));
@@ -71,9 +71,11 @@ final class VitsSynthesizer {
                     if (segment.boundary == SpeechSegmenter.PARAGRAPH) {
                         for (int i = pauses.length - 1; i >= 0; i--) if (pauses[i] != 0) { pauses[i] = SpeechSegmenter.PARAGRAPH; break; }
                     }
+                    // Web baseline: leave learned durations unchanged, including punctuation.
                     if (stage < 3) Arrays.fill(pauses, 0);
+                    int[] inferencePauses = stage == 5 ? new int[pauses.length] : pauses;
                     long chunkSeed = (seed + 0x9E3779B9L * lastSegmentCount) & 0xffffffffL;
-                    float[] audio=VitsMnn.generateWithOptions(labels,pauses,speaker,rate,stage < 2,stage >= 4,noise,noiseW,chunkSeed);
+                    float[] audio=VitsMnn.generateWithOptions(labels,inferencePauses,speaker,rate,stage < 2,stage == 4,noise,noiseW,chunkSeed);
                     lastSegmentCount++;
                     if (audio==null || audio.length==0) throw new IOException("未生成有效语音");
                     if (audit != null) tracePauses(labels, pauses, VitsMnn.lastDurations(), samples, segment.text);

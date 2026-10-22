@@ -1,4 +1,4 @@
-"""Generate v0.9.4-cap / bounded-pause real-model WAV comparisons in an isolated debug-only Android Activity."""
+"""Generate raw web baseline / bounded-pause real-model WAV comparisons in an isolated debug-only Android Activity."""
 import array
 import io
 import json
@@ -42,7 +42,7 @@ assert report.get('success'), report
 assert len(report['samples']) == 3
 for sample in report['samples']:
     name = sample['file']
-    assert re.fullmatch(r'stage-[34]-rate-[68]\.wav', name)
+    assert re.fullmatch(r'stage-[45]-rate-[68]\.wav', name)
     raw = adb('exec-out', 'run-as', PACKAGE, 'cat', 'files/prosody-audit/' + name, binary=True)
     (out / name).write_bytes(raw)
     with wave.open(io.BytesIO(raw)) as wav:
@@ -66,7 +66,7 @@ for sample in report['samples']:
             start = None
     sample['low_energy_gaps'] = spans
 samples = {(s['stage'], round(s['rate'], 1)): s for s in report['samples']}
-assert samples[4, .6]['frames'] > samples[4, .8]['frames'], '0.6 did not lengthen speech'
+assert samples[5, .6]['frames'] > samples[5, .8]['frames'], '0.6 did not lengthen speech'
 for (stage, rate), sample in samples.items():
     if stage != 4:
         continue

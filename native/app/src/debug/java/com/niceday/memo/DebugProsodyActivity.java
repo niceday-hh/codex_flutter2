@@ -23,9 +23,9 @@ public final class DebugProsodyActivity extends Activity {
             JSONObject result = new JSONObject(); JSONArray samples = new JSONArray();
             try {
                 synth.open(this, TtsAssets.prepare(this));
-                render(synth, directory, samples, 3, .8f);
+                render(synth, directory, samples, 5, .8f);
                 render(synth, directory, samples, 4, .8f);
-                render(synth, directory, samples, 4, .6f);
+                render(synth, directory, samples, 5, .6f);
                 result.put("success", true).put("samples", samples).put("speaker", 228)
                     .put("physical_audio_verified", false).put("gender", "female").put("text", TEXT);
             } catch (Throwable error) {

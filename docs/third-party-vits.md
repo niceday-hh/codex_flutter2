@@ -11,3 +11,5 @@ The adapter uses a scoped two-thread CPU executor and releases all five modules 
 The APK keeps sherpa/ONNX Runtime for Paraformer recognition and adds a CPU-only MNN JNI library for synthesis. No BERT model is included. The alarm receiver and native playback service do not load either model.
 
 tool/vits_model.lock.json pins each resource size/SHA-256. tool/fetch_mnn.py pins the MNN source archive. Build/download caches and model binaries are excluded from source control. Source extraction is for reproducible builds, not a runtime download dependency.
+
+Chinese segmentation also uses com.huaban:jieba-analysis:1.0.2 (Apache-2.0), https://github.com/huaban/jieba-analysis . Its bundled dictionary is available offline.

@@ -15,8 +15,8 @@ void main() {
       onPressed: () async { selected = await chooseSpeechRate(c, .8, allowDefault: false); }, child: const Text('打开语速'))))));
     await tester.tap(find.text('打开语速')); await tester.pumpAndSettle();
     final slider = tester.widget<Slider>(find.byType(Slider));
-    expect(slider.value, .8); expect(slider.min, .5); expect(slider.max, 1.3);
-    slider.onChanged!(.5); await tester.pump();
+    expect(slider.value, 1.25); expect(slider.min, .1); expect(slider.max, 2);
+    slider.onChanged!(2); await tester.pump();
     await tester.tap(find.text('使用此语速')); await tester.pumpAndSettle();
     expect(selected, .5);
     await tester.pumpWidget(const SizedBox()); await tester.pump();

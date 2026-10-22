@@ -150,14 +150,16 @@ class _SpeechOptionsState extends State<SpeechOptions> {
 }
 
 Future<double?> chooseSpeechRate(BuildContext context, double current, {required bool allowDefault}) async {
-  var rate = current == 0 ? 1.0 : current;
+  var length = 1 / (current == 0 ? 1.0 : current);
   return showModalBottomSheet<double>(context: context, showDragHandle: true, builder: (c) => StatefulBuilder(
-    builder: (c, update) => SafeArea(child: Padding(padding: const EdgeInsets.all(20), child: Column(mainAxisSize: MainAxisSize.min, children: [
-      Text('播报语速 ${rate.toStringAsFixed(1)} 倍', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-      Slider(min: 0.5, max: 1.3, divisions: 8, value: rate.clamp(0.5, 1.3).toDouble(), label: rate.toStringAsFixed(1), onChanged: (v) => update(() => rate = v)),
-      const Padding(padding: EdgeInsets.only(bottom: 12), child: Text('较小数值会放慢发音；标点停顿单独优化。仍觉得快时可试 0.6～0.7。单条提醒的独立语速优先于默认值。', style: TextStyle(fontSize: 12, color: Color(0xFF8A859C)))),
+    builder: (c, update) => SafeArea(child: SingleChildScrollView(padding: const EdgeInsets.all(20), child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Text('播报语速 ${(1 / length).toStringAsFixed(2)} 倍', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+      Text('length_scale · ${length.toStringAsFixed(3)}'),
+      Slider(min: 0.1, max: 2, divisions: 190, value: length.clamp(0.1, 2).toDouble(), label: length.toStringAsFixed(3), onChanged: (v) => update(() => length = (v * 1000).round() / 1000)),
+      const Padding(padding: EdgeInsets.only(bottom: 12), child: Text('与网页版相同：length_scale 越大越慢。保留模型原始停顿；0.1～2.0 对应约 10～0.5 倍语速。极端快语速可能影响清晰度。', style: TextStyle(fontSize: 12, color: Color(0xFF8A859C)))),
+      TextButton(onPressed: () => update(() => length = 1.2), child: const Text('网页版中文默认 · 1.200')),
       if (allowDefault) TextButton(onPressed: () => Navigator.pop(c, 0.0), child: const Text('跟随默认语速')),
-      FilledButton(onPressed: () => Navigator.pop(c, (rate * 10).round() / 10), child: const Text('使用此语速')),
+      FilledButton(onPressed: () => Navigator.pop(c, 1 / length), child: const Text('使用此语速')),
     ])))));
 }
 

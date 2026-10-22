@@ -82,7 +82,7 @@ public final class DebugSamplingActivity extends Activity {
     }
     private static String render(VitsSynthesizer synth, File directory, String name, String text, float noise, float noiseW, long seed) throws Exception {
         File output = new File(directory, name + ".wav");
-        synth.render(text, 228, .8f, output, 4, noise, noiseW, seed);
+        synth.render(text, 228, .8f, output, 5, noise, noiseW, seed);
         return hash(output);
     }
     private static String hash(File file) throws Exception {
