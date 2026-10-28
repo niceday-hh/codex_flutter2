@@ -158,7 +158,16 @@ class VoiceFlow extends ChangeNotifier {
   ParsedVoice? pending;
   String text = '', message = '';
   DateTime? reference;
-  int secondsLeft = 0, elapsed = 0;
+  int elapsed = 0;
+  /// Countdown seconds, exposed as its own listenable.
+  ///
+  /// The 1s ticker used to call `notifyListeners()`, which rebuilt all four
+  /// IndexedStack pages (list + 42-cell calendar + settings + voice) once per
+  /// second just to repaint a single label. Now only the widgets that actually
+  /// show the number listen to it.
+  final ValueNotifier<int> countdown = ValueNotifier<int>(0);
+  int get secondsLeft => countdown.value;
+  set secondsLeft(int value) => countdown.value = value;
   int _epoch = 0;
   VoicePhase _captureMode = VoicePhase.idle;
   bool _disposed = false;
@@ -183,7 +192,7 @@ class VoiceFlow extends ChangeNotifier {
     secondsLeft = duration.inSeconds; elapsed = 0;
     _limit = Timer(duration, expired);
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      elapsed++; if (secondsLeft > 0) secondsLeft--; _notify();
+      elapsed++; if (secondsLeft > 0) secondsLeft--;
     });
   }
   Future<void> startCommands() => _start(VoicePhase.commands);
@@ -344,6 +353,6 @@ class VoiceFlow extends ChangeNotifier {
   @override void dispose() {
     _disposed = true; ++_epoch; _stopTimers();
     unawaited(_queue(() async { try { await capture.cancel(); } finally { capture.release(); } }));
-    meter.dispose(); super.dispose();
+    meter.dispose(); countdown.dispose(); super.dispose();
   }
 }

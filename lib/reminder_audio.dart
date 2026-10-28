@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'app_style.dart';
+import 'design_tokens.dart';
 import 'app_error.dart';
 import 'reminder.dart';
 import 'speech.dart';
@@ -108,7 +109,7 @@ class _ReminderAudioPanelState extends State<ReminderAudioPanel> {
           const Text('提醒音频', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
           const SizedBox(height: 8),
           Semantics(liveRegion: true, child: Text(message, key: const ValueKey('reminder-audio-feedback'),
-            style: TextStyle(color: _failed || failure ? const Color(0xFFA75A28) : muted, fontSize: 13, height: 1.5))),
+            style: TextStyle(color: _failed || failure ? MemoColor.danger : muted, fontSize: 13, height: 1.5))),
           if (widget.reminder.speechState == 'off') const Padding(padding: EdgeInsets.only(top: 8), child: Text(
             '到点语音播报当前关闭；试听和保存不会开启它。', style: TextStyle(color: muted, fontSize: 12))),
           const SizedBox(height: 14),

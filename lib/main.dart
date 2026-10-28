@@ -11,12 +11,14 @@ import 'speech_options.dart';
 import 'task_library.dart';
 import 'voice_flow.dart';
 import 'app_error.dart';
+import 'design_tokens.dart';
 import 'voice_page.dart';
 import 'voice_groups_page.dart';
 import 'app_style.dart';
 import 'settings_page.dart';
 import 'voice_catalog.dart';
 import 'vibration_picker.dart';
+import 'widgets/widgets.dart';
 export 'vibration_picker.dart' show chooseVibration, vibrationLabel;
 export 'app_style.dart' show purple, ink, muted, canvas;
 
@@ -24,7 +26,10 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent, statusBarIconBrightness: Brightness.dark,
-    systemNavigationBarColor: Colors.white, systemNavigationBarIconBrightness: Brightness.dark,
+    statusBarBrightness: Brightness.light,
+    systemNavigationBarColor: canvas, systemNavigationBarIconBrightness: Brightness.dark,
+    systemNavigationBarDividerColor: Colors.transparent,
+    systemStatusBarContrastEnforced: false, systemNavigationBarContrastEnforced: false,
   ));
   runApp(const MemoApp());
 }
@@ -37,25 +42,39 @@ class MemoApp extends StatelessWidget {
     supportedLocales: const [Locale('zh', 'CN')],
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
     theme: ThemeData(useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: purple, surface: Colors.white),
+      colorScheme: ColorScheme.fromSeed(seedColor: purple, surface: MemoColor.surface),
       scaffoldBackgroundColor: canvas,
+      extensions: const [MemoTokens.light],
       textTheme: const TextTheme(
-        headlineLarge: TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: ink),
-        headlineSmall: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: ink),
-        bodyLarge: TextStyle(fontSize: 16, color: ink, height: 1.5),
-        bodyMedium: TextStyle(fontSize: 14, color: ink, height: 1.45),
+        headlineLarge: MemoText.display,
+        headlineSmall: MemoText.title,
+        titleMedium: MemoText.headline,
+        bodyLarge: MemoText.subtitle,
+        bodyMedium: MemoText.body,
+        bodySmall: MemoText.caption,
+        labelLarge: MemoText.subtitle,
       ),
-      appBarTheme: const AppBarTheme(backgroundColor: canvas, foregroundColor: ink, centerTitle: true),
-      inputDecorationTheme: InputDecorationTheme(filled: true, fillColor: canvas,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none)),
+      appBarTheme: const AppBarTheme(backgroundColor: canvas, foregroundColor: ink, centerTitle: true,
+        elevation: 0, scrolledUnderElevation: 0, titleTextStyle: MemoText.headline),
+      inputDecorationTheme: InputDecorationTheme(filled: true, fillColor: MemoColor.brand50,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(MemoRadius.lg),
+          borderSide: const BorderSide(color: MemoColor.outline)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(MemoRadius.lg),
+          borderSide: const BorderSide(color: MemoColor.outline)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(MemoRadius.lg),
+          borderSide: const BorderSide(color: MemoColor.brand600, width: 1.6))),
       filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(
         backgroundColor: purple, foregroundColor: Colors.white,
+        textStyle: MemoText.button, elevation: 0,
         minimumSize: const Size(double.infinity, 52),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)))),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MemoRadius.lg)))),
       outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(
-        foregroundColor: purple, side: BorderSide(color: purple.withValues(alpha: .60)),
-        minimumSize: const Size(0, 48),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)))),
+        foregroundColor: MemoColor.brand700, side: const BorderSide(color: MemoColor.brand200),
+        textStyle: MemoText.button, minimumSize: const Size(0, 48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MemoRadius.md)))),
+      snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating, elevation: 0),
+      dialogTheme: const DialogThemeData(backgroundColor: MemoColor.surface, elevation: 0),
     ),
     home: const MemoHome(),
   );
@@ -129,7 +148,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         setState(() => tab = 0);
         await voice.startCommands();
       }
-    } catch (e) { toast(niceError(e)); }
+    } catch (e) { toast(niceError(e), error: true); }
     finally {
       _checkingEntry = false;
       if (_entryAgain) {
@@ -147,13 +166,18 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   }
   void _selectTab(int i) {
     if (i == tab) return;
+    HapticFeedback.selectionClick();
     _entryPending = false; _entryEpoch++; speech.stopPreview();
     final stopped = voice.active || voice.pending != null ? voice.pause(keepDraft: false) : Future<void>.value();
     setState(() => tab = i);
     unawaited(stopped.then((_) async {
       if (!mounted || !_foreground || tab != i || voice.active) return;
       if (i == 2) _warmManualTab();
-    }).catchError((Object e) { toast(niceError(e)); }));
+    }).catchError((Object e) { toast(niceError(e), error: true); }));
+  }
+  void _shiftMonth(int delta) {
+    HapticFeedback.selectionClick();
+    setState(() => calendarMonth = DateTime(calendarMonth.year, calendarMonth.month + delta));
   }
   Future<void> _pauseForBackground() async {
     final ticket = ++_lifecycleEpoch;
@@ -219,22 +243,22 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       }
     } catch (e) {
       if (mounted) {
-        if (_settingsSheetOpen) { loading = false; error = niceError(e); toast(error!); }
+        if (_settingsSheetOpen) { loading = false; error = niceError(e); toast(error!, error: true); }
         else { setState(() { loading = false; error = niceError(e); }); }
       }
     }
   }
-  void toast(String s) {
+  void toast(String s, {bool error = false}) {
     if (!mounted) return;
     final local = _settingsMessenger.currentState;
     final messenger = local != null && ModalRoute.of(local.context)?.isCurrent == true
       ? local : ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(SnackBar(content: Text(s), behavior: SnackBarBehavior.floating));
+    messenger.showSnackBar(memoSnackBar(s, error: error));
   }
   void _pauseForNavigation() {
     _entryPending = false; _entryEpoch++; speech.stopPreview();
-    unawaited(voice.pause(keepDraft: false).catchError((Object e) { toast(niceError(e)); }));
+    unawaited(voice.pause(keepDraft: false).catchError((Object e) { toast(niceError(e), error: true); }));
   }
   Future<void> edit([Reminder? existing]) async {
     if (!mounted || _editorOpen) return;
@@ -249,6 +273,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       }
       final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => ReminderEditor(reminder: draft, store: store)));
       if (saved == true) {
+        HapticFeedback.lightImpact();
         if (mounted && existing != null && (existing.archived || existing.completed)) {
           Navigator.of(context).popUntil((route) => route.isFirst);
           setState(() => tab = 0);
@@ -274,6 +299,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         backgroundColor: Colors.white, showDragHandle: true,
         builder: (sheetContext) => ValueListenableBuilder<Reminder>(valueListenable: selection,
           builder: (_, current, _) => ReminderDetail(key: ValueKey(current.id), reminder: current, onAck: () async {
+          HapticFeedback.lightImpact();
           await store.ack(current);
           if (sheetContext.mounted) Navigator.pop(sheetContext);
           await reload();
@@ -286,7 +312,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
         TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('删除'))]));
     if (yes == true) {
-      try { await store.delete(r.id); await reload(); } catch (e) { toast(niceError(e)); }
+      HapticFeedback.mediumImpact();
+      try { await store.delete(r.id); await reload(); } catch (e) { toast(niceError(e), error: true); }
     }
   }
   Future<void> finishTask(Reminder r) async {
@@ -299,17 +326,18 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         TextButton(onPressed: () => Navigator.pop(c, 'delete'), child: const Text('删除任务')),
         FilledButton(onPressed: () => Navigator.pop(c, 'archive'), child: const Text('保留到历史'))]));
     if (action == null) return;
+    HapticFeedback.mediumImpact();
     try {
       if (action == 'archive') { await store.archive(r.id); toast('已保留到历史任务，可编辑后复用'); }
       else { await store.delete(r.id); toast('任务已删除'); }
       await reload();
-    } catch (e) { toast(niceError(e)); }
+    } catch (e) { toast(niceError(e), error: true); }
   }
   Future<void> taskLibrary() async {
     if (!mounted || _taskLibraryOpen) return;
     // Acquire before any await; the page must not wait for a cold ASR load.
     _taskLibraryOpen = true; _entryPending = false; _entryEpoch++;
-    unawaited(voice.pause(keepDraft: false).catchError((Object e) { toast(niceError(e)); }));
+    unawaited(voice.pause(keepDraft: false).catchError((Object e) { toast(niceError(e), error: true); }));
     try {
       await Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => TaskLibraryPage(
         store: store, card: reminderCard)));
@@ -318,10 +346,19 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   }
   @override Widget build(BuildContext context) => Scaffold(
     body: SafeArea(child: Column(children: [
-      if (voice.active && voice.pending == null && tab != 2) Material(color: const Color(0xFFECE5FF), child: ListTile(
-        dense: true, leading: const Icon(Icons.mic_none), title: Text(voice.message),
-        subtitle: voice.phase == VoicePhase.commands ? Text('剩余 ${voice.secondsLeft} 秒') : null,
-        trailing: IconButton(tooltip: '停止预听', onPressed: voice.cancel, icon: const Icon(Icons.close)))),
+      if (voice.active && voice.pending == null && tab != 2) Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+        child: Material(color: MemoColor.brand100, borderRadius: BorderRadius.circular(MemoRadius.lg),
+          clipBehavior: Clip.antiAlias,
+          child: ListTile(dense: true,
+            leading: const Icon(Icons.mic_none_rounded, color: MemoColor.brand700, size: 20),
+            title: Text(voice.message, style: MemoText.label.copyWith(color: MemoColor.brand800)),
+            subtitle: voice.phase == VoicePhase.commands
+              ? ValueListenableBuilder<int>(valueListenable: voice.countdown,
+                  builder: (_, seconds, __) => Text('剩余 $seconds 秒', style: MemoText.caption))
+              : null,
+            trailing: IconButton(tooltip: '停止预听', onPressed: voice.cancel,
+              icon: const Icon(Icons.close_rounded, size: 20))))),
       Expanded(child: loading ? const Center(child: CircularProgressIndicator())
       : error != null ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
         Text(error!), TextButton(onPressed: reload, child: const Text('重新加载'))]))
@@ -331,27 +368,29 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     floatingActionButton: !loading && error == null && (tab == 0 || tab == 1)
       ? FloatingActionButton(onPressed: () => edit(), backgroundColor: purple,
           foregroundColor: Colors.white, tooltip: '新建提醒', child: const Icon(Icons.add_rounded, size: 32)) : null,
-    bottomNavigationBar: SafeArea(top: false, child: Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: const Color(0xFFF0EDF6))),
-      child: ClipRRect(borderRadius: BorderRadius.circular(26), child: NavigationBar(backgroundColor: Colors.white,
-      height: 72,
-      selectedIndex: tab, indicatorColor: const Color(0xFFECE5FF),
-      onDestinationSelected: _selectTab, destinations: const [
-        NavigationDestination(icon: Icon(Icons.description_outlined), selectedIcon: Icon(Icons.description_rounded), label: '备忘录'),
-        NavigationDestination(icon: Icon(Icons.calendar_month_outlined), label: '日历'),
-        NavigationDestination(icon: Icon(Icons.mic_none_rounded), selectedIcon: Icon(Icons.mic_rounded), label: '语音'),
-        NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings_rounded), label: '设置'),
-      ])))),
+    bottomNavigationBar: SafeArea(top: false, child: Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: MemoColor.surface,
+          borderRadius: BorderRadius.circular(MemoRadius.xxl),
+          border: Border.all(color: MemoColor.line),
+          boxShadow: MemoShadow.card,
+        ),
+        child: ClipRRect(borderRadius: BorderRadius.circular(MemoRadius.xxl), child: NavigationBar(
+          backgroundColor: MemoColor.surface, surfaceTintColor: Colors.transparent,
+          height: 72, labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          selectedIndex: tab, indicatorColor: MemoColor.brand100,
+          onDestinationSelected: _selectTab, destinations: const [
+            NavigationDestination(icon: Icon(Icons.description_outlined), selectedIcon: Icon(Icons.description_rounded), label: '备忘录'),
+            NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month_rounded), label: '日历'),
+            NavigationDestination(icon: Icon(Icons.mic_none_rounded), selectedIcon: Icon(Icons.mic_rounded), label: '语音'),
+            NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings_rounded), label: '设置'),
+          ])),
+      ))),
   );
-  Widget header(String title, String subtitle, {Widget? trailing}) => Padding(
-    padding: const EdgeInsets.fromLTRB(24, 22, 24, 22), child: Row(children: [
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: Theme.of(context).textTheme.headlineLarge),
-        const SizedBox(height: 7), Text(subtitle, style: const TextStyle(color: muted)),
-      ])), if (trailing != null) trailing,
-    ]));
+  Widget header(String title, String subtitle, {Widget? trailing}) =>
+    MemoPageHeader(title: title, subtitle: subtitle, trailing: trailing);
   Widget homePage() {
     final list = store.reminders.where((r) => !r.archived).toList()..sort((a, b) {
       if (a.unread != b.unread) return a.unread ? -1 : 1;
@@ -369,27 +408,50 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         '${now.month}月${now.day}日  周${weekdays[now.weekday - 1]}', style: const TextStyle(fontWeight: FontWeight.w600))),
       const SizedBox(height: 16),
       if (active.isNotEmpty) Padding(padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Container(padding: const EdgeInsets.all(22), decoration: BoxDecoration(
-          gradient: const LinearGradient(colors: [Color(0xFF8465FF), Color(0xFF6240E2)]),
-          borderRadius: BorderRadius.circular(26), boxShadow: [BoxShadow(color: purple.withValues(alpha: 0.18), blurRadius: 20, offset: const Offset(0, 8))]),
-          child: InkWell(onTap: () => viewReminder(active.first), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [Icon(active.first.unread ? Icons.mark_email_unread_outlined : Icons.notifications_active_outlined, color: Colors.white70, size: 19),
-              const SizedBox(width: 8), Text(active.first.unread ? '待确认提醒' : '下一条提醒', style: const TextStyle(color: Colors.white70)),
-              const Spacer(), const Icon(Icons.arrow_forward_rounded, color: Colors.white70, size: 20)]),
-            const SizedBox(height: 14), Text(active.first.time, style: const TextStyle(fontSize: 38, color: Colors.white, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 5), Text(active.first.text, maxLines: 2, overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 10), Text('${dateLabel(active.first.displayDate)} · ${active.first.repeatLabel}', style: const TextStyle(color: Colors.white70)),
-          ])))),
+        child: Container(decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(MemoRadius.xxl),
+          boxShadow: [BoxShadow(color: MemoColor.brand600.withValues(alpha: .22), blurRadius: 22, offset: const Offset(0, 10))]),
+          child: Material(type: MaterialType.transparency, child: Ink(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
+                colors: [MemoColor.heroTop, MemoColor.heroBottom]),
+              borderRadius: BorderRadius.all(Radius.circular(MemoRadius.xxl))),
+            child: InkWell(onTap: () => viewReminder(active.first), borderRadius: BorderRadius.circular(MemoRadius.xxl),
+              child: Padding(padding: const EdgeInsets.all(MemoSpace.xxl), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Icon(active.first.unread ? Icons.mark_email_unread_outlined : Icons.notifications_active_outlined,
+                    color: MemoColor.onBrand, size: 18),
+                  const SizedBox(width: MemoSpace.sm),
+                  Text(active.first.unread ? '待确认提醒' : '下一条提醒',
+                    style: MemoText.label.copyWith(color: MemoColor.onBrand)),
+                  const Spacer(),
+                  const Icon(Icons.arrow_forward_rounded, color: MemoColor.onBrand, size: 20)]),
+                const SizedBox(height: 14),
+                Text(active.first.time, style: const TextStyle(fontSize: 38, height: 1.1, color: Colors.white,
+                  fontWeight: FontWeight.w700, fontFeatures: MemoText.tabular)),
+                const SizedBox(height: 4),
+                Text(active.first.text, maxLines: 2, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 17, height: 1.4, fontWeight: FontWeight.w600)),
+                const SizedBox(height: MemoSpace.md),
+                Text('${dateLabel(active.first.displayDate)} · ${active.first.repeatLabel}',
+                  style: MemoText.caption.copyWith(color: MemoColor.onBrandSoft)),
+              ]))))))),
       if (store.status['notifications'] != true || store.status['exact'] != true) permissionBanner(),
       section('待办提醒', '${active.length} 条'),
-      if (active.isEmpty) emptyState('留一点空间，给重要的事', '点击右下角 +，或用语音创建第一条提醒'),
+      if (active.isEmpty) MemoEmptyState(icon: Icons.edit_note_rounded, title: '留一点空间，给重要的事',
+        subtitle: '点击下方按钮，或用语音创建第一条提醒', actionLabel: '新建提醒', onAction: () => edit()),
       ]),
       SliverList.builder(itemCount: active.length, itemBuilder: (_, i) => reminderCard(active[i])),
-      SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 0), child: Surface(child: Column(children: [
-        ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.history, color: purple),
-          title: Text('历史任务 · $historyCount 条'), subtitle: const Text('完成或主动保留的任务统一收纳，支持搜索和复用'),
-          trailing: const Icon(Icons.chevron_right), onTap: taskLibrary),
+      SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 0), child: MemoCard(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4), onTap: taskLibrary, child: Row(children: [
+        const Icon(Icons.history_rounded, color: MemoColor.brand500, size: 22),
+        const SizedBox(width: MemoSpace.md),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('历史任务 · $historyCount 条', style: MemoText.subtitle),
+          const SizedBox(height: 2),
+          Text('完成或主动保留的任务统一收纳，支持搜索和复用', style: MemoText.caption),
+        ])),
+        const Icon(Icons.chevron_right_rounded, color: MemoColor.muted, size: 20),
       ])))),
       if (paused.isNotEmpty) SliverToBoxAdapter(child: section('未启用', '${paused.length} 条')),
       SliverList.builder(itemCount: paused.length, itemBuilder: (_, i) => reminderCard(paused[i])),
@@ -397,26 +459,28 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     ]));
   }
   Key? settingKey(String title) => title == _settingsTargetTitle ? _settingsTargetKey : null;
-  Widget section(String title, String subtitle) => Padding(key: settingKey(title), padding: const EdgeInsets.fromLTRB(24, 26, 24, 12),
-    child: Row(children: [Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-      const Spacer(), Text(subtitle, style: const TextStyle(color: muted, fontSize: 12))]));
+  Widget section(String title, String subtitle) =>
+    KeyedSubtree(key: settingKey(title), child: MemoSectionHeader(title, trailing: subtitle));
   Widget permissionBanner() => Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-    child: InkWell(onTap: () => _selectTab(3), borderRadius: BorderRadius.circular(18),
-      child: Container(padding: const EdgeInsets.all(15), decoration: BoxDecoration(color: const Color(0xFFFFF0E4), borderRadius: BorderRadius.circular(18)),
-        child: const Row(children: [Icon(Icons.info_outline, color: Color(0xFFB96C29)), SizedBox(width: 10),
-          Expanded(child: Text('请在设置中开启通知与精确定时权限', style: TextStyle(fontSize: 13))), Icon(Icons.chevron_right)]))));
+    child: MemoBanner(icon: Icons.info_outline_rounded,
+      text: '请在设置中开启通知与精确定时权限', onTap: () => _selectTab(3)));
   Widget reminderCard(Reminder r) {
-    final card = Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 12), child: Surface(
-      padding: const EdgeInsets.all(16), child: InkWell(onTap: () => viewReminder(r), child: Row(children: [
-        Container(width: 4, height: 46, decoration: BoxDecoration(color: r.completed ? const Color(0xFFD7D4DF)
-          : r.unread ? purple : const Color(0xFFFFC598), borderRadius: BorderRadius.circular(4))),
-        const SizedBox(width: 12), Text(r.time, style: TextStyle(fontSize: 23, fontWeight: FontWeight.w700, color: r.completed ? muted : ink)),
+    final card = Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 12), child: MemoCard(
+      padding: const EdgeInsets.all(16), onTap: () => viewReminder(r), child: Row(children: [
+        Container(width: 4, height: 46, decoration: BoxDecoration(
+          color: r.completed ? MemoColor.lineStrong : r.unread ? MemoColor.warning : MemoColor.brand500,
+          borderRadius: BorderRadius.circular(MemoRadius.pill))),
+        const SizedBox(width: MemoSpace.md),
+        Text(r.time, style: TextStyle(fontSize: 23, height: 1.15, fontWeight: FontWeight.w700,
+          color: r.completed ? MemoColor.muted : MemoColor.ink, fontFeatures: MemoText.tabular)),
         const SizedBox(width: 15), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(r.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: r.completed ? muted : ink, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6), Wrap(spacing: 5, runSpacing: 4, children: [
-            if (r.speechState != 'off') Tag(r.speechState == 'ready' ? '语音已就绪' : r.speechState == 'preparing' ? '语音准备中' : '语音待准备'),
-            Tag(r.completed || r.archived ? '已结束' : !r.enabled ? '未启用' : r.unread ? '未读 ${r.attempts}/${r.totalCount}' : r.repeatLabel),
-            Text(dateLabel(r.displayDate), style: const TextStyle(fontSize: 11, color: muted)),
+          Text(r.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: MemoText.subtitle.copyWith(
+            color: r.completed ? MemoColor.muted : MemoColor.ink)),
+          const SizedBox(height: 6), Wrap(spacing: 5, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+            if (r.speechState != 'off') MemoTag(r.speechState == 'ready' ? '语音已就绪' : r.speechState == 'preparing' ? '语音准备中' : '语音待准备'),
+            MemoTag(r.completed || r.archived ? '已结束' : !r.enabled ? '未启用' : r.unread ? '未读 ${r.attempts}/${r.totalCount}' : r.repeatLabel,
+              emphasized: r.unread),
+            Text(dateLabel(r.displayDate), style: MemoText.caption),
           ]),
         ])), PopupMenuButton<String>(tooltip: '更多操作', onSelected: (v) async {
           if (v == 'edit') { await edit(r); }
@@ -425,34 +489,59 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         }, itemBuilder: (_) => [PopupMenuItem(value: 'edit', child: Text(r.archived || r.completed ? '编辑并复用' : '编辑')),
           if (!r.archived && !r.completed) const PopupMenuItem(value: 'archive', child: Text('结束并保留')),
           const PopupMenuItem(value: 'delete', child: Text('删除'))]),
-      ]))));
+      ])));
     if (r.archived || r.completed) return card;
     return Dismissible(key: ValueKey('task-${r.id}-${r.activeOccurrence}-${r.attempts}'), direction: DismissDirection.endToStart,
-      background: Container(color: const Color(0xFFECE5FF), alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.symmetric(horizontal: 30), child: const Text('完成并整理', style: TextStyle(color: purple))),
-      secondaryBackground: Container(color: const Color(0xFFECE5FF), alignment: Alignment.centerRight,
-        padding: const EdgeInsets.symmetric(horizontal: 30), child: const Text('保留 / 删除', style: TextStyle(color: purple))),
+      background: const SizedBox.shrink(),
+      secondaryBackground: Container(margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+        padding: const EdgeInsets.symmetric(horizontal: MemoSpace.xl), alignment: Alignment.centerRight,
+        decoration: BoxDecoration(color: MemoColor.brand100, borderRadius: BorderRadius.circular(MemoRadius.xl)),
+        child: const Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.archive_outlined, color: MemoColor.brand700, size: 20), SizedBox(width: 6),
+          Text('保留 / 删除', style: TextStyle(color: MemoColor.brand700, fontWeight: FontWeight.w600,
+            fontSize: 14)),
+        ])),
       confirmDismiss: (_) async {
         await finishTask(r);
         return false;
       }, child: card);
   }
+  // Marks for the visible month, computed once per (data, month) pair instead of
+  // scanning every reminder inside all 42 grid cells on every rebuild.
+  List<Reminder>? _marksSource;
+  DateTime? _marksMonth;
+  Set<int> _marks = const <int>{};
+  Set<int> _monthMarks(DateTime first, int count) {
+    if (identical(_marksSource, store.reminders) && _marksMonth == first) return _marks;
+    final marks = <int>{};
+    for (var d = 1; d <= count; d++) {
+      final date = DateTime(first.year, first.month, d);
+      if (store.reminders.any((r) => calendarOccursOn(r, date))) marks.add(d);
+    }
+    _marksSource = store.reminders; _marksMonth = first; _marks = marks;
+    return marks;
+  }
   Widget calendarPage() {
     final first = DateTime(calendarMonth.year, calendarMonth.month);
     final count = DateTime(first.year, first.month + 1, 0).day;
     final offset = first.weekday - 1;
+    final marks = _monthMarks(first, count);
     final list = store.reminders.where((r) => calendarOccursOn(r, selectedDate)).toList()..sort((a, b) => a.time.compareTo(b.time));
     final active = list.where((r) => !r.completed && !r.archived).toList();
     final history = list.where((r) => r.completed || r.archived).toList();
     return CustomScrollView(slivers: [SliverList.list(children: [
       header('提醒日历', '每一天，都安排得刚刚好'),
-      Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Surface(child: Column(children: [
-        Row(children: [Expanded(child: Text('${first.year}年${first.month}月', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
-          IconButton(onPressed: () => setState(() => calendarMonth = DateTime(first.year, first.month - 1)), icon: const Icon(Icons.chevron_left)),
-          IconButton(onPressed: () => setState(() => calendarMonth = DateTime(first.year, first.month + 1)), icon: const Icon(Icons.chevron_right))]),
-        Row(children: weekdays.map((s) => Expanded(child: Center(child: Text(s, style: const TextStyle(color: muted))))).toList()),
-        const SizedBox(height: 12),
-        GridView.builder(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+      Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: MemoCard(child: Column(children: [
+        Row(children: [Expanded(child: Align(alignment: Alignment.centerLeft,
+            child: AnimatedSwitcher(duration: MemoMotion.fast, transitionBuilder: (child, t) =>
+              FadeTransition(opacity: t, child: child),
+              child: Text('${first.year}年${first.month}月', key: ValueKey('${first.year}-${first.month}'),
+                style: MemoText.title)))),
+          IconButton(tooltip: '上个月', onPressed: () => _shiftMonth(-1), icon: const Icon(Icons.chevron_left_rounded)),
+          IconButton(tooltip: '下个月', onPressed: () => _shiftMonth(1), icon: const Icon(Icons.chevron_right_rounded))]),
+        Row(children: weekdays.map((s) => Expanded(child: Center(child: Text(s, style: MemoText.caption)))).toList()),
+        const SizedBox(height: MemoSpace.md),
+        Material(type: MaterialType.transparency, child: GridView.builder(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, mainAxisSpacing: 4),
           itemCount: ((count + offset) / 7).ceil() * 7,
           itemBuilder: (_, i) {
@@ -460,17 +549,37 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
             if (d < 1 || d > count) return const SizedBox.shrink();
             final date = DateTime(first.year, first.month, d);
             final selected = sameDay(date, selectedDate);
-            final has = store.reminders.any((r) => calendarOccursOn(r, date));
-            return InkWell(onTap: () => setState(() => selectedDate = date), borderRadius: BorderRadius.circular(16),
-              child: Container(decoration: BoxDecoration(color: selected ? purple : Colors.transparent, borderRadius: BorderRadius.circular(16)),
-                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text('$d', style: TextStyle(color: selected ? Colors.white : ink,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
-                  const SizedBox(height: 3), Container(width: 4, height: 4, decoration: BoxDecoration(shape: BoxShape.circle,
-                    color: has ? selected ? Colors.white : purple : Colors.transparent))])));
-          }),
+            final today = sameDay(date, DateTime.now());
+            final has = marks.contains(d);
+            final radius = BorderRadius.circular(MemoRadius.md);
+            return Ink(
+              decoration: BoxDecoration(
+                color: selected ? MemoColor.brand500 : Colors.transparent,
+                borderRadius: radius,
+              ),
+              child: InkWell(
+                onTap: () { HapticFeedback.selectionClick(); setState(() => selectedDate = date); },
+                borderRadius: radius,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text('$d', style: TextStyle(
+                      color: selected ? Colors.white : today ? MemoColor.brand700 : MemoColor.ink,
+                      fontWeight: selected || today ? FontWeight.w700 : FontWeight.w500,
+                      fontSize: 14, fontFeatures: MemoText.tabular)),
+                    const SizedBox(height: 3),
+                    Container(width: 4, height: 4, decoration: BoxDecoration(shape: BoxShape.circle,
+                      color: has ? selected ? Colors.white : MemoColor.brand500 : Colors.transparent)),
+                  ],
+                ),
+              ),
+            );
+          })),
       ]))),
       section('${selectedDate.month}月${selectedDate.day}日', '${list.length} 个提醒'),
-      if (list.isEmpty) emptyState('这一天还没有提醒', '点击 + 添加一件值得记住的事'),
+      if (list.isEmpty) MemoEmptyState(icon: Icons.event_available_rounded,
+        title: '这一天还没有提醒', subtitle: '点击 + 添加一件值得记住的事',
+        actionLabel: '新建提醒', onAction: () => edit()),
     ]),
       if (active.isNotEmpty) SliverToBoxAdapter(child: section('待提醒与暂停', '')),
       SliverList.builder(itemCount: active.length, itemBuilder: (_, i) => reminderCard(active[i])),
@@ -490,7 +599,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     _settingsTargetTitle = target?.anchor;
     _settingsTargetKey = target == null ? null : GlobalKey();
     if (voice.active || voice.pending != null) {
-      unawaited(voice.pause(keepDraft: false).catchError((Object e) { toast(niceError(e)); }));
+      unawaited(voice.pause(keepDraft: false).catchError((Object e) { toast(niceError(e), error: true); }));
     }
     String? action;
     try {
@@ -575,7 +684,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         try {
           final uri = await native.invokeMethod<String>('pickRingtone', store.defaults['ringtone'] ?? '');
           if (uri != null) { store.defaults['ringtone'] = uri; await persistDefaults(); }
-        } catch (e) { toast(niceError(e)); }
+        } catch (e) { toast(niceError(e), error: true); }
       }),
       settingRow(Icons.timer_outlined, '未读再次提醒间隔', '${store.defaults['intervalMinutes'] ?? 5} 分钟', () async {
         final n = await numberDialog(context, '再次提醒间隔（分钟）', store.defaults['intervalMinutes'] as int? ?? 5, 1, 1440);
@@ -597,7 +706,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         value: store.status['popupEnabled'] as bool? ?? false,
         onChanged: (enabled) async {
           try { await native.invokeMethod('popupMode', enabled); await reload(); }
-          catch (e) { await reload(); toast(niceError(e)); return; }
+          catch (e) { await reload(); toast(niceError(e), error: true); return; }
           toast(enabled ? store.status['popupPermission'] == true ? '亮屏弹窗增强已开启' : '已保存，请在系统页面允许悬浮窗权限' : '亮屏弹窗增强已关闭');
         }),
       const ListTile(subtitle: Text('适用于“横幅和通知栏”提醒。点击已读或横向滑动确认；收起及自动消失均保持未读。系统横幅仍需在对应通知样式中允许，部分应用可限制悬浮窗。')),
@@ -627,7 +736,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     settingsHint('单次录音最长45秒，确认过程不播放语音。'),
     section('识别方式', ''), settingsGroup([
       ListTile(key: settingKey('本机离线'), leading: const Icon(Icons.shield_outlined, color: purple), title: const Text('本机离线'),
-        subtitle: const Text('录音只在本机识别'), trailing: const Tag('已内置')),
+        subtitle: const Text('录音只在本机识别'), trailing: const MemoTag('已内置')),
     ]),
     settingsHint('无需联网。首次准备或从后台返回时，可能需要稍候。'),
     Padding(padding: const EdgeInsets.fromLTRB(20, 24, 20, 4), child: FilledButton.tonalIcon(key: settingKey('试用免手输入'),
@@ -659,7 +768,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         value: store.status['reliableMode'] as bool? ?? true,
         onChanged: (enabled) async {
           try { await native.invokeMethod('reliableMode', enabled); await reload(); toast(enabled ? '可靠提醒模式已开启' : '可靠提醒模式已关闭'); }
-          catch (e) { await reload(); toast(niceError(e)); }
+          catch (e) { await reload(); toast(niceError(e), error: true); }
         }),
       ListTile(leading: const Icon(Icons.shield_outlined, color: purple), key: settingKey('提醒服务状态'), title: const Text('提醒服务状态'),
         subtitle: Text(store.status['reliableMode'] == false ? '可靠模式已关闭，仍保留系统闹钟'
@@ -688,7 +797,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       SwitchListTile(key: settingKey('划掉通知后询问整理方式'), title: const Text('划掉通知后询问整理方式'),
         subtitle: const Text('划掉通知先结束本轮，再询问保留或删除；不选择时保留记录与循环，自检自动清理时不再询问'),
         value: store.status['cleanupPrompts'] as bool? ?? true, onChanged: (v) async {
-          try { await native.invokeMethod('cleanupPrompts', v); await reload(); toast('整理方式设置已保存'); } catch (e) { toast(niceError(e)); }
+          try { await native.invokeMethod('cleanupPrompts', v); await reload(); toast('整理方式设置已保存'); } catch (e) { toast(niceError(e), error: true); }
         }),
     ]),
     section('数据迁移', ''), settingsGroup([
@@ -718,7 +827,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       SwitchListTile(key: settingKey('测试提醒完成后自动删除'), title: const Text('测试提醒完成后自动删除'),
         subtitle: const Text('仅作用于新建的15秒自检提醒；确认或划掉通知后删除，未确认时保留。普通备忘录不受影响。'),
         value: store.status['testAutoDelete'] as bool? ?? true, onChanged: (v) async {
-          try { await native.invokeMethod('testAutoDelete', v); await reload(); toast('测试提醒清理设置已保存'); } catch (e) { toast(niceError(e)); }
+          try { await native.invokeMethod('testAutoDelete', v); await reload(); toast('测试提醒清理设置已保存'); } catch (e) { toast(niceError(e), error: true); }
         }),
       settingRow(Icons.notifications_active_outlined, '15秒后发送测试提醒', '使用当前默认样式；语音未就绪时使用备用提醒', () async {
         final allowed = await native.invokeMethod<bool>('requestNotifications');
@@ -741,7 +850,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       ListTile(key: settingKey('固定发布签名'), leading: const Icon(Icons.security, color: purple), title: const Text('固定发布签名'),
         subtitle: const Text('同一固定签名的版本可覆盖更新，数据保存在本机')),
     ]),
-    section('使用提示', ''), Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Surface(child: const Text(
+    section('使用提示', ''), Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: MemoCard(child: const Text(
       '• 手动划掉系统通知或点击已读后结束本轮重提醒；App 中结束并保留会停用后续提醒。点开通知、横幅自动收起不算已读。\n\n'
       '• 达到总次数后停止再次提醒，但仍保留未读状态。下一次每日／每周提醒重新计数。\n\n'
       '• 荣耀手机请检查应用启动管理，允许自启动与后台运行。系统休眠、勿扰模式、强行停止会影响提醒和亮屏。\n\n'
@@ -775,7 +884,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   }
   Future<void> persistDefaults() async {
     try { await store.saveDefaults(); await reload(); toast('设置已保存'); }
-    catch (e) { await reload(); toast(niceError(e)); }
+    catch (e) { await reload(); toast(niceError(e), error: true); }
   }
   Widget notificationStylesList() {
     final styles = (store.status['notificationStyles'] as List? ?? [])
@@ -800,38 +909,15 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       ]);
   }
   Widget settingsGroup(List<Widget> children) => Padding(padding: const EdgeInsets.symmetric(horizontal: 20),
-    child: Surface(padding: const EdgeInsets.symmetric(vertical: 4), child: Column(children: children)));
-  Widget settingsHint(String text) => Padding(padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
-    child: Text(text, style: const TextStyle(color: muted, fontSize: 12, height: 1.6)));
+    child: MemoCard(shadow: false, padding: const EdgeInsets.symmetric(vertical: 4), child: Column(children: children)));
+  Widget settingsHint(String text) => MemoHint(text, padding: const EdgeInsets.fromLTRB(24, 10, 24, 0));
   Widget settingRow(IconData icon, String title, String value, Future<void> Function() action) => SettingsActionTile(
     key: settingKey(title), icon: icon, title: title, value: value, highlighted: title == _settingsTargetTitle,
     action: () async {
-      try { await action(); } catch (e) { toast(niceError(e)); }
+      try { await action(); } catch (e) { toast(niceError(e), error: true); }
     });
 }
 
-class Surface extends StatelessWidget {
-  final Widget child;
-  final EdgeInsetsGeometry padding;
-  const Surface({super.key, required this.child, this.padding = const EdgeInsets.all(20)});
-  @override Widget build(BuildContext context) => Container(padding: padding, decoration: BoxDecoration(
-    color: Colors.white, borderRadius: BorderRadius.circular(22),
-    border: Border.all(color: const Color(0xFFF0EDF6)),
-    boxShadow: const [BoxShadow(color: Color(0x060E0824), blurRadius: 14, offset: Offset(0, 5))]), child: child);
-}
-class Tag extends StatelessWidget {
-  final String text;
-  const Tag(this.text, {super.key});
-  @override Widget build(BuildContext context) => Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-    decoration: BoxDecoration(color: const Color(0xFFF0EBFF), borderRadius: BorderRadius.circular(8)),
-    child: Text(text, style: const TextStyle(fontSize: 11, color: purple)));
-}
-Widget emptyState(String title, String subtitle) => Padding(padding: const EdgeInsets.all(28), child: Column(children: [
-  Container(padding: const EdgeInsets.all(24), decoration: const BoxDecoration(color: Color(0xFFEEE8FF), shape: BoxShape.circle),
-    child: const Icon(Icons.notifications_none_rounded, color: purple, size: 45)),
-  const SizedBox(height: 20), Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-  const SizedBox(height: 8), Text(subtitle, textAlign: TextAlign.center, style: const TextStyle(color: muted, fontSize: 13)),
-]));
 String eventTime(dynamic stamp) {
   if (stamp is! int || stamp <= 0) { return '暂无记录'; }
   final d = DateTime.fromMillisecondsSinceEpoch(stamp);
@@ -914,29 +1000,55 @@ class ReminderDetail extends StatefulWidget {
   @override State<ReminderDetail> createState() => _ReminderDetailState();
 }
 class _ReminderDetailState extends State<ReminderDetail> {
-  double slide = 0;
   bool busy = false;
+  Future<void> _ack() async {
+    if (busy) return;
+    setState(() => busy = true);
+    try { await widget.onAck(); } catch (e) {
+      if (mounted) {
+        setState(() => busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(memoSnackBar(niceError(e), error: true));
+      }
+    }
+  }
   @override Widget build(BuildContext context) {
     final r = widget.reminder;
     return SafeArea(child: SingleChildScrollView(padding: EdgeInsets.fromLTRB(24, 0, 24, 28 + MediaQuery.of(context).viewInsets.bottom),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(r.time, style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w700, color: purple)),
-        Text('${dateLabel(r.displayDate)} · ${r.repeatLabel}', style: const TextStyle(color: muted)),
-        const SizedBox(height: 18), ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.35),
-          child: SingleChildScrollView(child: Text(r.text, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w600)))),
-        const SizedBox(height: 20),
+        const SizedBox(height: MemoSpace.sm),
+        Text(r.time, style: const TextStyle(fontSize: 42, height: 1.1, fontWeight: FontWeight.w700,
+          color: MemoColor.brand500, fontFeatures: MemoText.tabular)),
+        const SizedBox(height: 2),
+        Text('${dateLabel(r.displayDate)} · ${r.repeatLabel}', style: MemoText.body.copyWith(color: MemoColor.muted)),
+        const SizedBox(height: MemoSpace.xl),
+        ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.35),
+          child: SingleChildScrollView(child: Text(r.text, style: MemoText.title.copyWith(height: 1.45)))),
+        const SizedBox(height: MemoSpace.xl),
         if (r.unread) ...[
-          Text('已提醒 ${r.attempts}/${r.totalCount} 次 · 向右滑动确认已读', style: const TextStyle(color: muted)),
-          Slider(value: slide, onChanged: busy ? null : (v) => setState(() => slide = v), onChangeEnd: (v) async {
-            if (v < 0.9) { setState(() => slide = 0); return; }
-            setState(() => busy = true);
-            try { await widget.onAck(); } catch (e) {
-              if (mounted && context.mounted) { setState(() { busy = false; slide = 0; }); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(niceError(e)))); }
-            }
-          }),
-        ] else const Text('到时会通过系统通知提醒你', style: TextStyle(color: muted)),
-        const SizedBox(height: 18), ReminderAudioPanel(key: ValueKey('audio-${r.id}'), reminder: r),
-        const SizedBox(height: 16), OutlinedButton(onPressed: busy ? null : widget.onEdit, child: const Text('编辑提醒')),
+          Text('已提醒 ${r.attempts}/${r.totalCount} 次', style: MemoText.caption),
+          const SizedBox(height: MemoSpace.sm),
+          MemoSlideToConfirm(
+            label: '向右滑动，确认已读',
+            icon: Icons.done_all_rounded,
+            enabled: !busy,
+            onConfirm: _ack,
+          ),
+        ] else
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(color: MemoColor.brand50, borderRadius: BorderRadius.circular(MemoRadius.md)),
+            child: Row(children: [
+              const Icon(Icons.notifications_none_rounded, size: 18, color: MemoColor.brand700),
+              const SizedBox(width: MemoSpace.sm),
+              Expanded(child: Text('到时会通过系统通知提醒你', style: MemoText.label)),
+            ]),
+          ),
+        const SizedBox(height: MemoSpace.xl),
+        ReminderAudioPanel(key: ValueKey('audio-${r.id}'), reminder: r),
+        const SizedBox(height: MemoSpace.lg),
+        OutlinedButton(onPressed: busy ? null : widget.onEdit,
+          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+          child: const Text('编辑提醒')),
       ])));
   }
 }
@@ -966,15 +1078,16 @@ class _ReminderEditorState extends State<ReminderEditor> {
     else if (!r.timeConfirmed) { error = '请点选时间确认，系统不会替你设置默认时间'; }
     else if (r.repeat == 'weekly' && r.days.isEmpty) { error = '请选择重复星期'; }
     else if (r.repeat == 'none' && !r.date.isAfter(DateTime.now())) { error = '请选择未来的日期和时间'; }
-    if (error != null) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error))); return; }
+    if (error != null) { ScaffoldMessenger.of(context).showSnackBar(memoSnackBar(error, error: true)); return; }
     setState(() => saving = true);
     try {
       await native.invokeMethod('requestNotifications');
       if (r.repeat == 'none' && !r.date.isAfter(DateTime.now())) { throw StateError('确认期间时间已到，请重新选择时间或明确重新计时'); }
       await widget.store.save(r);
+      HapticFeedback.lightImpact();
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      if (mounted) { setState(() => saving = false); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(niceError(e)))); }
+      if (mounted) { setState(() => saving = false); ScaffoldMessenger.of(context).showSnackBar(memoSnackBar(niceError(e), error: true)); }
     }
   }
   Future<void> pickDate() async {
@@ -993,8 +1106,8 @@ class _ReminderEditorState extends State<ReminderEditor> {
     appBar: AppBar(title: Text(r.id == 0 ? '新建提醒' : '编辑提醒'), actions: [TextButton(onPressed: saving ? null : save, child: const Text('保存'))]),
     body: ListView(padding: const EdgeInsets.fromLTRB(20, 16, 20, 24), children: [
       if (widget.voice != null) ...[
-        Surface(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(!r.dateConfirmed ? '日期无效，请手动选择日期' : !r.timeConfirmed ? '请手动选择有效时间' : r.repeat == 'none' && !r.date.isAfter(DateTime.now()) ? '目标时间已过期，请修改或明确重新计时' : '请确认识别出的时间和内容', style: const TextStyle(color: purple)),
+        MemoCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(!r.dateConfirmed ? '日期无效，请手动选择日期' : !r.timeConfirmed ? '请手动选择有效时间' : r.repeat == 'none' && !r.date.isAfter(DateTime.now()) ? '目标时间已过期，请修改或明确重新计时' : '请确认识别出的时间和内容', style: const TextStyle(color: danger)),
           if (widget.voice!.settings.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(widget.voice!.settings.join(' · '))),
           if (widget.voice!.relativeDelay != null) ...[
             Text(manualTime ? '已手动修改，按下方日期和时间提醒' : '以 ${countdownReference!.hour}:${countdownReference!.minute.toString().padLeft(2, '0')}:${countdownReference!.second.toString().padLeft(2, '0')} 为基准计时，目标为 ${r.date.year}年${r.date.month}月${r.date.day}日 ${r.preciseTime}'),
@@ -1002,17 +1115,17 @@ class _ReminderEditorState extends State<ReminderEditor> {
           ],
         ])), const SizedBox(height: 14),
       ],
-      Surface(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      MemoCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('提醒内容', style: TextStyle(fontWeight: FontWeight.w600)), const SizedBox(height: 12),
         TextField(controller: text, minLines: 2, maxLines: 5, maxLength: 2000,
           decoration: const InputDecoration(hintText: '写下一件重要的事…')),
       ])), const SizedBox(height: 14),
-      Surface(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
+      MemoCard(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
         ListTile(leading: const Icon(Icons.calendar_today_outlined, color: purple), title: const Text('日期'),
           trailing: Text(r.dateConfirmed ? '${r.date.year}年${r.date.month}月${r.date.day}日' : '请选择有效日期'), onTap: pickDate),
         ListTile(leading: const Icon(Icons.schedule_rounded, color: purple), title: const Text('时间'), trailing: Text(r.timeConfirmed ? r.preciseTime : '请选择时间'), onTap: pickTime),
       ])), const SizedBox(height: 14),
-      Surface(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      MemoCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('重复', style: TextStyle(fontWeight: FontWeight.w600)), const SizedBox(height: 14),
         SizedBox(width: double.infinity, child: SegmentedButton<String>(showSelectedIcon: false,
           segments: const [ButtonSegment(value: 'none', label: Text('仅一次')), ButtonSegment(value: 'daily', label: Text('每天')), ButtonSegment(value: 'weekly', label: Text('每周'))],
@@ -1020,7 +1133,7 @@ class _ReminderEditorState extends State<ReminderEditor> {
         if (r.repeat == 'weekly') ...[const SizedBox(height: 16), Wrap(spacing: 8, runSpacing: 8, children: List.generate(7, (i) => FilterChip(
           label: Text(weekdays[i]), selected: r.days.contains(i + 1), onSelected: (v) => setState(() { if (v) { r.days.add(i + 1); } else { r.days.remove(i + 1); } }))))],
       ])), const SizedBox(height: 14),
-      Surface(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
+      MemoCard(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
         const ListTile(title: Text('提醒方式', style: TextStyle(fontWeight: FontWeight.w700))),
         NotificationDisplayOptions(presentation: r.presentation, lockscreen: r.lockscreen,
           onPresentationChanged: (v) => setState(() => r.presentation = v),
@@ -1029,7 +1142,7 @@ class _ReminderEditorState extends State<ReminderEditor> {
           subtitle: const Text('请选择允许横幅／悬浮通知；相同样式共用系统设置。亮屏卡片增强可在设置开启'), trailing: const Icon(Icons.open_in_new_rounded),
           onTap: () async {
             try { await widget.store.openNotificationSettings(r); }
-            catch (e) { if (context.mounted) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(niceError(e)))); } }
+            catch (e) { if (context.mounted) { ScaffoldMessenger.of(context).showSnackBar(memoSnackBar(niceError(e), error: true)); } }
           }),
         SwitchListTile(title: const Text('尝试亮屏'), subtitle: const Text('保持锁屏，遵循手机系统限制'), value: r.wakeScreen, onChanged: (v) => setState(() => r.wakeScreen = v)),
         ListTile(leading: const Icon(Icons.vibration, color: purple), title: const Text('振动'), subtitle: Text(vibrationLabel(r.vibration)),
@@ -1040,14 +1153,14 @@ class _ReminderEditorState extends State<ReminderEditor> {
         if (r.sound) ListTile(leading: const Icon(Icons.music_note_outlined, color: purple), title: const Text('从系统选择铃声'),
           subtitle: Text(r.ringtone.isEmpty ? '系统默认' : '已选择系统铃声'), trailing: const Icon(Icons.chevron_right), onTap: () async {
             try { final v = await native.invokeMethod<String>('pickRingtone', r.ringtone); if (v != null && mounted) setState(() => r.ringtone = v); }
-            catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(niceError(e)))); }
+            catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(memoSnackBar(niceError(e), error: true)); }
           }),
       ])), const SizedBox(height: 14),
-      Surface(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
+      MemoCard(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
         const ListTile(title: Text('语音播报', style: TextStyle(fontWeight: FontWeight.w700))),
         SpeechOptions(groups: widget.store.voiceGroups, reminder: r, defaults: widget.store.defaults, onChanged: () async { if (mounted) setState(() {}); }),
       ])), const SizedBox(height: 14),
-      Surface(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
+      MemoCard(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
         const ListTile(title: Text('未读再次提醒', style: TextStyle(fontWeight: FontWeight.w700)), subtitle: Text('手动划掉通知或滑动确认后停止')),
         ListTile(leading: const Icon(Icons.timer_outlined, color: purple), title: const Text('时间间隔'), trailing: Text('${r.intervalMinutes} 分钟'), onTap: () async {
           final n = await numberDialog(context, '再次提醒间隔（分钟）', r.intervalMinutes, 1, 1440);

@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'app_style.dart';
+import 'design_tokens.dart';
 import 'reminder.dart';
 import 'speech.dart';
 import 'speech_variation.dart';
@@ -6,7 +9,7 @@ import 'speech_voices.dart';
 import 'voice_catalog.dart';
 import 'voice_group.dart';
 
-const _purple = Color(0xFF7252F6);
+const _purple = MemoColor.brand500;
 String speechModeLabel(String value) => switch (value) {
   'on' => '开启语音播报', 'inherit' => '跟随默认设置', _ => '关闭语音播报',
 };
@@ -36,7 +39,7 @@ class _SpeechOptionsState extends State<SpeechOptions> {
   Future<void> changed() async {
     setState(() {});
     try { await widget.onChanged(); }
-    catch (_) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('设置保存失败，请重试'))); }
+    catch (_) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(memoSnackBar('设置保存失败，请重试', error: true)); }
   }
   Future<void> previewCurrent() async {
     final config = Reminder.fromJson(r.toJson());
@@ -54,11 +57,11 @@ class _SpeechOptionsState extends State<SpeechOptions> {
       final catalog = await VoiceCatalog.load();
       final id = catalog.pick(language: r.speechRandomLanguage, gender: r.speechRandomGender, members: members);
       if (id == null) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('当前分组没有可用音色，请调整角色组、来源或性别')));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(memoSnackBar('当前分组没有可用音色，请调整角色组、来源或性别', error: true));
         return;
       }
       if (mounted) { r.speechVoice = id; await changed(); }
-    } catch (_) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('音色分组加载失败，请重试'))); }
+    } catch (_) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(memoSnackBar('音色分组加载失败，请重试', error: true)); }
   }
   @override void dispose() { speech.stopPreview(); super.dispose(); }
   @override Widget build(BuildContext context) => Column(children: [
@@ -112,7 +115,7 @@ class _SpeechOptionsState extends State<SpeechOptions> {
           onChanged: (v) async { if (v == null) return; r.speechRandomGender = v; if (!widget.defaultSettings) r.speechVoice = ''; await changed(); })),
       ])),
       const Padding(padding: EdgeInsets.all(16), child: Text('分组指角色配音来源，不会自动翻译；当前按中文文本朗读。未确认性别的角色只参与“不限角色性别”随机。',
-        style: TextStyle(fontSize: 12, color: Color(0xFF8A859C)))),
+        style: TextStyle(fontSize: 12, color: muted))),
       if (!widget.defaultSettings) TextButton.icon(onPressed: reroll, icon: const Icon(Icons.shuffle), label: const Text('重新抽取一个音色')),
     ],
     ListTile(leading: const Icon(Icons.speed, color: _purple), title: const Text('播报语速'),
@@ -140,12 +143,12 @@ class _SpeechOptionsState extends State<SpeechOptions> {
       onPressed: previewing ? null : () async {
         setState(() => previewing = true);
         try { await previewCurrent(); }
-        catch (_) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('试听暂未成功，请重试并检查媒体音量'))); }
+        catch (_) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(memoSnackBar('试听暂未成功，请重试并检查媒体音量', error: true)); }
         finally { if (mounted) setState(() => previewing = false); }
       }, icon: const Icon(Icons.play_circle_outline), label: Text(previewing ? '正在生成试听…' : r.speechRandom && widget.defaultSettings ? '试听随机音色' : '试听当前音色'))),
     const Padding(padding: EdgeInsets.fromLTRB(16, 4, 16, 12), child: Text(
       '保存后异步生成离线语音；请确认“语音已就绪”。到点未就绪时使用原铃声／振动，不会稍后自动补播这一轮。修改正文、音色或语速后需重新生成。此处试听短句每次随机生成；提醒详情可试听正文并换一版。锁屏播报与通知显示分别控制。',
-      style: TextStyle(fontSize: 12, color: Color(0xFF8A859C)))),
+      style: TextStyle(fontSize: 12, color: muted))),
   ]);
 }
 
@@ -156,7 +159,7 @@ Future<double?> chooseSpeechRate(BuildContext context, double current, {required
       Text('播报语速 ${(1 / length).toStringAsFixed(2)} 倍', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
       Text('length_scale · ${length.toStringAsFixed(3)}'),
       Slider(min: 0.1, max: 2, divisions: 190, value: length.clamp(0.1, 2).toDouble(), label: length.toStringAsFixed(3), onChanged: (v) => update(() => length = (v * 1000).round() / 1000)),
-      const Padding(padding: EdgeInsets.only(bottom: 12), child: Text('与网页版相同：length_scale 越大越慢。保留模型原始停顿；0.1～2.0 对应约 10～0.5 倍语速。极端快语速可能影响清晰度。', style: TextStyle(fontSize: 12, color: Color(0xFF8A859C)))),
+      const Padding(padding: EdgeInsets.only(bottom: 12), child: Text('与网页版相同：length_scale 越大越慢。保留模型原始停顿；0.1～2.0 对应约 10～0.5 倍语速。极端快语速可能影响清晰度。', style: TextStyle(fontSize: 12, color: muted))),
       TextButton(onPressed: () => update(() => length = 1.2), child: const Text('网页版中文默认 · 1.200')),
       if (allowDefault) TextButton(onPressed: () => Navigator.pop(c, 0.0), child: const Text('跟随默认语速')),
       FilledButton(onPressed: () => Navigator.pop(c, 1 / length), child: const Text('使用此语速')),
@@ -168,6 +171,10 @@ Future<String?> chooseSpeechVoice(BuildContext context, String current, {require
   final catalog = await VoiceCatalog.load();
   if (!context.mounted) return null;
   var query = '', busy = '', source = language, role = gender;
+  // 804 entries: re-filtering on every keystroke re-builds the candidate list
+  // three times for a three-character query. 160ms is below the threshold where
+  // typing feels laggy and above the inter-key interval of a fast typist.
+  Timer? debounce;
   var selectedGroup = groups.any((g) => g.id == group) ? group : '';
   String? message;
   return showModalBottomSheet<String>(context: context, showDragHandle: true, isScrollControlled: true,
@@ -198,7 +205,12 @@ Future<String?> chooseSpeechVoice(BuildContext context, String current, {require
             onChanged: (v) => update(() => role = v ?? 'all'))),
         ]),
         const SizedBox(height: 8), TextField(decoration: const InputDecoration(hintText: '搜索角色名或编号'),
-          onChanged: (v) => update(() => query = v.trim().toLowerCase())),
+          onChanged: (v) {
+            debounce?.cancel();
+            debounce = Timer(const Duration(milliseconds: 160), () {
+              if (c.mounted) update(() => query = v.trim().toLowerCase());
+            });
+          }),
         Row(children: [Expanded(child: Text('${matches.length} 个匹配音色', style: const TextStyle(fontSize: 12))),
           TextButton.icon(onPressed: matches.isEmpty ? null : () {
             final id = catalog.pick(language: source, gender: role, query: query, members: members);
@@ -206,11 +218,13 @@ Future<String?> chooseSpeechVoice(BuildContext context, String current, {require
           }, icon: const Icon(Icons.shuffle), label: const Text('随机挑一个'))]),
         if (allowDefault) ListTile(title: const Text('跟随默认音色'), onTap: () { speech.stopPreview(); Navigator.pop(c, ''); }),
         if (message != null) Text(message!, style: const TextStyle(fontSize: 12)),
-        const Text('按配音来源和角色性别分组；性别未标注的角色仅在“不限角色性别”中显示。', style: TextStyle(fontSize: 11, color: Color(0xFF8A859C))),
+        const Text('按配音来源和角色性别分组；性别未标注的角色仅在“不限角色性别”中显示。', style: TextStyle(fontSize: 12, color: muted)),
         Expanded(child: matches.isEmpty ? const Center(child: Text('没有匹配的音色，请调整分组或搜索词')) : ListView.builder(
-          itemCount: matches.length, itemBuilder: (_, index) {
+          itemExtent: 76, itemCount: matches.length, itemBuilder: (_, index) {
             final id = matches[index];
-            return ListTile(title: Text(speechVoiceLabel(id)), subtitle: Text(catalog.tags(id), style: const TextStyle(fontSize: 11)),
+            return ListTile(contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+              title: Text(speechVoiceLabel(id), style: MemoText.body.copyWith(fontWeight: FontWeight.w500)),
+              subtitle: Text(catalog.tags(id), style: MemoText.caption),
               leading: id == current ? const Icon(Icons.check_circle, color: _purple) : const Icon(Icons.person_outline),
               trailing: IconButton(tooltip: '试听音色$id', icon: busy == id
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.play_circle_outline),
@@ -222,5 +236,5 @@ Future<String?> chooseSpeechVoice(BuildContext context, String current, {require
                 }), onTap: () { speech.stopPreview(); Navigator.pop(c, id); });
           })),
       ]))));
-    })).whenComplete(speech.stopPreview);
+    })).whenComplete(() { debounce?.cancel(); speech.stopPreview(); });
 }

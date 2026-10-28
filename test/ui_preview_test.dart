@@ -33,7 +33,10 @@ void main() {
   setUpAll(() async {
     if (!previewsEnabled) return;
     final bytes = File(Platform.environment['MEMO_PREVIEW_FONT']!).readAsBytesSync();
-    for (final family in ['Roboto', 'Ahem']) {
+    // The test harness paints unstyled text with its own fallback font, which
+    // has no CJK glyphs. Register the preview font under every family name the
+    // engine may resolve so previews match the real device.
+    for (final family in ['Roboto', 'Ahem', 'FlutterTest']) {
       final loader = FontLoader(family)..addFont(Future.value(ByteData.sublistView(bytes)));
       await loader.load();
     }

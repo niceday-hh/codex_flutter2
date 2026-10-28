@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'app_style.dart';
+import 'design_tokens.dart';
 import 'app_error.dart';
 import 'reminder.dart';
 
@@ -51,10 +52,10 @@ class _VibrationPickerState extends State<VibrationPicker> {
       const Padding(padding: EdgeInsets.all(12), child: Text('振动模式', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
       Semantics(liveRegion: true, child: Container(width: double.infinity,
         margin: const EdgeInsets.fromLTRB(20, 2, 20, 12), padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: failed ? const Color(0xFFFFEFE5) : lavender, borderRadius: BorderRadius.circular(16)),
+        decoration: BoxDecoration(color: failed ? MemoColor.dangerSurface : lavender, borderRadius: BorderRadius.circular(16)),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Icon(failed ? Icons.info_outline : active != null ? Icons.vibration : Icons.check_circle_outline,
-            color: failed ? const Color(0xFFA75A28) : purple, size: 21), const SizedBox(width: 10),
+            color: failed ? MemoColor.danger : purple, size: 21), const SizedBox(width: 10),
           Expanded(child: Text(message, key: const ValueKey('vibration-feedback'), style: const TextStyle(fontSize: 13, height: 1.5))),
         ]))),
       Flexible(child: SingleChildScrollView(child: Column(children: vibrations.entries.map((e) => ListTile(

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'design_tokens.dart';
 import 'reminder.dart';
+import 'widgets/widgets.dart';
 
 class TaskLibraryPage extends StatefulWidget {
   final MemoStore store;
@@ -19,19 +21,25 @@ class _TaskLibraryPageState extends State<TaskLibraryPage> {
         (r.archived || r.completed) && r.text.toLowerCase().contains(query.toLowerCase())).toList()
         ..sort((a, b) => collectedAt(b).compareTo(collectedAt(a)));
       return Column(children: [
-        Padding(padding: const EdgeInsets.fromLTRB(20, 8, 20, 12), child: TextField(
-          decoration: const InputDecoration(hintText: '搜索任务内容', prefixIcon: Icon(Icons.search)),
-          onChanged: (s) => setState(() => query = s.trim()))),
-        Padding(padding: const EdgeInsets.all(12), child: Text('${rows.length} 条 · 已停止提醒，内容保留；可编辑后复用',
-          style: const TextStyle(color: Color(0xFF8A859C), fontSize: 12))),
-        Expanded(child: rows.isEmpty ? const Center(child: Text('还没有匹配的记录')) : ListView.builder(
-          itemCount: rows.length, itemBuilder: (_, i) {
+        Padding(padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
+          child: MemoSearchField(hint: '搜索任务内容', onChanged: (s) => setState(() => query = s.trim()))),
+        Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+          child: Align(alignment: Alignment.centerLeft,
+            child: MemoHint('${rows.length} 条 · 已停止提醒，内容保留；可编辑后复用'))),
+        Expanded(child: rows.isEmpty
+          ? const Center(child: MemoEmptyState(icon: Icons.inbox_rounded, title: '还没有匹配的记录',
+              subtitle: '完成或主动保留的任务会收纳到这里'))
+          : ListView.builder(
+            padding: const EdgeInsets.only(top: 4),
+            itemCount: rows.length, itemBuilder: (_, i) {
             final r = rows[i];
             final previous = i == 0 ? null : DateTime.fromMillisecondsSinceEpoch(collectedAt(rows[i - 1]));
             final date = DateTime.fromMillisecondsSinceEpoch(collectedAt(r));
             final heading = previous == null || previous.year != date.year || previous.month != date.month || previous.day != date.day;
             return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              if (heading) Padding(padding: const EdgeInsets.fromLTRB(24, 18, 24, 12), child: Text('${date.year}年${date.month}月${date.day}日', style: const TextStyle(fontWeight: FontWeight.w600))),
+              if (heading) Padding(padding: const EdgeInsets.fromLTRB(24, 16, 24, 10),
+                child: Text('${date.year}年${date.month}月${date.day}日',
+                  style: MemoText.overline.copyWith(color: MemoColor.inkSoft))),
               widget.card(r),
             ]);
           })),

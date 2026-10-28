@@ -1,26 +1,36 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 
-const purple = Color(0xFF7252F6);
-const ink = Color(0xFF25213A);
-const muted = Color(0xFF8A859C);
-const canvas = Color(0xFFF8F6FC);
-const lavender = Color(0xFFF0ECFF);
+import 'design_tokens.dart';
 
-class FrostedPanel extends StatelessWidget {
-  final Widget child;
-  final double radius;
-  final bool blur;
-  const FrostedPanel({super.key, required this.child, this.radius = 30, this.blur = true});
-  @override Widget build(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(borderRadius: BorderRadius.circular(radius), boxShadow: [
-      BoxShadow(color: ink.withValues(alpha: .09), blurRadius: blur ? 36 : 16, offset: const Offset(0, 8)),
-    ]),
-    child: ClipRRect(borderRadius: BorderRadius.circular(radius), child: blur ? BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16), child: _surface()) : _surface()));
-  Widget _surface() => DecoratedBox(decoration: BoxDecoration(
-        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
-          colors: [Colors.white.withValues(alpha: blur ? .97 : 1), const Color(0xFFF9F7FF).withValues(alpha: blur ? .93 : 1)]),
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: Colors.white.withValues(alpha: .85))), child: child);
-}
+/// Backwards-compatible names for the palette. New code should read
+/// [MemoColor] / [MemoText] directly; these aliases exist so older call sites
+/// keep compiling while they are migrated.
+const purple = MemoColor.brand500;
+const ink = MemoColor.ink;
+const muted = MemoColor.muted;
+const canvas = MemoColor.canvas;
+const lavender = MemoColor.brand100;
+const brandInk = MemoColor.brand700;
+const line = MemoColor.line;
+const success = MemoColor.success;
+const warning = MemoColor.warning;
+const danger = MemoColor.danger;
+const tabularFigures = MemoText.tabular;
+
+/// App-wide snack bar: one shape, one rhythm, a leading state icon.
+/// The message stays a plain [Text] so existing finders keep working.
+SnackBar memoSnackBar(String message, {bool error = false}) => SnackBar(
+  behavior: SnackBarBehavior.floating,
+  backgroundColor: const Color(0xFF211D33),
+  elevation: 0,
+  margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+  duration: Duration(seconds: error ? 5 : 3),
+  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MemoRadius.md)),
+  content: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Icon(error ? Icons.error_outline_rounded : Icons.check_circle_outline_rounded,
+      size: 20, color: error ? const Color(0xFFFFB4A8) : const Color(0xFF9BE3C4)),
+    const SizedBox(width: 10),
+    Expanded(child: Text(message, style: MemoText.body.copyWith(
+      fontSize: 13.5, height: 1.45, color: Colors.white))),
+  ]),
+);
