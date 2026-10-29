@@ -347,4 +347,32 @@ void main() {
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
 
+  testWidgets('the tab body is never composited through a fading layer', (tester) async {
+    // A tab transition that fades or slides the whole page forces Flutter to
+    // rasterise it into an offscreen buffer on every frame, and repaints the
+    // entire subtree while it moves. On a scrolling list that reads as stutter,
+    // so the container between Scaffold and IndexedStack must stay empty of
+    // compositing wrappers.
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    await tester.pumpWidget(const MemoApp()); await tester.pump(const Duration(milliseconds: 600));
+    for (final label in ['日历', '语音', '设置', '备忘录']) {
+      await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text(label)).last);
+      await tester.pump();
+      final offenders = <String>[];
+      tester.element(find.byType(IndexedStack)).visitAncestorElements((ancestor) {
+        final widget = ancestor.widget;
+        if (widget is Scaffold) return false;
+        if (widget is Opacity || widget is AnimatedOpacity || widget is FadeTransition
+            || widget is BackdropFilter || widget is Transform) {
+          offenders.add(widget.runtimeType.toString());
+        }
+        return true;
+      });
+      expect(offenders, isEmpty, reason: 'page composited through ${offenders.join(", ")}');
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(tester.takeException(), isNull);
+    }
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  });
+
 }

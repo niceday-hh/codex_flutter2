@@ -1,6 +1,7 @@
 /// Base component library. Import this barrel, never the individual files.
 library;
 
+export 'memo_art.dart';
 export 'memo_content.dart';
 export 'memo_motion.dart';
 export 'memo_sheet.dart';

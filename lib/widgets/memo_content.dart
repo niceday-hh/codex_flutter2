@@ -48,6 +48,10 @@ class MemoEmptyState extends StatelessWidget {
   final String? actionLabel;
   final VoidCallback? onAction;
 
+  /// Optional illustration that replaces the tinted circle. Passing one here
+  /// keeps every empty state on the same vertical rhythm.
+  final Widget? art;
+
   const MemoEmptyState({
     super.key,
     required this.icon,
@@ -55,13 +59,14 @@ class MemoEmptyState extends StatelessWidget {
     required this.subtitle,
     this.actionLabel,
     this.onAction,
+    this.art,
   });
 
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(MemoSpace.xxl, MemoSpace.xxl, MemoSpace.xxl, MemoSpace.xxxl),
     child: Column(children: [
-      Container(
+      art ?? Container(
         width: 76, height: 76,
         decoration: const BoxDecoration(color: MemoColor.brand100, shape: BoxShape.circle),
         child: Icon(icon, size: 32, color: MemoColor.brand500),

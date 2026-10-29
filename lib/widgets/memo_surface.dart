@@ -13,9 +13,15 @@ class MemoCard extends StatefulWidget {
   final EdgeInsetsGeometry padding;
   final double radius;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final Color? color;
   final bool border;
   final bool shadow;
+
+  /// Selection state for batch mode: a brand outline instead of the hairline,
+  /// and a tinted fill. Cheaper than a second widget stacked on top, and it
+  /// keeps the card's own padding and shadow untouched.
+  final bool selected;
 
   const MemoCard({
     super.key,
@@ -23,9 +29,11 @@ class MemoCard extends StatefulWidget {
     this.padding = const EdgeInsets.all(MemoSpace.xl),
     this.radius = MemoRadius.xl,
     this.onTap,
+    this.onLongPress,
     this.color,
     this.border = true,
     this.shadow = true,
+    this.selected = false,
   });
 
   @override State<MemoCard> createState() => _MemoCardState();
@@ -38,7 +46,8 @@ class _MemoCardState extends State<MemoCard> {
   Widget build(BuildContext context) {
     final shape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(widget.radius),
-      side: widget.border ? const BorderSide(color: MemoColor.line) : BorderSide.none,
+      side: widget.selected ? const BorderSide(color: MemoColor.brand600, width: 1.6)
+        : widget.border ? const BorderSide(color: MemoColor.line) : BorderSide.none,
     );
     final content = widget.padding == EdgeInsets.zero
       ? widget.child : Padding(padding: widget.padding, child: widget.child);
@@ -56,13 +65,14 @@ class _MemoCardState extends State<MemoCard> {
         duration: MemoMotion.press,
         curve: MemoMotion.curve,
         child: Material(
-          color: widget.color ?? MemoColor.surface,
+          color: widget.color ?? (widget.selected ? MemoColor.brand50 : MemoColor.surface),
           shape: shape,
           clipBehavior: Clip.antiAlias,
-          child: widget.onTap == null
+          child: widget.onTap == null && widget.onLongPress == null
             ? content
             : InkWell(
                 onTap: widget.onTap,
+                onLongPress: widget.onLongPress,
                 customBorder: shape,
                 onHighlightChanged: (v) { if (v != _pressed) setState(() => _pressed = v); },
                 child: content),

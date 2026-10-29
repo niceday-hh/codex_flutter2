@@ -30,30 +30,6 @@ class MemoReveal extends StatelessWidget {
   );
 }
 
-/// Tab body transition: fade-through with a 6px lift. Deliberately wraps the
-/// `IndexedStack` instead of replacing it — every tab keeps its scroll offset,
-/// search text and draft, because nothing gets unmounted.
-class MemoFadeThrough extends StatelessWidget {
-  final Animation<double> animation;
-  final Widget child;
-
-  const MemoFadeThrough({super.key, required this.animation, required this.child});
-
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: animation,
-    builder: (_, c) {
-      final t = animation.value;
-      if (t >= 1) return c!;
-      return Opacity(
-        opacity: MemoMotion.tabFrom + (1 - MemoMotion.tabFrom) * t,
-        child: Transform.translate(offset: Offset(0, (1 - t) * MemoMotion.tabShift), child: c),
-      );
-    },
-    child: child,
-  );
-}
-
 /// Static brand wash behind a page. `RepaintBoundary` keeps it out of every
 /// scroll-driven repaint, so the whole effect costs one fill on first layout.
 class MemoGlow extends StatelessWidget {

@@ -169,6 +169,17 @@ class MemoStore extends ChangeNotifier {
     await native.invokeMethod('archive', id);
     await load();
   }
+  /// Batch variants. Each native call still reschedules alarms, so this is a
+  /// loop rather than one round-trip; it only avoids reloading the whole store
+  /// after every single item.
+  Future<void> deleteAll(Iterable<int> ids) async {
+    for (final id in ids) { await native.invokeMethod('delete', id); }
+    await load();
+  }
+  Future<void> archiveAll(Iterable<int> ids) async {
+    for (final id in ids) { await native.invokeMethod('archive', id); }
+    await load();
+  }
   Future<void> saveDefaults() async {
     await native.invokeMethod('saveDefaults', jsonEncode(defaults));
     unawaited(speech.preparePending());

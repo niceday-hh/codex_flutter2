@@ -56,8 +56,18 @@ abstract final class MemoColor {
   static const onBrandSoft = Color(0xB8FFFFFF);
 
   /// The one place a gradient is allowed: the "next reminder" hero card.
+  /// Three bands by hour of day, so the card reads as "morning" or "late
+  /// night" without any extra chrome. All three hold white text at 5:1 or
+  /// better, which is why nothing else had to change when they were added.
   static const heroTop = Color(0xFF6A4AF0);
   static const heroBottom = Color(0xFF4A2BC4);
+  static const heroDawn = <Color>[Color(0xFF6E4BE6), Color(0xFFC2456F)];
+  static const heroDay = <Color>[heroTop, heroBottom];
+  static const heroNight = <Color>[Color(0xFF332F7A), Color(0xFF1A1F52)];
+
+  /// 05:00–10:00 dawn, 10:00–17:00 day, the rest night.
+  static List<Color> heroGradientFor(int hour) =>
+    hour >= 5 && hour < 10 ? heroDawn : hour >= 10 && hour < 17 ? heroDay : heroNight;
 
   /// A single low-opacity brand wash behind the first screen. Painted once into
   /// its own layer, so it costs one fill — not one per scrolling frame.
@@ -161,10 +171,6 @@ abstract final class MemoMotion {
   static const enterSpan = 0.55; // how much of the timeline one item takes
   static const enterShift = 10.0; // px an item travels while fading in
   static const enterMaxItems = 6; // past this, items appear without delay
-
-  /// Tab switch: a fade-through, not a slide. 200ms, composition only.
-  static const tabFrom = 0.74;
-  static const tabShift = 6.0;
 }
 
 /// Theme extension so a future dark theme can swap the whole palette without
