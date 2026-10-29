@@ -552,9 +552,13 @@ public final class ReminderEngine {
         // Three actions, the three things people actually do when a reminder
         // lands: handled it, not now, stop making noise. Everything else still
         // needs the app, which is why there is no fourth.
+        // "完成" reuses [dismiss] instead of building a second ACK intent: same
+        // request code, same action, same data means FLAG_CANCEL_CURRENT would
+        // cancel the record the notification's delete intent points at, and
+        // swiping the notification away would then throw instead of acking.
         if (bodyAvailable) builder
             .addAction(new Notification.Action.Builder(Icon.createWithResource(context,
-                com.niceday.memo.R.drawable.ic_action_done), "完成", intent(r, ACK, token)).build())
+                com.niceday.memo.R.drawable.ic_action_done), "完成", dismiss).build())
             .addAction(new Notification.Action.Builder(Icon.createWithResource(context,
                 com.niceday.memo.R.drawable.ic_action_snooze), "稍后10分钟", intent(r, SNOOZE, token)).build())
             .addAction(new Notification.Action.Builder(Icon.createWithResource(context,

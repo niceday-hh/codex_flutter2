@@ -56,6 +56,10 @@ public class ReminderEngineTest {
         assertEquals(ReminderEngine.ACK, Shadows.shadowOf(posted.actions[0].actionIntent).getSavedIntent().getAction());
         assertEquals(ReminderEngine.SNOOZE, Shadows.shadowOf(posted.actions[1].actionIntent).getSavedIntent().getAction());
         assertEquals(ReminderEngine.MUTE, Shadows.shadowOf(posted.actions[2].actionIntent).getSavedIntent().getAction());
+        // The delete intent and "完成" must be the same PendingIntent record:
+        // a second getBroadcast with FLAG_CANCEL_CURRENT would cancel the one
+        // the notification points at, breaking swipe-to-dismiss.
+        assertEquals("完成 shares the delete intent", posted.deleteIntent, posted.actions[0].actionIntent);
     }
     @Test public void snoozeDropsThisOccurrenceAndRearmsTenMinutesLater() throws Exception {
         engine.fire(intent(ReminderEngine.BASE, token));
