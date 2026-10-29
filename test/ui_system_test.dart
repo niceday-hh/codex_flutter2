@@ -64,6 +64,37 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  test('no animation in the app loops', () {
+    // The frame budget rule from the analysis: motion is a one-shot response to
+    // input. A `repeat()` anywhere is an idle animation and immediately fails.
+    final offenders = <String>[];
+    for (final entity in Directory('lib').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      final lines = entity.readAsLinesSync().where((l) => !l.trimLeft().startsWith('//'));
+      for (final line in lines) {
+        if (line.contains('.repeat(') || line.contains('repeat(reverse')) {
+          offenders.add('${entity.path}: ${line.trim()}');
+        }
+      }
+    }
+    expect(offenders, isEmpty, reason: 'idle animation added:\n${offenders.join('\n')}');
+  });
+
+  testWidgets('a settled reveal paints nothing extra', (tester) async {
+    await tester.pumpWidget(Directionality(textDirection: TextDirection.ltr,
+      child: MemoReveal(animation: const AlwaysStoppedAnimation(1), child: const Text('done'))));
+    expect(find.byType(Opacity), findsNothing,
+      reason: 'a finished entrance must not keep a compositing layer alive');
+    expect(find.byType(Transform), findsNothing);
+  });
+
+  testWidgets('an unfinished reveal does paint the offset and the alpha', (tester) async {
+    await tester.pumpWidget(Directionality(textDirection: TextDirection.ltr,
+      child: MemoReveal(animation: const AlwaysStoppedAnimation(.4), child: const Text('mid'))));
+    expect(tester.widget<Opacity>(find.byType(Opacity)).opacity, .4);
+    expect(tester.widget<Transform>(find.byType(Transform)), isNotNull);
+  });
+
   testWidgets('the design tokens are registered on the theme', (tester) async {
     late MemoTokens tokens;
     await tester.pumpWidget(MaterialApp(

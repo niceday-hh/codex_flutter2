@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -34,6 +35,24 @@ void main() {
   runApp(const MemoApp());
 }
 
+/// Platform text theme for the current platform, so CJK/Arabic fallback keeps
+/// working. Used only as the merge base below — never exposed directly.
+final _baseTextTheme = Typography.material2021(platform: defaultTargetPlatform).black;
+
+TextTheme _memoTextTheme(TextTheme base) => TextTheme(
+  displayLarge: base.displayLarge?.merge(MemoText.display),
+  headlineLarge: base.headlineLarge?.merge(MemoText.display),
+  headlineSmall: base.headlineSmall?.merge(MemoText.title),
+  titleLarge: base.titleLarge?.merge(MemoText.title),
+  titleMedium: base.titleMedium?.merge(MemoText.headline),
+  bodyLarge: base.bodyLarge?.merge(MemoText.subtitle),
+  bodyMedium: base.bodyMedium?.merge(MemoText.body),
+  bodySmall: base.bodySmall?.merge(MemoText.caption),
+  labelLarge: base.labelLarge?.merge(MemoText.button),
+  labelMedium: base.labelMedium?.merge(MemoText.overline),
+  labelSmall: base.labelSmall?.merge(MemoText.caption),
+);
+
 class MemoApp extends StatelessWidget {
   const MemoApp({super.key});
   @override Widget build(BuildContext context) => MaterialApp(
@@ -45,15 +64,13 @@ class MemoApp extends StatelessWidget {
       colorScheme: ColorScheme.fromSeed(seedColor: purple, surface: MemoColor.surface),
       scaffoldBackgroundColor: canvas,
       extensions: const [MemoTokens.light],
-      textTheme: const TextTheme(
-        headlineLarge: MemoText.display,
-        headlineSmall: MemoText.title,
-        titleMedium: MemoText.headline,
-        bodyLarge: MemoText.subtitle,
-        bodyMedium: MemoText.body,
-        bodySmall: MemoText.caption,
-        labelLarge: MemoText.subtitle,
-      ),
+      // Every token style is merged onto the platform text theme instead of
+      // replacing it. A bare `TextStyle` has no `fontFamily`, and anything that
+      // resolves a style straight into a `DefaultTextStyle` — buttons, dialogs,
+      // chips — then falls back to the engine default, which in the test harness
+      // has no CJK glyphs at all. Merging keeps the platform family while the
+      // tokens keep control of size, weight, height and colour.
+      textTheme: _memoTextTheme(_baseTextTheme),
       appBarTheme: const AppBarTheme(backgroundColor: canvas, foregroundColor: ink, centerTitle: true,
         elevation: 0, scrolledUnderElevation: 0, titleTextStyle: MemoText.headline),
       inputDecorationTheme: InputDecorationTheme(filled: true, fillColor: MemoColor.brand50,
@@ -65,13 +82,12 @@ class MemoApp extends StatelessWidget {
         focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(MemoRadius.lg),
           borderSide: const BorderSide(color: MemoColor.brand600, width: 1.6))),
       filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(
-        backgroundColor: purple, foregroundColor: Colors.white,
-        textStyle: MemoText.button, elevation: 0,
+        backgroundColor: purple, foregroundColor: Colors.white, elevation: 0,
         minimumSize: const Size(double.infinity, 52),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MemoRadius.lg)))),
       outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(
         foregroundColor: MemoColor.brand700, side: const BorderSide(color: MemoColor.brand200),
-        textStyle: MemoText.button, minimumSize: const Size(0, 48),
+        minimumSize: const Size(0, 48),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MemoRadius.md)))),
       snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating, elevation: 0),
       dialogTheme: const DialogThemeData(backgroundColor: MemoColor.surface, elevation: 0),
@@ -85,7 +101,7 @@ class MemoHome extends StatefulWidget {
   @override State<MemoHome> createState() => _MemoHomeState();
 }
 
-class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
+class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, TickerProviderStateMixin {
   final store = MemoStore();
   int tab = 0;
   bool loading = true;
@@ -104,8 +120,35 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   DateTime selectedDate = DateTime.now();
   DateTime calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
 
+  // Motion. Two controllers for the whole app, both one-shot: the first screen
+  // resolves in half a second, a tab switch in 200ms, and then nothing ticks.
+  late final AnimationController _enter;
+  late final AnimationController _tabFade;
+  late final Animation<double> _tabAnim = CurvedAnimation(parent: _tabFade, curve: MemoMotion.curve);
+  final Map<int, Animation<double>> _revealCache = {};
+  bool _entered = false;
+
+  Animation<double> _revealAt(int i) => _revealCache.putIfAbsent(i, () {
+    final begin = (i.clamp(0, MemoMotion.enterMaxItems) * MemoMotion.enterStep)
+      .clamp(0.0, 1.0 - MemoMotion.enterSpan);
+    return CurvedAnimation(parent: _enter,
+      curve: Interval(begin, begin + MemoMotion.enterSpan, curve: MemoMotion.curve));
+  });
+
+  Widget _reveal(int i, Widget child) =>
+    _enter.isCompleted ? child : MemoReveal(animation: _revealAt(i), child: child);
+
+  void _playEntrance() {
+    if (_entered) return;
+    _entered = true;
+    _enter.forward(from: 0);
+  }
+
   @override void initState() {
     super.initState(); WidgetsBinding.instance.addObserver(this);
+    _enter = AnimationController(vsync: this, duration: MemoMotion.enter)
+      ..addStatusListener((s) { if (s == AnimationStatus.completed && mounted) setState(() {}); });
+    _tabFade = AnimationController(vsync: this, duration: MemoMotion.base, value: 1);
     asr.setForeground(true);
     voice.addListener(_voiceChanged);
     native.setMethodCallHandler((call) async {
@@ -170,6 +213,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     _entryPending = false; _entryEpoch++; speech.stopPreview();
     final stopped = voice.active || voice.pending != null ? voice.pause(keepDraft: false) : Future<void>.value();
     setState(() => tab = i);
+    _tabFade.forward(from: 0);
     unawaited(stopped.then((_) async {
       if (!mounted || !_foreground || tab != i || voice.active) return;
       if (i == 2) _warmManualTab();
@@ -188,6 +232,9 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
   @override void dispose() {
     voice.removeListener(_voiceChanged); voice.dispose();
     asr.setForeground(false); asr.release();
+    for (final a in _revealCache.values) { if (a is CurvedAnimation) a.dispose(); }
+    _revealCache.clear();
+    _enter.dispose(); _tabFade.dispose();
     WidgetsBinding.instance.removeObserver(this); native.setMethodCallHandler(null); super.dispose();
   }
   @override void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -240,6 +287,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       if (mounted) {
         if (_settingsSheetOpen) { loading = false; error = null; }
         else { setState(() { loading = false; error = null; }); }
+        _playEntrance();
       }
     } catch (e) {
       if (mounted) {
@@ -345,7 +393,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     if (mounted) await reload();
   }
   @override Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(child: Column(children: [
+    body: MemoGlow(child: SafeArea(child: Column(children: [
       if (voice.active && voice.pending == null && tab != 2) Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
         child: Material(color: MemoColor.brand100, borderRadius: BorderRadius.circular(MemoRadius.lg),
@@ -362,9 +410,9 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       Expanded(child: loading ? const Center(child: CircularProgressIndicator())
       : error != null ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
         Text(error!), TextButton(onPressed: reload, child: const Text('重新加载'))]))
-      : IndexedStack(index: tab, children: [homePage(), calendarPage(),
-        TickerMode(enabled: tab == 2, child: VoicePage(flow: voice)), settingsPage()])),
-    ])),
+      : MemoFadeThrough(animation: _tabAnim, child: IndexedStack(index: tab, children: [homePage(), calendarPage(),
+        TickerMode(enabled: tab == 2, child: VoicePage(flow: voice)), settingsPage()]))),
+    ]))),
     floatingActionButton: !loading && error == null && (tab == 0 || tab == 1)
       ? FloatingActionButton(onPressed: () => edit(), backgroundColor: purple,
           foregroundColor: Colors.white, tooltip: '新建提醒', child: const Icon(Icons.add_rounded, size: 32)) : null,
@@ -407,17 +455,25 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
       Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: Text(
         '${now.month}月${now.day}日  周${weekdays[now.weekday - 1]}', style: const TextStyle(fontWeight: FontWeight.w600))),
       const SizedBox(height: 16),
-      if (active.isNotEmpty) Padding(padding: const EdgeInsets.symmetric(horizontal: 20),
+      if (active.isNotEmpty) _reveal(0, Padding(padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Container(decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(MemoRadius.xxl),
-          boxShadow: [BoxShadow(color: MemoColor.brand600.withValues(alpha: .22), blurRadius: 22, offset: const Offset(0, 10))]),
+          boxShadow: MemoShadow.hero),
           child: Material(type: MaterialType.transparency, child: Ink(
             decoration: const BoxDecoration(
               gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
                 colors: [MemoColor.heroTop, MemoColor.heroBottom]),
               borderRadius: BorderRadius.all(Radius.circular(MemoRadius.xxl))),
             child: InkWell(onTap: () => viewReminder(active.first), borderRadius: BorderRadius.circular(MemoRadius.xxl),
-              child: Padding(padding: const EdgeInsets.all(MemoSpace.xxl), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              child: Stack(children: [
+                // Sheen along the top edge: a lit surface instead of a flat fill,
+                // with no blur layer and no per-frame cost.
+                Positioned.fill(child: IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(MemoRadius.xxl)),
+                  gradient: LinearGradient(begin: Alignment.topCenter, end: const Alignment(0, .68),
+                    colors: [MemoColor.heroSheen, MemoColor.heroSheenEnd]))))),
+                Padding(padding: const EdgeInsets.fromLTRB(22, 20, 22, 21),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
                   Icon(active.first.unread ? Icons.mark_email_unread_outlined : Icons.notifications_active_outlined,
                     color: MemoColor.onBrand, size: 18),
@@ -426,22 +482,22 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
                     style: MemoText.label.copyWith(color: MemoColor.onBrand)),
                   const Spacer(),
                   const Icon(Icons.arrow_forward_rounded, color: MemoColor.onBrand, size: 20)]),
-                const SizedBox(height: 14),
-                Text(active.first.time, style: const TextStyle(fontSize: 38, height: 1.1, color: Colors.white,
-                  fontWeight: FontWeight.w700, fontFeatures: MemoText.tabular)),
-                const SizedBox(height: 4),
-                Text(active.first.text, maxLines: 2, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 17, height: 1.4, fontWeight: FontWeight.w600)),
                 const SizedBox(height: MemoSpace.md),
-                Text('${dateLabel(active.first.displayDate)} · ${active.first.repeatLabel}',
-                  style: MemoText.caption.copyWith(color: MemoColor.onBrandSoft)),
+                Text(active.first.time, style: MemoText.heroTime),
+                const SizedBox(height: 9),
+                Text(active.first.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: MemoText.heroTitle),
+                const SizedBox(height: 13),
+                Text(dateLabel(active.first.displayDate) +
+                    (active.first.repeat != 'none' ? ' · ${active.first.repeatLabel}' : ''),
+                  style: MemoText.caption.copyWith(color: MemoColor.onBrandSoft, letterSpacing: .2)),
+                  ])),
               ]))))))),
       if (store.status['notifications'] != true || store.status['exact'] != true) permissionBanner(),
       section('待办提醒', '${active.length} 条'),
       if (active.isEmpty) MemoEmptyState(icon: Icons.edit_note_rounded, title: '留一点空间，给重要的事',
         subtitle: '点击下方按钮，或用语音创建第一条提醒', actionLabel: '新建提醒', onAction: () => edit()),
       ]),
-      SliverList.builder(itemCount: active.length, itemBuilder: (_, i) => reminderCard(active[i])),
+      SliverList.builder(itemCount: active.length, itemBuilder: (_, i) => _reveal(i + 1, reminderCard(active[i]))),
       SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 0), child: MemoCard(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4), onTap: taskLibrary, child: Row(children: [
         const Icon(Icons.history_rounded, color: MemoColor.brand500, size: 22),
@@ -454,7 +510,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
         const Icon(Icons.chevron_right_rounded, color: MemoColor.muted, size: 20),
       ])))),
       if (paused.isNotEmpty) SliverToBoxAdapter(child: section('未启用', '${paused.length} 条')),
-      SliverList.builder(itemCount: paused.length, itemBuilder: (_, i) => reminderCard(paused[i])),
+      SliverList.builder(itemCount: paused.length, itemBuilder: (_, i) => _reveal(i + 1, reminderCard(paused[i]))),
       const SliverToBoxAdapter(child: SizedBox(height: 90)),
     ]));
   }
@@ -465,22 +521,31 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     child: MemoBanner(icon: Icons.info_outline_rounded,
       text: '请在设置中开启通知与精确定时权限', onTap: () => _selectTab(3)));
   Widget reminderCard(Reminder r) {
-    final card = Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 12), child: MemoCard(
-      padding: const EdgeInsets.all(16), onTap: () => viewReminder(r), child: Row(children: [
-        Container(width: 4, height: 46, decoration: BoxDecoration(
-          color: r.completed ? MemoColor.lineStrong : r.unread ? MemoColor.warning : MemoColor.brand500,
+    // One status chip, everything else folds into a single meta line. The card
+    // used to carry up to three pills; three pills is noise, and noise is what
+    // made the list read as a wall instead of a sequence.
+    final status = r.completed || r.archived ? '已结束'
+      : !r.enabled ? '未启用'
+      : r.unread ? '未读 ${r.attempts}/${r.totalCount}' : null;
+    final meta = StringBuffer(dateLabel(r.displayDate));
+    if (!r.completed && !r.archived && r.repeat != 'none') meta.write(' · ${r.repeatLabel}');
+    if (r.speechState != 'off') {
+      meta.write(' · ${r.speechState == 'ready' ? '语音就绪' : r.speechState == 'preparing' ? '语音准备中' : '语音待准备'}');
+    }
+    final card = Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 10), child: MemoCard(
+      padding: const EdgeInsets.fromLTRB(14, 13, 6, 13), onTap: () => viewReminder(r), child: Row(children: [
+        Container(width: 4, height: 52, decoration: BoxDecoration(
+          color: r.completed ? MemoColor.lineStrong : r.unread ? MemoColor.amber : MemoColor.brand500,
           borderRadius: BorderRadius.circular(MemoRadius.pill))),
         const SizedBox(width: MemoSpace.md),
-        Text(r.time, style: TextStyle(fontSize: 23, height: 1.15, fontWeight: FontWeight.w700,
-          color: r.completed ? MemoColor.muted : MemoColor.ink, fontFeatures: MemoText.tabular)),
-        const SizedBox(width: 15), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(r.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: MemoText.subtitle.copyWith(
-            color: r.completed ? MemoColor.muted : MemoColor.ink)),
-          const SizedBox(height: 6), Wrap(spacing: 5, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
-            if (r.speechState != 'off') MemoTag(r.speechState == 'ready' ? '语音已就绪' : r.speechState == 'preparing' ? '语音准备中' : '语音待准备'),
-            MemoTag(r.completed || r.archived ? '已结束' : !r.enabled ? '未启用' : r.unread ? '未读 ${r.attempts}/${r.totalCount}' : r.repeatLabel,
-              emphasized: r.unread),
-            Text(dateLabel(r.displayDate), style: MemoText.caption),
+        Text(r.time, style: r.completed ? MemoText.cardTime.copyWith(color: MemoColor.muted) : MemoText.cardTime),
+        const SizedBox(width: MemoSpace.md), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(r.text, maxLines: 2, overflow: TextOverflow.ellipsis,
+            style: r.completed ? MemoText.cardTitle.copyWith(color: MemoColor.muted) : MemoText.cardTitle),
+          const SizedBox(height: 5), Row(children: [
+            if (status != null) ...[MemoTag(status, emphasized: r.unread), const SizedBox(width: 6)],
+            Flexible(child: Text(meta.toString(), maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: MemoText.caption)),
           ]),
         ])), PopupMenuButton<String>(tooltip: '更多操作', onSelected: (v) async {
           if (v == 'edit') { await edit(r); }
@@ -493,7 +558,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver {
     if (r.archived || r.completed) return card;
     return Dismissible(key: ValueKey('task-${r.id}-${r.activeOccurrence}-${r.attempts}'), direction: DismissDirection.endToStart,
       background: const SizedBox.shrink(),
-      secondaryBackground: Container(margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      secondaryBackground: Container(margin: const EdgeInsets.fromLTRB(20, 0, 20, 10),
         padding: const EdgeInsets.symmetric(horizontal: MemoSpace.xl), alignment: Alignment.centerRight,
         decoration: BoxDecoration(color: MemoColor.brand100, borderRadius: BorderRadius.circular(MemoRadius.xl)),
         child: const Row(mainAxisSize: MainAxisSize.min, children: [

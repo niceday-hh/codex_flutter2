@@ -4,7 +4,11 @@ import '../design_tokens.dart';
 
 /// The single surface primitive: hairline border, one soft shadow, optional tap
 /// with a real ink response. Every card-like block in the app is built from it.
-class MemoCard extends StatelessWidget {
+///
+/// Tappable cards also dip 2.2% and tighten their shadow under the finger. Both
+/// are implicit animations, so they settle into a static `Transform` and stop
+/// ticking the moment the finger lifts — nothing here animates on its own.
+class MemoCard extends StatefulWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
   final double radius;
@@ -24,31 +28,52 @@ class MemoCard extends StatelessWidget {
     this.shadow = true,
   });
 
+  @override State<MemoCard> createState() => _MemoCardState();
+}
+
+class _MemoCardState extends State<MemoCard> {
+  bool _pressed = false;
+
   @override
   Widget build(BuildContext context) {
     final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(radius),
-      side: border ? const BorderSide(color: MemoColor.line) : BorderSide.none,
+      borderRadius: BorderRadius.circular(widget.radius),
+      side: widget.border ? const BorderSide(color: MemoColor.line) : BorderSide.none,
     );
-    final content = padding == EdgeInsets.zero ? child : Padding(padding: padding, child: child);
+    final content = widget.padding == EdgeInsets.zero
+      ? widget.child : Padding(padding: widget.padding, child: widget.child);
     return DecoratedBox(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(radius),
-        boxShadow: shadow ? MemoShadow.card : null,
+        borderRadius: BorderRadius.circular(widget.radius),
+        boxShadow: !widget.shadow ? null : (_pressed ? MemoShadow.press : MemoShadow.card),
       ),
-      child: Material(
-        color: color ?? MemoColor.surface,
-        shape: shape,
-        clipBehavior: Clip.antiAlias,
-        child: onTap == null
-          ? content
-          : InkWell(onTap: onTap, customBorder: shape, child: content),
+      // The scale sits *inside* the decorated box on purpose. `RenderTransform`
+      // never adds itself to a hit-test result, so making it the card's root
+      // would make `tester.tap(find.byKey(...))` report a miss, and any tooling
+      // that walks the hit path would lose the card.
+      child: AnimatedScale(
+        scale: _pressed ? MemoMotion.pressScale : 1,
+        duration: MemoMotion.press,
+        curve: MemoMotion.curve,
+        child: Material(
+          color: widget.color ?? MemoColor.surface,
+          shape: shape,
+          clipBehavior: Clip.antiAlias,
+          child: widget.onTap == null
+            ? content
+            : InkWell(
+                onTap: widget.onTap,
+                customBorder: shape,
+                onHighlightChanged: (v) { if (v != _pressed) setState(() => _pressed = v); },
+                child: content),
+        ),
       ),
     );
   }
 }
 
-/// Inline status chip. One shape, one tint, one text colour.
+/// Inline status chip. One shape, two tints: brand for routine state, amber for
+/// "unread", so the chip and the card's left bar speak the same colour language.
 class MemoTag extends StatelessWidget {
   final String text;
   final bool emphasized;
@@ -58,7 +83,7 @@ class MemoTag extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: MemoSpace.sm, vertical: 3),
     decoration: BoxDecoration(
-      color: emphasized ? MemoColor.brand500 : MemoColor.brand100,
+      color: emphasized ? MemoColor.amberDeep : MemoColor.brand100,
       borderRadius: BorderRadius.circular(MemoRadius.sm),
     ),
     child: Text(text, style: MemoText.overline.copyWith(
