@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import time
 import urllib.error
 import urllib.request
 import zipfile
@@ -217,7 +218,17 @@ class Publisher:
         require(target is None or target == sha, "Release tag already points to another commit")
         if target is None:
             self.api("/git/refs", "POST", {"ref": "refs/tags/" + tag, "sha": sha})
-        require(self.tag_commit(tag) == sha, "Release tag verification failed")
+            # The ref read is served from a cache that lags the write by a second
+            # or two. Reading back exactly once failed the v0.9.9 release even
+            # though the tag had been created correctly, so retry with backoff
+            # instead of declaring failure on the first empty response.
+            target = self.tag_commit(tag)
+            for _ in range(7):
+                if target == sha:
+                    break
+                time.sleep(2)
+                target = self.tag_commit(tag)
+        require(target == sha, "Release tag verification failed")
         self.api(f"/releases/{draft['id']}", "PATCH", {
             "tag_name": tag, "target_commitish": sha,
             "name": f"超级提醒 {tag} · 固定签名新版", "body": notes,
