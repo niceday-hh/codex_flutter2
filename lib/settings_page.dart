@@ -96,8 +96,8 @@ class _SettingsPageState extends State<SettingsPage> {
         onChanged: (_) => setState(() {}), showClear: query.isNotEmpty,
         onClear: () { search.clear(); setState(() {}); }),
       if (query.isEmpty) ...[
-        _label('偏好设置'), _group(settingsSections.take(4).toList()),
-        _label('管理与支持'), _group(settingsSections.skip(4).toList()),
+        _label('偏好设置'), _group(settingsSections.take(5).toList()),
+        _label('管理与支持'), _group(settingsSections.skip(5).toList()),
       ] else ...[
         _label('搜索结果 · ${matches.length} 个子项 · 点击预览'),
         if (matches.isNotEmpty) ...matches.map(_result)

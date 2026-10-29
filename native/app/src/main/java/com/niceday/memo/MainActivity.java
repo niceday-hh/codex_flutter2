@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.KeyguardManager;
+import org.json.JSONException;
 import org.json.JSONObject;
 import android.content.*;
 import android.content.pm.PackageManager;
@@ -51,6 +52,33 @@ public final class MainActivity extends FlutterActivity {
         MainActivity activity = foreground.get();
         if (activity == null || !activity.resumed || activity.channel == null) return false;
         activity.channel.invokeMethod("prepareSpeech", null); return true;
+    }
+    /** Mode + accent, stored apart from reminder data: it is device preference,
+     *  not something a backup should overwrite. */
+    private SharedPreferences appearancePrefs() {
+        return getSharedPreferences(MemoWidgetProvider.APPEARANCE_PREFS, MODE_PRIVATE);
+    }
+    private String appearance() {
+        SharedPreferences prefs = appearancePrefs();
+        try {
+            return new JSONObject().put("mode", prefs.getString("mode", "system"))
+                .put("accent", prefs.getString("accent", "violet")).toString();
+        } catch (JSONException e) {
+            return "{\"mode\":\"system\",\"accent\":\"violet\"}";
+        }
+    }
+    private void saveAppearance(String json) {
+        if (json == null) return;
+        try {
+            JSONObject values = new JSONObject(json);
+            String mode = values.optString("mode", "system");
+            if (!mode.equals("system") && !mode.equals("light") && !mode.equals("dark")) mode = "system";
+            String accent = values.optString("accent", "violet");
+            if (!java.util.Arrays.asList("violet", "indigo", "teal", "ember").contains(accent)) accent = "violet";
+            appearancePrefs().edit().putString("mode", mode).putString("accent", accent).commit();
+            // The widget is painted with the accent ramp, so it has to repaint.
+            MemoWidgetProvider.refresh(this);
+        } catch (JSONException ignored) {}
     }
     private MethodChannel channel;
     private EventChannel.EventSink levelSink;
@@ -100,6 +128,8 @@ public final class MainActivity extends FlutterActivity {
                 ReminderEngine store = new ReminderEngine(this);
                 switch (call.method) {
                     case "getState" -> result.success(store.state());
+                    case "getAppearance" -> result.success(appearance());
+                    case "saveAppearance" -> { saveAppearance((String) call.arguments); result.success(null); }
                     case "saveVoiceGroups" -> { VoiceGroups.save(this,(String)call.arguments); result.success(null); }
                     case "microphoneReady" -> result.success(resumed && !getSystemService(KeyguardManager.class).isKeyguardLocked() && recorder!=null && recorder.getRecordingState()==AudioRecord.RECORDSTATE_RECORDING && (Build.VERSION.SDK_INT<29 || recorder.getActiveRecordingConfiguration()!=null && !recorder.getActiveRecordingConfiguration().isClientSilenced()));
                     case "voiceEntryAllowed" -> result.success(resumed && !getSystemService(KeyguardManager.class).isKeyguardLocked());

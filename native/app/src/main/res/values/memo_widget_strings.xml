@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_label">下一条提醒</string>
+    <string name="widget_empty_time">--:--</string>
+    <string name="widget_empty_text">还没有提醒，点按新建</string>
+    <string name="widget_description">在桌面显示下一条提醒</string>
+</resources>

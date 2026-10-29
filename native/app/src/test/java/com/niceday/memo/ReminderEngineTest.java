@@ -48,6 +48,39 @@ public class ReminderEngineTest {
     Intent intent(String action, long occurrence) {
         return new Intent(action).putExtra("id", 1).putExtra("token", occurrence).putExtra("version", 1L);
     }
+    @Test public void notificationOffersDoneSnoozeAndMute() throws Exception {
+        engine.fire(intent(ReminderEngine.BASE, token));
+        Notification posted = Shadows.shadowOf(context.getSystemService(NotificationManager.class)).getNotification(1);
+        assertNotNull(posted);
+        assertEquals(3, posted.actions.length);
+        assertEquals(ReminderEngine.ACK, Shadows.shadowOf(posted.actions[0].actionIntent).getSavedIntent().getAction());
+        assertEquals(ReminderEngine.SNOOZE, Shadows.shadowOf(posted.actions[1].actionIntent).getSavedIntent().getAction());
+        assertEquals(ReminderEngine.MUTE, Shadows.shadowOf(posted.actions[2].actionIntent).getSavedIntent().getAction());
+    }
+    @Test public void snoozeDropsThisOccurrenceAndRearmsTenMinutesLater() throws Exception {
+        engine.fire(intent(ReminderEngine.BASE, token));
+        long before = System.currentTimeMillis();
+        engine.snooze(1, token, 10);
+        JSONObject r = row();
+        assertTrue(r.getBoolean("acknowledged"));
+        assertEquals(0, r.getLong("activeOccurrence"));
+        long next = r.getLong("nextTrigger");
+        assertTrue("snooze re-arms ten minutes out", next >= before + 9 * 60000 && next <= before + 11 * 60000);
+        assertNull("the ringing notification is withdrawn", Shadows.shadowOf(context.getSystemService(NotificationManager.class)).getNotification(1));
+    }
+    @Test public void muteSilencesThisOccurrenceButLeavesItUnread() throws Exception {
+        engine.fire(intent(ReminderEngine.BASE, token));
+        engine.mute(1, token);
+        JSONObject r = row();
+        assertTrue(r.getBoolean("muted"));
+        assertFalse("muting is not acknowledging", r.getBoolean("acknowledged"));
+        assertEquals(0, r.getLong("retryAt"));
+        NotificationManager nm = context.getSystemService(NotificationManager.class);
+        Notification posted = Shadows.shadowOf(nm).getNotification(1);
+        assertNotNull(posted);
+        assertEquals("memo_silent_v1", posted.getChannelId());
+        assertNull(nm.getNotificationChannel(posted.getChannelId()).getSound());
+    }
     @Test public void notificationDismissalStopsRetriesAndOffersSilentArchiveChoice() throws Exception {
         Shadows.shadowOf(context.getSystemService(KeyguardManager.class)).setKeyguardLocked(false);
         engine.fire(intent(ReminderEngine.BASE,token)); engine.dismissed(1,token);

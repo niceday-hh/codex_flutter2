@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:timed_memo/appearance.dart';
+import 'package:timed_memo/design_tokens.dart';
 import 'package:timed_memo/main.dart';
 import 'package:timed_memo/reminder.dart';
 
@@ -12,6 +14,16 @@ Future<void> revealByDragging(WidgetTester tester, Finder target, Finder scrolla
     await tester.pumpAndSettle();
   }
   expect(target.hitTestable(), findsOneWidget);
+}
+
+Future<void> openCategory(WidgetTester tester, String title) async {
+  // The overview scrolls once there are more categories than fit on a phone;
+  // ensureVisible keeps these tests independent of how many sections exist.
+  final target = find.text(title);
+  await tester.ensureVisible(target);
+  await tester.pumpAndSettle();
+  await tester.tap(target);
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -150,7 +162,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(393, 852));
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
     await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置'))); await tester.pumpAndSettle();
-    await tester.tap(find.text('帮助与诊断')); await tester.pumpAndSettle();
+    await openCategory(tester, '帮助与诊断');
     final settingsScroll = find.byType(Scrollable).last;
     await revealByDragging(tester, find.text('检查系统通知与锁屏设置'), settingsScroll);
     expect(find.text('检查系统通知与锁屏设置'), findsOneWidget);
@@ -199,14 +211,14 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(393, 852));
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
     await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置'))); await tester.pumpAndSettle();
-    await tester.tap(find.text('后台与权限')); await tester.pumpAndSettle();
+    await openCategory(tester, '后台与权限');
     final scroll = find.byType(Scrollable).last;
     await revealByDragging(tester, find.text('可靠提醒模式'), scroll);
     await tester.tap(find.text('可靠提醒模式')); await tester.pumpAndSettle();
     expect(reliable, isFalse);
     expect(find.text('可靠模式已关闭，仍保留系统闹钟'), findsOneWidget);
     await tester.tap(find.byTooltip('关闭设置分类')); await tester.pumpAndSettle();
-    await tester.tap(find.text('帮助与诊断')); await tester.pumpAndSettle();
+    await openCategory(tester, '帮助与诊断');
     await revealByDragging(tester, find.text('导出提醒诊断'), find.byType(Scrollable).last);
     await tester.tap(find.text('导出提醒诊断')); await tester.pumpAndSettle();
     expect(calls, contains('exportDiagnostics'));
@@ -372,6 +384,33 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       expect(tester.takeException(), isNull);
     }
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  });
+
+
+  testWidgets('appearance setting repaints the app and switches the accent', (tester) async {
+    addTearDown(() => appearance.value = Appearance.defaults);
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置')));
+    await tester.pumpAndSettle();
+    await openCategory(tester, '外观与主题');
+    expect(find.text('主题模式'), findsOneWidget);
+    expect(find.text('强调色'), findsOneWidget);
+
+    await tester.tap(find.text('深色')); await tester.pumpAndSettle();
+    var context = tester.element(find.byType(NavigationBar));
+    expect(Theme.of(context).brightness, Brightness.dark,
+      reason: 'the whole app follows the chosen mode, not just the sheet');
+
+    await tester.tap(find.byKey(const ValueKey('accent-teal'))); await tester.pumpAndSettle();
+    context = tester.element(find.byType(NavigationBar));
+    expect(Theme.of(context).extension<MemoTokens>()!.colors.brand500, brandTealDark.c500,
+      reason: 'the accent ramp is swapped in dark mode too');
+
+    await tester.tap(find.text('跟随系统')); await tester.pumpAndSettle();
+    expect(appearance.value.mode, ThemeMode.system);
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
 

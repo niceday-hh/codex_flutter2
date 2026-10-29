@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.*;
 import android.content.*;
 import android.content.pm.PackageManager;
+import android.graphics.drawable.Icon;
 import android.media.AudioAttributes;
 import android.media.RingtoneManager;
 import android.net.Uri;
@@ -19,6 +20,8 @@ public final class ReminderEngine {
     public static final String ACK = "com.niceday.memo.ACK";
     public static final String ARCHIVE = "com.niceday.memo.ARCHIVE";
     public static final String DELETE = "com.niceday.memo.DELETE";
+    public static final String SNOOZE = "com.niceday.memo.SNOOZE";
+    public static final String MUTE = "com.niceday.memo.MUTE";
     private final Context context;
     private final SharedPreferences prefs;
     private final SharedPreferences runtime;
@@ -57,7 +60,7 @@ public final class ReminderEngine {
         } catch(JSONException e) { error("音色迁移未完成，请导出备份后重试"); }
     }
     private static final String[] RUNTIME_FIELDS = {"nextTrigger", "activeOccurrence", "attempts", "retryAt",
-        "acknowledged", "completed", "enabled", "lastAck", "lastFired", "metaRevision"};
+        "acknowledged", "completed", "enabled", "lastAck", "lastFired", "metaRevision", "muted"};
     private JSONArray read() throws JSONException {
         JSONArray rows = new JSONArray(prefs.getString("reminders", "[]"));
         if (!unlocked) return rows;
@@ -87,6 +90,9 @@ public final class ReminderEngine {
             throw new IllegalStateException("保存失败，请检查存储空间");
         if (!runtime.edit().putString("reminders", mirror.toString()).putLong("revision", revision).commit())
             throw new IllegalStateException("无法保存开机提醒排程");
+        // The widget is a projection of this file; refresh it wherever the data
+        // changes instead of running its own timer.
+        MemoWidgetProvider.refresh(context);
     }
     private void trace(String type, int id, long at, String detail) {
         try {
@@ -287,6 +293,35 @@ public final class ReminderEngine {
         SpeechCache.prune(context);
         syncGuardian();
     }
+    /** "稍后": drop the current occurrence and re-arm the same task later. */
+    public void snooze(int id, long token, int minutes) throws JSONException {
+        JSONArray rows = read();
+        JSONObject r = find(rows, id);
+        if (r == null || token <= 0 || r.optLong("activeOccurrence") != token || r.optBoolean("acknowledged")) return;
+        long at = System.currentTimeMillis() + Math.max(1, Math.min(180, minutes)) * 60000L;
+        r.put("acknowledged", true).put("retryAt", 0).put("muted", false).put("attempts", 0)
+            .put("activeOccurrence", 0).put("nextTrigger", at).put("enabled", true);
+        write(rows);
+        cancel(id, BASE); cancel(id, RETRY);
+        notifications.cancel(id); notifications.cancel(-id);
+        SpeechPlaybackService.cancel(id);
+        scheduleBase(r);
+        trace("snoozed", id, at, "稍后 " + minutes + " 分钟");
+        syncGuardian();
+    }
+    /** "静音本次": silence this occurrence, keep it unread and on screen. */
+    public void mute(int id, long token) throws JSONException {
+        JSONArray rows = read();
+        JSONObject r = find(rows, id);
+        if (r == null || token <= 0 || r.optLong("activeOccurrence") != token || r.optBoolean("acknowledged")) return;
+        r.put("muted", true).put("retryAt", 0);
+        write(rows);
+        cancel(id, RETRY);
+        SpeechPlaybackService.cancel(id);
+        notify(r, token, false);
+        trace("muted", id, token, "本次静音");
+        syncGuardian();
+    }
     public void acknowledge(int id, long token) throws JSONException {
         acknowledge(id, token, "应用内确认");
     }
@@ -409,6 +444,7 @@ public final class ReminderEngine {
             r.put("activeOccurrence", token);
             r.put("attempts", 0);
             r.put("acknowledged", false);
+            r.put("muted", false);
             r.put("nextTrigger", next(r, now));
         }
         r.put("attempts", r.optInt("attempts") + 1);
@@ -484,7 +520,10 @@ public final class ReminderEngine {
         if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             error("通知权限未开启，系统闹钟已触发但无法显示通知"); return;
         }
-        String channelId = ensureChannel(r);
+        // Muting one occurrence must not touch the shared style channel: that
+        // would silence every reminder using the same style.
+        boolean muted = r.optBoolean("muted", false);
+        String channelId = muted ? styles.silentChannel() : ensureChannel(r);
         int id = r.getInt("id");
         Intent open = new Intent(context, MainActivity.class)
             .setAction("com.niceday.memo.OPEN").setData(Uri.parse("memo://open/" + id))
@@ -510,6 +549,16 @@ public final class ReminderEngine {
             .setDeleteIntent(dismiss).setAutoCancel(false).setOnlyAlertOnce(!alert)
             .setWhen(r.optLong("lastFired", System.currentTimeMillis()));
         if (Build.VERSION.SDK_INT >= 29) builder.setAllowSystemGeneratedContextualActions(false);
+        // Three actions, the three things people actually do when a reminder
+        // lands: handled it, not now, stop making noise. Everything else still
+        // needs the app, which is why there is no fourth.
+        if (bodyAvailable) builder
+            .addAction(new Notification.Action.Builder(Icon.createWithResource(context,
+                com.niceday.memo.R.drawable.ic_action_done), "完成", intent(r, ACK, token)).build())
+            .addAction(new Notification.Action.Builder(Icon.createWithResource(context,
+                com.niceday.memo.R.drawable.ic_action_snooze), "稍后10分钟", intent(r, SNOOZE, token)).build())
+            .addAction(new Notification.Action.Builder(Icon.createWithResource(context,
+                com.niceday.memo.R.drawable.ic_action_mute), "静音本次", intent(r, MUTE, token)).build());
         if (bodyAvailable) builder.setStyle(new Notification.BigTextStyle().bigText(r.getString("text")));
         notifications.notify(id, builder.build());
         if (alert && bodyAvailable && "banner".equals(r.optString("presentation", "banner"))) {
@@ -521,10 +570,14 @@ public final class ReminderEngine {
         NotificationChannel actual = notifications.getNotificationChannel(channelId);
         trace(alert ? "notified" : "notification_refreshed", id, token,
             "importance=" + actual.getImportance() + ";bodyAvailable=" + bodyAvailable);
-        if (actual.getImportance() == NotificationManager.IMPORTANCE_NONE) error("此通知样式已被系统关闭，请打开对应的系统通知设置");
-        else if (NotificationStyles.importance(r) == NotificationManager.IMPORTANCE_HIGH && actual.getImportance() < NotificationManager.IMPORTANCE_HIGH)
-            error("系统通道未允许横幅，请打开这条提醒的系统通知设置");
-        if (alert && bodyAvailable && actual.getImportance() != NotificationManager.IMPORTANCE_NONE &&
+        // A muted occurrence sits on the deliberately quiet channel; reporting
+        // "channel does not allow banners" for it would be noise, not a fix.
+        if (!muted) {
+            if (actual.getImportance() == NotificationManager.IMPORTANCE_NONE) error("此通知样式已被系统关闭，请打开对应的系统通知设置");
+            else if (NotificationStyles.importance(r) == NotificationManager.IMPORTANCE_HIGH && actual.getImportance() < NotificationManager.IMPORTANCE_HIGH)
+                error("系统通道未允许横幅，请打开这条提醒的系统通知设置");
+        }
+        if (alert && !muted && bodyAvailable && actual.getImportance() != NotificationManager.IMPORTANCE_NONE &&
             SpeechSettings.enabled(r, SpeechSettings.defaults(context))) SpeechPlaybackService.start(context, id, token);
         if (alert && r.optBoolean("wakeScreen", true)) {
             try {

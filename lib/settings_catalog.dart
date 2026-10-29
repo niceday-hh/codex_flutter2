@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum SettingsCategory { reminders, voiceInput, speech, background, data, help }
+enum SettingsCategory { appearance, reminders, voiceInput, speech, background, data, help }
 
 class SettingsSection {
   final SettingsCategory category;
@@ -11,6 +11,8 @@ class SettingsSection {
 }
 
 const settingsSections = [
+  SettingsSection(SettingsCategory.appearance, '外观与主题', '深浅模式与强调色', Icons.palette_outlined,
+    '主题 深色 浅色 跟随系统 强调色 配色 紫色 靛蓝 青碧 赭橙 外观 风格 夜间模式 自动切换'),
   SettingsSection(SettingsCategory.reminders, '提醒与通知', '铃声、振动与再次提醒', Icons.notifications_none_rounded,
     '默认展示方式 默认锁屏显示 默认样式 系统设置 振动模式 铃声 选择系统铃声 未读再次提醒间隔 提醒总次数 尝试亮屏 亮屏弹窗增强'),
   SettingsSection(SettingsCategory.voiceInput, '语音录入', '免手预听与自动停录', Icons.mic_none_rounded,
@@ -38,6 +40,8 @@ class SettingsEntry {
 }
 
 const settingsEntries = [
+  SettingsEntry('themeMode', SettingsCategory.appearance, '主题模式', '跟随系统，或固定浅色／深色。', '深色 浅色 夜间 系统 自动 外观', target: '主题模式'),
+  SettingsEntry('accent', SettingsCategory.appearance, '强调色', '按钮、主卡与强调文字使用的品牌色。', '主题 配色 颜色 紫色 靛蓝 青碧 赭橙 风格', target: '强调色'),
   SettingsEntry('presentation', SettingsCategory.reminders, '默认展示方式', '新建提醒使用横幅和通知栏，或仅在通知栏显示。', '横幅 通知 样式', target: '默认提醒'),
   SettingsEntry('lockscreen', SettingsCategory.reminders, '默认锁屏显示', '选择锁屏隐藏正文，或不在锁屏显示。', '隐私 正文', target: '默认提醒'),
   SettingsEntry('style', SettingsCategory.reminders, '默认样式的系统设置', '打开当前默认通知样式的系统设置。', '系统 通道 横幅 锁屏'),

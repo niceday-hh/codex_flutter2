@@ -49,6 +49,22 @@ final class NotificationStyles {
         } catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
     }
     private boolean owned(String id) { return id.startsWith("memo_v2_") || id.startsWith("memo_v3_"); }
+
+    /// One shared, deliberately quiet channel for "静音本次". It is not part of
+    /// the style registry — muting one occurrence must not create a new channel,
+    /// and it stays out of [hiddenCount] by not carrying the `memo_v3_` prefix.
+    String silentChannel() {
+        String id = "memo_silent_v1";
+        if (manager.getNotificationChannel(id) != null) return id;
+        NotificationChannel channel = new NotificationChannel(id, "静音提醒（单次）",
+            NotificationManager.IMPORTANCE_LOW);
+        channel.setDescription("在通知栏点“静音本次”后，这条提醒改用此通道，不再响铃或振动。");
+        channel.setSound(null, null);
+        channel.enableVibration(false);
+        channel.setShowBadge(true);
+        manager.createNotificationChannel(channel);
+        return id;
+    }
     private String legacyId(JSONObject r) {
         return "memo_v2_" + Integer.toHexString((sound(r) + ":" + r.optString("vibration", "three") + ":" + ringtone(r)).hashCode());
     }

@@ -12,7 +12,9 @@ Future<void> openSettings(WidgetTester tester, String category) async {
   addTearDown(tester.view.resetDevicePixelRatio); addTearDown(tester.view.resetPhysicalSize);
   await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
   await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置'))); await tester.pumpAndSettle();
-  await tester.tap(find.text(category)); await tester.pumpAndSettle();
+  final target = find.text(category);
+  await tester.ensureVisible(target); await tester.pumpAndSettle();
+  await tester.tap(target); await tester.pumpAndSettle();
 }
 Finder sheetText(String text) => find.descendant(of: find.byType(SettingsSheet), matching: find.text(text));
 

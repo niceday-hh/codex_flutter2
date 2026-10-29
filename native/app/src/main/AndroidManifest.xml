@@ -36,6 +36,14 @@
                 <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
             </intent-filter>
         </receiver>
+        <!-- Home-screen widget. Exported because the launcher has to send the
+             update broadcast; it exposes no data, only a view of our own store. -->
+        <receiver android:name="com.niceday.memo.MemoWidgetProvider" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/memo_widget_info" />
+        </receiver>
         <service android:name="com.niceday.memo.ReminderGuardianService" android:exported="false"
             android:directBootAware="true" android:stopWithTask="false" android:foregroundServiceType="systemExempted" />
         <service android:name="com.niceday.memo.ReminderPopupService" android:exported="false"

@@ -31,6 +31,9 @@ abstract final class MemoColor {
   static const lineStrong = Color(0xFFDDD8E8); // grips, drag handles
   static const outline = Color(0xFF8B8499); // 3.6:1 — borders of real inputs (WCAG 1.4.11)
   static const canvas = Color(0xFFF8F6FC);
+  /// The dark canvas. Also the label colour for pastel fills in dark mode,
+  /// where white would only reach 3.5:1.
+  static const night = Color(0xFF121017);
   static const surface = Color(0xFFFFFFFF);
   static const surfaceAlt = Color(0xFFFBFAFE);
 
@@ -78,6 +81,108 @@ abstract final class MemoColor {
   /// dropped for frame-time reasons.
   static const heroSheen = Color(0x26FFFFFF); // 15% white
   static const heroSheenEnd = Color(0x00FFFFFF);
+}
+
+/// Four complete brand ramps. Violet is the shipped identity; the other three
+/// are alternatives picked in 设置 → 外观与主题. A ramp carries its own hero
+/// gradient stops, so the "next reminder" card never ends up blue on a violet
+/// page.
+///
+/// The values are deliberately the darker end of each hue: `c500` fills a
+/// button that carries white text, and every ramp is asserted in
+/// `test/ui_system_test.dart` (500 on white ≥4.5:1, 700 on white ≥7:1, and in
+/// dark mode 500 on the page ≥4.5:1).
+enum MemoAccent {
+  violet('紫'), indigo('靛蓝'), teal('青碧'), ember('赭橙');
+
+  const MemoAccent(this.label);
+  final String label;
+}
+
+@immutable
+class MemoBrand {
+  final Color c50, c100, c200, c400, c500, c600, c700, c800;
+
+  /// Second stop of the morning gradient: a warm turn, so dawn does not read
+  /// as midday.
+  final Color dawn;
+  final Color nightTop, nightBottom;
+
+  const MemoBrand({
+    required this.c50, required this.c100, required this.c200, required this.c400,
+    required this.c500, required this.c600, required this.c700, required this.c800,
+    required this.dawn, required this.nightTop, required this.nightBottom,
+  });
+
+  List<Color> get gradientDay => [c600, c800];
+  List<Color> get gradientDawn => [c600, dawn];
+  List<Color> get gradientNight => [nightTop, nightBottom];
+}
+
+const brandVioletLight = MemoBrand(
+  c50: Color(0xFFF7F4FF), c100: Color(0xFFF0ECFF), c200: Color(0xFFDDD2FF), c400: Color(0xFF8E6BF5),
+  c500: Color(0xFF7252F6), c600: Color(0xFF5B3FD9), c700: Color(0xFF5334CC), c800: Color(0xFF3E2699),
+  dawn: Color(0xFFC2456F), nightTop: Color(0xFF332F7A), nightBottom: Color(0xFF1A1F52));
+
+const brandIndigoLight = MemoBrand(
+  c50: Color(0xFFF1F4FF), c100: Color(0xFFE5EAFF), c200: Color(0xFFC9D4FE), c400: Color(0xFF6B87F5),
+  c500: Color(0xFF4468E8), c600: Color(0xFF3253CC), c700: Color(0xFF2A45A8), c800: Color(0xFF1D3178),
+  dawn: Color(0xFFB84A87), nightTop: Color(0xFF26305E), nightBottom: Color(0xFF161C3C));
+
+const brandTealLight = MemoBrand(
+  c50: Color(0xFFEDFAF6), c100: Color(0xFFDCF5EE), c200: Color(0xFFB7E7DA), c400: Color(0xFF3FA890),
+  c500: Color(0xFF1A8168), c600: Color(0xFF146D59), c700: Color(0xFF105B4A), c800: Color(0xFF0A4033),
+  dawn: Color(0xFFC2603F), nightTop: Color(0xFF1B3A36), nightBottom: Color(0xFF0F2220));
+
+const brandEmberLight = MemoBrand(
+  c50: Color(0xFFFFF7EF), c100: Color(0xFFFFEEDD), c200: Color(0xFFFFD6B2), c400: Color(0xFFD08340),
+  c500: Color(0xFFB25C12), c600: Color(0xFF9E4F0F), c700: Color(0xFF83400B), c800: Color(0xFF5E2E07),
+  dawn: Color(0xFFC2456F), nightTop: Color(0xFF3A2A1E), nightBottom: Color(0xFF1F1710));
+
+/// Dark ramps are not the light ones inverted: 500 gets lighter so it can carry
+/// the page colour as label text, and 200 is a deep tint rather than a pastel.
+const brandVioletDark = MemoBrand(
+  c50: Color(0xFF1F1A2E), c100: Color(0xFF2A2340), c200: Color(0xFF3B3160), c400: Color(0xFF9B82FF),
+  c500: Color(0xFF8C74FF), c600: Color(0xFFA18CFF), c700: Color(0xFFC3B6FF), c800: Color(0xFFDFD7FF),
+  dawn: Color(0xFFC2456F), nightTop: Color(0xFF332F7A), nightBottom: Color(0xFF1A1F52));
+
+const brandIndigoDark = MemoBrand(
+  c50: Color(0xFF1A1F33), c100: Color(0xFF232B45), c200: Color(0xFF333F6B), c400: Color(0xFF8BA0FF),
+  c500: Color(0xFF7D93FF), c600: Color(0xFF9AABFF), c700: Color(0xFFBFC9FF), c800: Color(0xFFDFE4FF),
+  dawn: Color(0xFFB84A87), nightTop: Color(0xFF26305E), nightBottom: Color(0xFF161C3C));
+
+const brandTealDark = MemoBrand(
+  c50: Color(0xFF14241F), c100: Color(0xFF1B2E28), c200: Color(0xFF274740), c400: Color(0xFF5FCBB2),
+  c500: Color(0xFF4FBFA5), c600: Color(0xFF6BD0B8), c700: Color(0xFF9BE0CF), c800: Color(0xFFC8F0E4),
+  dawn: Color(0xFFC2603F), nightTop: Color(0xFF1B3A36), nightBottom: Color(0xFF0F2220));
+
+const brandEmberDark = MemoBrand(
+  c50: Color(0xFF2A1E14), c100: Color(0xFF33261A), c200: Color(0xFF4A3722), c400: Color(0xFFE09A57),
+  c500: Color(0xFFD98A45), c600: Color(0xFFEBA468), c700: Color(0xFFF5C599), c800: Color(0xFFFBE0C4),
+  dawn: Color(0xFFC2456F), nightTop: Color(0xFF3A2A1E), nightBottom: Color(0xFF1F1710));
+
+const brandLightRamps = <MemoAccent, MemoBrand>{
+  MemoAccent.violet: brandVioletLight, MemoAccent.indigo: brandIndigoLight,
+  MemoAccent.teal: brandTealLight, MemoAccent.ember: brandEmberLight,
+};
+
+const brandDarkRamps = <MemoAccent, MemoBrand>{
+  MemoAccent.violet: brandVioletDark, MemoAccent.indigo: brandIndigoDark,
+  MemoAccent.teal: brandTealDark, MemoAccent.ember: brandEmberDark,
+};
+
+MemoBrand brandFor(MemoAccent accent, Brightness brightness) =>
+  (brightness == Brightness.dark ? brandDarkRamps : brandLightRamps)[accent]!;
+
+/// Whichever of white / [MemoColor.night] reads better on [swatch]. Light-mode
+/// 500s are dark enough for white; dark-mode 500s are pastel and need the near
+/// black. Picking the larger ratio instead of hard-coding per theme keeps this
+/// correct if a ramp is retuned later.
+Color inkOn(Color swatch) {
+  final luminance = swatch.computeLuminance();
+  final white = 1.05 / (luminance + .05);
+  final night = (luminance + .05) / (MemoColor.night.computeLuminance() + .05);
+  return white >= night ? Colors.white : MemoColor.night;
 }
 
 /// Eight steps, no free-form font sizes. Line heights are pre-baked so text
@@ -183,6 +288,11 @@ class MemoPalette {
   final Color onBrand, onBrandSoft, amber, amberSurface, amberInk, amberDeep;
   final Color danger, dangerSurface, success, warning, warningSurface;
 
+  /// The ramp this palette was built from. Kept as one object so the hero card
+  /// can pick its gradient stops from the same hue as the accent.
+  final MemoBrand brand;
+  final MemoAccent accent;
+
   const MemoPalette({
     required this.surface, required this.canvas, required this.ink, required this.inkSoft,
     required this.muted, required this.line, required this.lineStrong, required this.outline,
@@ -191,7 +301,29 @@ class MemoPalette {
     required this.onBrand, required this.onBrandSoft, required this.amber, required this.amberSurface,
     required this.amberInk, required this.amberDeep, required this.danger, required this.dangerSurface,
     required this.success, required this.warning, required this.warningSurface,
+    this.brand = brandVioletLight, this.accent = MemoAccent.violet,
   });
+
+  /// Same neutrals and semantics, different accent. Used by the appearance
+  /// setting; the two const instances below stay the defaults so existing test
+  /// assertions keep meaning.
+  MemoPalette withBrand(MemoAccent accent, Brightness brightness) {
+    final b = brandFor(accent, brightness);
+    return MemoPalette(
+      surface: surface, canvas: canvas, ink: ink, inkSoft: inkSoft, muted: muted, line: line,
+      lineStrong: lineStrong, outline: outline,
+      brand50: b.c50, brand100: b.c100, brand200: b.c200, brand400: b.c400,
+      brand500: b.c500, brand600: b.c600, brand700: b.c700, brand800: b.c800,
+      onBrand: onBrand, onBrandSoft: onBrandSoft, amber: amber, amberSurface: amberSurface,
+      amberInk: amberInk, amberDeep: amberDeep, danger: danger, dangerSurface: dangerSurface,
+      success: success, warning: warning, warningSurface: warningSurface,
+      brand: b, accent: accent);
+  }
+
+  /// 05–10 dawn, 10–17 day, otherwise night. Same three-band idea as before, but
+  /// the stops now come from the active ramp.
+  List<Color> heroGradientFor(int hour) => hour >= 5 && hour < 10
+    ? brand.gradientDawn : hour >= 10 && hour < 17 ? brand.gradientDay : brand.gradientNight;
 
   static const light = MemoPalette(
     surface: MemoColor.surface, canvas: MemoColor.canvas, ink: MemoColor.ink,
@@ -211,7 +343,7 @@ class MemoPalette {
   /// every text colour clears 4.5:1 against its own surface:
   /// ink 15.4:1, muted 7.1:1, outline 5.4:1 on [surface].
   static const dark = MemoPalette(
-    surface: Color(0xFF1B1822), canvas: Color(0xFF121017), ink: Color(0xFFF3EFFA),
+    surface: Color(0xFF1B1822), canvas: MemoColor.night, ink: Color(0xFFF3EFFA),
     inkSoft: Color(0xFFD9D3E6), muted: Color(0xFFA79FB9), line: Color(0xFF2E2938),
     lineStrong: Color(0xFF3D3649), outline: Color(0xFF928AA6),
     brand50: Color(0xFF1F1A2E), brand100: Color(0xFF2A2340), brand200: Color(0xFF3B3160),
@@ -221,7 +353,13 @@ class MemoPalette {
     amber: Color(0xFFF0A34F), amberSurface: Color(0xFF35240F), amberInk: Color(0xFFFFD9AC),
     amberDeep: Color(0xFFC9761D), danger: Color(0xFFFF8B80), dangerSurface: Color(0xFF3A1D1B),
     success: Color(0xFF5FD39B), warning: Color(0xFFF0B062), warningSurface: Color(0xFF35240F),
+    brand: brandVioletDark,
   );
+
+  /// Palette for a chosen accent. The light and dark bases stay const; only the
+  /// ramp is swapped, so neutrals never drift between accents.
+  static MemoPalette forAccent(MemoAccent accent, Brightness brightness) =>
+    (brightness == Brightness.dark ? dark : light).withBrand(accent, brightness);
 }
 
 /// Type scale bound to a palette. Sizes and weights live here; colour comes
@@ -262,6 +400,13 @@ class MemoTokens extends ThemeExtension<MemoTokens> {
 
   static const light = MemoTokens(colors: MemoPalette.light, text: MemoType(MemoPalette.light));
   static const dark = MemoTokens(colors: MemoPalette.dark, text: MemoType(MemoPalette.dark));
+
+  /// Tokens for a chosen accent. Rebuilt on every theme change, which happens
+  /// once per user action — not per frame.
+  static MemoTokens forAccent(MemoAccent accent, Brightness brightness) {
+    final palette = MemoPalette.forAccent(accent, brightness);
+    return MemoTokens(colors: palette, text: MemoType(palette));
+  }
 
   static MemoTokens of(BuildContext context) =>
     Theme.of(context).extension<MemoTokens>() ?? light;

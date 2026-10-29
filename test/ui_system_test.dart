@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:timed_memo/appearance.dart';
 import 'package:timed_memo/design_tokens.dart';
 import 'package:timed_memo/voice_flow.dart';
 import 'package:timed_memo/widgets/widgets.dart';
@@ -111,6 +112,55 @@ void main() {
     expect(ratio(c.brand700, c.surface), greaterThan(4.5), reason: 'links');
     expect(ratio(c.outline, c.surface), greaterThan(3.0), reason: 'input borders (1.4.11)');
     expect(ratio(c.canvas, c.surface), isNot(1.0), reason: 'page and card must differ');
+  });
+
+  test('every accent ramp carries white text and reads on the page', () {
+    double lum(Color c) {
+      double channel(double v) => v <= .03928 ? v / 12.92 : math.pow((v + .055) / 1.055, 2.4).toDouble();
+      return .2126 * channel(c.r) + .7152 * channel(c.g) + .0722 * channel(c.b);
+    }
+    double ratio(Color a, Color b) {
+      final l1 = lum(a), l2 = lum(b);
+      return (math.max(l1, l2) + .05) / (math.min(l1, l2) + .05);
+    }
+    for (final accent in MemoAccent.values) {
+      final light = MemoPalette.forAccent(accent, Brightness.light);
+      final dark = MemoPalette.forAccent(accent, Brightness.dark);
+      // A filled button is white on 500, a link is 700 on the card.
+      expect(ratio(light.brand500, Colors.white), greaterThanOrEqualTo(4.5),
+        reason: '${accent.name}: filled button label');
+      expect(ratio(light.brand700, light.surface), greaterThanOrEqualTo(7.0),
+        reason: '${accent.name}: links and labels');
+      // In dark mode the fill carries the page colour as its label.
+      expect(ratio(dark.brand500, dark.canvas), greaterThanOrEqualTo(4.5),
+        reason: '${accent.name}: dark filled button label');
+      expect(ratio(dark.brand700, dark.surface), greaterThanOrEqualTo(7.0),
+        reason: '${accent.name}: dark links');
+      expect(light.brand500, isNot(dark.brand500), reason: '${accent.name}: ramps are per-brightness');
+      // The tick drawn on a selected swatch uses inkOn; it must stay legible
+      // whichever swatch the contrast picker lands on.
+      expect(ratio(inkOn(light.brand500), light.brand500), greaterThanOrEqualTo(4.5),
+        reason: '${accent.name}: light swatch tick');
+      expect(ratio(inkOn(dark.brand500), dark.brand500), greaterThanOrEqualTo(4.5),
+        reason: '${accent.name}: dark swatch tick');
+    }
+  });
+
+  test('the hero gradient follows the accent instead of the default violet', () {
+    final teal = MemoPalette.forAccent(MemoAccent.teal, Brightness.light);
+    expect(teal.heroGradientFor(12), teal.brand.gradientDay);
+    expect(teal.heroGradientFor(7), teal.brand.gradientDawn);
+    expect(teal.heroGradientFor(22), teal.brand.gradientNight);
+    // A switched accent must not leave a violet card behind.
+    expect(teal.heroGradientFor(12).first, isNot(MemoPalette.light.heroGradientFor(12).first));
+  });
+
+  test('appearance parsing tolerates unknown or missing values', () {
+    expect(Appearance.modeOf(null), ThemeMode.system);
+    expect(Appearance.modeOf('sepia'), ThemeMode.system);
+    expect(Appearance.modeOf('dark'), ThemeMode.dark);
+    expect(Appearance.accentOf('chartreuse'), MemoAccent.violet);
+    expect(Appearance.accentOf('ember'), MemoAccent.ember);
   });
 
   testWidgets('the design tokens are registered on the theme', (tester) async {

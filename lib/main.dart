@@ -17,14 +17,18 @@ import 'design_tokens.dart';
 import 'voice_page.dart';
 import 'voice_groups_page.dart';
 import 'app_style.dart';
+import 'appearance.dart';
 import 'settings_page.dart';
 import 'voice_catalog.dart';
 import 'vibration_picker.dart';
 import 'widgets/widgets.dart';
 export 'vibration_picker.dart' show chooseVibration, vibrationLabel;
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // One channel round-trip before the first frame; without it the app would
+  // paint in the default purple and then jump to the saved accent.
+  await appearance.load();
   runApp(const MemoApp());
 }
 
@@ -53,8 +57,8 @@ TextTheme _memoTextTheme(TextTheme base, MemoType t) => TextTheme(
 class MemoApp extends StatelessWidget {
   const MemoApp({super.key});
 
-  ThemeData _theme(Brightness brightness) {
-    final tokens = brightness == Brightness.dark ? MemoTokens.dark : MemoTokens.light;
+  ThemeData _theme(Brightness brightness, MemoAccent accent) {
+    final tokens = MemoTokens.forAccent(accent, brightness);
     final c = tokens.colors;
     final t = tokens.text;
     final base = _platformTextTheme(brightness);
@@ -100,14 +104,18 @@ class MemoApp extends StatelessWidget {
     );
   }
 
-  @override Widget build(BuildContext context) => MaterialApp(
+  @override Widget build(BuildContext context) => ValueListenableBuilder<Appearance>(
+    valueListenable: appearance,
+    builder: (context, look, _) => _app(look));
+
+  Widget _app(Appearance look) => MaterialApp(
     title: '超级提醒', debugShowCheckedModeBanner: false,
     locale: const Locale('zh', 'CN'),
     supportedLocales: const [Locale('zh', 'CN')],
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
-    theme: _theme(Brightness.light),
-    darkTheme: _theme(Brightness.dark),
-    themeMode: ThemeMode.system,
+    theme: _theme(Brightness.light, look.accent),
+    darkTheme: _theme(Brightness.dark, look.accent),
+    themeMode: look.mode,
     // Status and navigation bar icons follow the theme instead of being fixed
     // to dark-on-light, which made them invisible once the page went dark.
     builder: (context, child) {
@@ -115,7 +123,7 @@ class MemoApp extends StatelessWidget {
       return AnnotatedRegion<SystemUiOverlayStyle>(
         value: (dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark).copyWith(
           statusBarColor: Colors.transparent,
-          systemNavigationBarColor: dark ? MemoPalette.dark.canvas : MemoPalette.light.canvas,
+          systemNavigationBarColor: context.colors.canvas,
           systemNavigationBarIconBrightness: dark ? Brightness.light : Brightness.dark,
           systemNavigationBarDividerColor: Colors.transparent,
           systemStatusBarContrastEnforced: false, systemNavigationBarContrastEnforced: false),
@@ -608,7 +616,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       child: Material(type: MaterialType.transparency, child: Ink(
         decoration: BoxDecoration(
           gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
-            colors: MemoColor.heroGradientFor(now.hour)),
+            colors: context.colors.heroGradientFor(now.hour)),
           borderRadius: const BorderRadius.all(Radius.circular(MemoRadius.xxl))),
         child: InkWell(onTap: () => _selecting ? _togglePick(r) : viewReminder(r),
           borderRadius: BorderRadius.circular(MemoRadius.xxl),
@@ -804,7 +812,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     try {
       action = await showModalBottomSheet<String>(context: context, isScrollControlled: true,
         useSafeArea: true, backgroundColor: Colors.transparent, barrierColor: context.colors.ink.withValues(alpha: .20),
-        builder: (_) => SettingsSheet(section: section, changes: store,
+        builder: (_) => SettingsSheet(section: section, changes: Listenable.merge([store, appearance]),
           messengerKey: _settingsMessenger, targetKey: _settingsTargetKey, target: target,
           items: (sheetContext) => _settingsItems(section.category, sheetContext)));
     } finally {
@@ -820,6 +828,9 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     final d = store.defaults, s = store.status;
     String toggle(bool value) => value ? '已开启' : '已关闭';
     return switch (entry.id) {
+      'themeMode' => switch (appearance.value.mode) {
+        ThemeMode.light => '浅色', ThemeMode.dark => '深色', _ => '跟随系统'},
+      'accent' => appearance.value.accent.label,
       'presentation' => d['presentation'] == 'drawer' ? '仅通知栏' : '横幅和通知栏',
       'lockscreen' => d['lockscreen'] == 'hidden' ? '不在锁屏显示' : '隐藏正文',
       'vibration' => vibrationLabel(d['vibration'] as String? ?? 'three'),
@@ -862,7 +873,56 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       _ => '点击前往查看',
     };
   }
+  /// Two choices, not a colour wheel: four ramps × two brightness modes is
+  /// enough to feel personal and still leaves every pair contrast-checked.
+  List<Widget> _appearanceItems(BuildContext sheetContext) {
+    final brightness = Theme.of(sheetContext).brightness;
+    return [
+      section('主题模式', '跟随系统时，深色由系统在夜间自动切换'),
+      settingsGroup([
+        for (final (mode, title, subtitle) in const [
+          (ThemeMode.system, '跟随系统', '系统切到深色时自动跟随，无需手动'),
+          (ThemeMode.light, '浅色', '白底，白天或强光下更清楚'),
+          (ThemeMode.dark, '深色', '近黑底，夜间不刺眼'),
+        ]) ListTile(
+          key: mode == ThemeMode.system ? settingKey('主题模式') : null,
+          title: Text(title), subtitle: Text(subtitle),
+          trailing: Icon(appearance.value.mode == mode ? Icons.check_circle_rounded : Icons.circle_outlined,
+            color: appearance.value.mode == mode ? context.colors.brand500 : context.colors.outline, size: 22),
+          onTap: () { HapticFeedback.selectionClick(); appearance.setMode(mode); }),
+      ]),
+      section('强调色', '按钮、主卡渐变与强调文字跟随这个颜色'),
+      settingsGroup([_accentPicker(brightness)]),
+    ];
+  }
+
+  Widget _accentPicker(Brightness brightness) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+    child: Row(children: [
+      for (final accent in MemoAccent.values) Expanded(child: GestureDetector(
+        key: ValueKey('accent-${accent.name}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () { HapticFeedback.selectionClick(); appearance.setAccent(accent); },
+        child: Column(children: [
+          AnimatedContainer(duration: MemoMotion.fast, curve: MemoMotion.curve, height: 44,
+            margin: const EdgeInsets.symmetric(horizontal: 5),
+            decoration: BoxDecoration(color: brandFor(accent, brightness).c500,
+              borderRadius: BorderRadius.circular(MemoRadius.md),
+              border: Border.all(width: 2,
+                color: appearance.value.accent == accent ? context.colors.ink : Colors.transparent)),
+            // The tick has to clear 4.5:1 on its own swatch; the light-mode
+            // ramps are dark enough for white, the dark-mode ones are not.
+            child: appearance.value.accent == accent
+              ? Icon(Icons.check_rounded, size: 20,
+                  color: inkOn(brandFor(accent, brightness).c500)) : null),
+          const SizedBox(height: 7),
+          Text(accent.label, style: context.text.caption.copyWith(
+            color: appearance.value.accent == accent ? context.colors.ink : context.colors.muted,
+            fontWeight: appearance.value.accent == accent ? FontWeight.w600 : FontWeight.w400)),
+        ])))]));
+
   List<Widget> _settingsItems(SettingsCategory category, BuildContext sheetContext) => switch (category) {
+    SettingsCategory.appearance => _appearanceItems(sheetContext),
     SettingsCategory.reminders => [
     section('默认提醒', '新提醒使用这些设置'),
     settingsGroup([

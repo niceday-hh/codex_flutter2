@@ -2,12 +2,19 @@ package com.niceday.memo;
 import android.content.*;
 
 public final class ReminderReceiver extends BroadcastReceiver {
+    /** How far the notification's "稍后" action pushes a reminder out. */
+    static final int SNOOZE_MINUTES = 10;
+
     @Override public void onReceive(Context context, Intent intent) {
         ReminderEngine engine = new ReminderEngine(context);
         try {
             String action = intent.getAction();
             if (ReminderEngine.ACK.equals(action)) {
                 engine.dismissed(intent.getIntExtra("id", 0), intent.getLongExtra("token", 0));
+            } else if (ReminderEngine.SNOOZE.equals(action)) {
+                engine.snooze(intent.getIntExtra("id", 0), intent.getLongExtra("token", 0), SNOOZE_MINUTES);
+            } else if (ReminderEngine.MUTE.equals(action)) {
+                engine.mute(intent.getIntExtra("id", 0), intent.getLongExtra("token", 0));
             } else if (ReminderEngine.ARCHIVE.equals(action) || ReminderEngine.DELETE.equals(action)) {
                 engine.cleanupAction(intent);
             } else if (ReminderEngine.BASE.equals(action) || ReminderEngine.RETRY.equals(action)) {
