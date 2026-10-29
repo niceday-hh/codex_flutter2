@@ -76,19 +76,19 @@ class _ReminderSearchPageState extends State<ReminderSearchPage> {
                   padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
                   onTap: () => Navigator.pop(context, r),
                   child: Row(children: [
-                    SizedBox(width: 54, child: Text(r.time, style: MemoText.cardTime.copyWith(fontSize: 20))),
+                    SizedBox(width: 54, child: Text(r.time, style: context.text.cardTime.copyWith(fontSize: 20))),
                     const SizedBox(width: MemoSpace.sm),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(r.text, maxLines: 1, overflow: TextOverflow.ellipsis, style: MemoText.cardTitle),
+                      Text(r.text, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.text.cardTitle),
                       const SizedBox(height: 4),
                       Text([
                         _date(r.date),
                         if (r.repeat != 'none') r.repeatLabel,
                         if (r.completed) '已完成',
                         if (r.archived && !r.completed) '已归档',
-                      ].join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis, style: MemoText.caption),
+                      ].join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis, style: context.text.caption),
                     ])),
-                    const Icon(Icons.chevron_right_rounded, color: MemoColor.muted, size: 20),
+                     Icon(Icons.chevron_right_rounded, color: context.colors.muted, size: 20),
                   ]),
                 ),
               );

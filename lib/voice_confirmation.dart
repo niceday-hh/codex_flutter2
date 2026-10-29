@@ -26,14 +26,14 @@ class VoiceConfirmation extends StatelessWidget {
     return '${date.year == reference.year ? '' : '${date.year}年'}${date.month}月${date.day}日';
   }
 
-  Widget _pill(String text, {required bool on}) => Container(
+  Widget _pill(BuildContext context, String text, {required bool on}) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
     decoration: BoxDecoration(
-      color: on ? MemoColor.brand200 : MemoColor.brand50,
+      color: on ? context.colors.brand200 : context.colors.brand50,
       borderRadius: BorderRadius.circular(MemoRadius.sm),
     ),
-    child: Text(text, style: MemoText.caption.copyWith(
-      color: on ? MemoColor.brand800 : MemoColor.muted, fontWeight: FontWeight.w600)),
+    child: Text(text, style: context.text.caption.copyWith(
+      color: on ? context.colors.brand800 : context.colors.muted, fontWeight: FontWeight.w600)),
   );
 
   @override Widget build(BuildContext context) => AnimatedBuilder(animation: flow, builder: (context, _) {
@@ -59,7 +59,7 @@ class VoiceConfirmation extends StatelessWidget {
           maxHeight: (MediaQuery.sizeOf(context).height - MediaQuery.viewInsetsOf(context).bottom - 48).clamp(200.0, 1000.0).toDouble()),
         child: Container(
           decoration: BoxDecoration(
-            color: MemoColor.surface,
+            color: context.colors.surface,
             borderRadius: BorderRadius.circular(MemoRadius.xxl),
             boxShadow: MemoShadow.float,
           ),
@@ -68,62 +68,62 @@ class VoiceConfirmation extends StatelessWidget {
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Container(width: 44, height: 44,
-                  decoration: const BoxDecoration(color: MemoColor.brand100, shape: BoxShape.circle),
-                  child: const Icon(Icons.schedule_rounded, color: MemoColor.brand500, size: 24)),
+                  decoration:  BoxDecoration(color: context.colors.brand100, shape: BoxShape.circle),
+                  child:  Icon(Icons.schedule_rounded, color: context.colors.brand500, size: 24)),
                 const SizedBox(width: MemoSpace.md),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('首次提醒', style: MemoText.overline),
+                  Text('首次提醒', style: context.text.overline),
                   const SizedBox(height: 4),
                   Text(validTime ? '${_dateLabel(r.date, parsed.reference)} $time' : '日期或时间待确认',
-                    style: const TextStyle(fontSize: 26, height: 1.2, fontWeight: FontWeight.w800,
-                      color: MemoColor.ink, fontFeatures: MemoText.tabular)),
+                    style:  TextStyle(fontSize: 26, height: 1.2, fontWeight: FontWeight.w800,
+                      color: context.colors.ink, fontFeatures: MemoText.tabular)),
                 ])),
               ]),
               const SizedBox(height: MemoSpace.xl),
               Container(padding: const EdgeInsets.all(MemoSpace.lg),
-                decoration: BoxDecoration(color: MemoColor.brand50, borderRadius: BorderRadius.circular(MemoRadius.lg)),
+                decoration: BoxDecoration(color: context.colors.brand50, borderRadius: BorderRadius.circular(MemoRadius.lg)),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('提醒内容', style: MemoText.overline),
+                  Text('提醒内容', style: context.text.overline),
                   const SizedBox(height: 6),
                   Text(r.text.isEmpty ? '没有识别到提醒正文' : r.text,
-                    style: MemoText.title.copyWith(fontSize: 20, height: 1.5)),
+                    style: context.text.title.copyWith(fontSize: 20, height: 1.5)),
                 ])),
               const SizedBox(height: MemoSpace.lg),
-              const Divider(height: 1, color: MemoColor.line),
-              MemoMetaRow(label: '语音播报', value: _pill(
+               Divider(height: 1, color: context.colors.line),
+              MemoMetaRow(label: '语音播报', value: _pill(context, 
                 '${speechOn ? '已开启' : '已关闭'}${r.speechMode == 'inherit' ? ' · 默认' : ''}', on: speechOn)),
-              const Divider(height: 1, color: MemoColor.line),
+               Divider(height: 1, color: context.colors.line),
               MemoMetaRow(label: '未确认时', value: Text(
                 r.totalCount <= 1 ? '仅提醒一次' : '每隔 ${r.intervalMinutes} 分钟提醒',
-                textAlign: TextAlign.right, style: MemoText.body)),
-              const Divider(height: 1, color: MemoColor.line),
+                textAlign: TextAlign.right, style: context.text.body)),
+               Divider(height: 1, color: context.colors.line),
               MemoMetaRow(label: '提醒次数', value: Text('共 ${r.totalCount} 次（含首次）',
-                textAlign: TextAlign.right, style: MemoText.body)),
+                textAlign: TextAlign.right, style: context.text.body)),
               if (r.repeat != 'none')
-                MemoMetaRow(label: '重复安排', value: Text(r.repeatLabel, textAlign: TextAlign.right, style: MemoText.body)),
+                MemoMetaRow(label: '重复安排', value: Text(r.repeatLabel, textAlign: TextAlign.right, style: context.text.body)),
               const SizedBox(height: MemoSpace.xs),
               const MemoHint('确认已读后停止后续提醒。'),
               if (extra.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: MemoHint(extra)),
               if (error != null) Container(
                 margin: const EdgeInsets.only(top: MemoSpace.md),
                 padding: const EdgeInsets.all(MemoSpace.md),
-                decoration: BoxDecoration(color: MemoColor.dangerSurface, borderRadius: BorderRadius.circular(MemoRadius.sm)),
+                decoration: BoxDecoration(color: context.colors.dangerSurface, borderRadius: BorderRadius.circular(MemoRadius.sm)),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Icon(Icons.error_outline_rounded, size: 18, color: MemoColor.danger),
+                   Icon(Icons.error_outline_rounded, size: 18, color: context.colors.danger),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(error, style: MemoText.label.copyWith(color: MemoColor.danger, height: 1.5))),
+                  Expanded(child: Text(error, style: context.text.label.copyWith(color: context.colors.danger, height: 1.5))),
                 ])),
               const SizedBox(height: MemoSpace.xl),
               Container(padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-                decoration: BoxDecoration(color: MemoColor.brand100, borderRadius: BorderRadius.circular(MemoRadius.md)),
+                decoration: BoxDecoration(color: context.colors.brand100, borderRadius: BorderRadius.circular(MemoRadius.md)),
                 child: Row(children: [
-                  Icon(listening ? Icons.mic_rounded : Icons.info_outline_rounded, color: MemoColor.brand700, size: 20),
+                  Icon(listening ? Icons.mic_rounded : Icons.info_outline_rounded, color: context.colors.brand700, size: 20),
                   const SizedBox(width: 9),
-                  Expanded(child: Text(status, style: MemoText.label.copyWith(
-                    color: MemoColor.brand800, fontWeight: FontWeight.w600))),
+                  Expanded(child: Text(status, style: context.text.label.copyWith(
+                    color: context.colors.brand800, fontWeight: FontWeight.w600))),
                   if (listening) ValueListenableBuilder<int>(valueListenable: flow.countdown,
                     builder: (_, seconds, __) => Text('$seconds 秒',
-                      style: MemoText.caption.copyWith(color: MemoColor.brand700, fontFeatures: MemoText.tabular))),
+                      style: context.text.caption.copyWith(color: context.colors.brand700, fontFeatures: MemoText.tabular))),
                 ])),
               const Padding(padding: EdgeInsets.only(top: 8, bottom: 14),
                 child: MemoHint('可说“确认”“重新录音”或“取消”。', align: TextAlign.center)),
@@ -140,10 +140,10 @@ class VoiceConfirmation extends StatelessWidget {
               const SizedBox(height: MemoSpace.md),
               FilledButton(onPressed: saving || error != null ? null : () { HapticFeedback.lightImpact(); flow.confirm(); },
                 style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
-                child: Text(saving ? '正在保存…' : '确认创建', style: MemoText.button.copyWith(fontSize: 16))),
+                child: Text(saving ? '正在保存…' : '确认创建', style: context.text.button.copyWith(fontSize: 16))),
               const SizedBox(height: 2),
               TextButton(onPressed: saving ? null : flow.cancel,
-                child: Text('取消', style: MemoText.body.copyWith(color: MemoColor.muted))),
+                child: Text('取消', style: context.text.body.copyWith(color: context.colors.muted))),
             ])),
         ),
       ),

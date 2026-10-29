@@ -21,22 +21,22 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _group(List<SettingsSection> sections) => MemoCard(shadow: false, padding: EdgeInsets.zero,
     child: Column(children: [for (var i = 0; i < sections.length; i++) ...[
-      if (i > 0) const Divider(height: 1, indent: 76, endIndent: 18, color: MemoColor.line),
+      if (i > 0)  Divider(height: 1, indent: 76, endIndent: 18, color: context.colors.line),
       ListTile(key: ValueKey('settings-${sections[i].category.name}'),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MemoRadius.xl)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         leading: Container(width: 40, height: 40,
-          decoration: BoxDecoration(color: MemoColor.brand100, borderRadius: BorderRadius.circular(MemoRadius.md)),
-          child: Icon(sections[i].icon, color: MemoColor.brand500, size: 22)),
-        title: Text(sections[i].title, style: MemoText.subtitle.copyWith(fontSize: 16)),
+          decoration: BoxDecoration(color: context.colors.brand100, borderRadius: BorderRadius.circular(MemoRadius.md)),
+          child: Icon(sections[i].icon, color: context.colors.brand500, size: 22)),
+        title: Text(sections[i].title, style: context.text.subtitle.copyWith(fontSize: 16)),
         subtitle: Padding(padding: const EdgeInsets.only(top: 3), child: Text(sections[i].subtitle,
-          style: MemoText.caption.copyWith(height: 1.5))),
-        trailing: const Icon(Icons.chevron_right_rounded, color: MemoColor.muted, size: 20),
+          style: context.text.caption.copyWith(height: 1.5))),
+        trailing:  Icon(Icons.chevron_right_rounded, color: context.colors.muted, size: 20),
         onTap: () { FocusScope.of(context).unfocus(); widget.onOpen(sections[i]); }),
     ]]));
 
   Widget _label(String title) => Padding(padding: const EdgeInsets.fromLTRB(4, MemoSpace.xxl, 4, MemoSpace.sm),
-    child: Text(title, style: MemoText.overline));
+    child: Text(title, style: context.text.overline));
 
   Future<void> _preview(SettingsEntry entry) async {
     if (_previewing) return;
@@ -44,24 +44,24 @@ class _SettingsPageState extends State<SettingsPage> {
     bool? open;
     try {
       open = await showDialog<bool>(context: context, builder: (context) => Dialog(
-        clipBehavior: Clip.antiAlias, backgroundColor: MemoColor.surface,
+        clipBehavior: Clip.antiAlias, backgroundColor: context.colors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MemoRadius.xxl)),
         child: ConstrainedBox(constraints: BoxConstraints(maxWidth: 440, maxHeight: MediaQuery.sizeOf(context).height * .8),
           child: SingleChildScrollView(padding: const EdgeInsets.all(MemoSpace.xxl), child: Column(
             mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Text(entry.section.title, style: MemoText.overline.copyWith(color: MemoColor.brand700)),
+              Text(entry.section.title, style: context.text.overline.copyWith(color: context.colors.brand700)),
               const SizedBox(height: MemoSpace.md),
-              Text(entry.title, style: MemoText.title),
+              Text(entry.title, style: context.text.title),
               const SizedBox(height: MemoSpace.lg),
               Container(padding: const EdgeInsets.all(MemoSpace.lg),
-                decoration: BoxDecoration(color: MemoColor.brand100, borderRadius: BorderRadius.circular(MemoRadius.md)),
-                child: Text('当前：${widget.currentValue(entry)}', style: MemoText.subtitle.copyWith(color: MemoColor.brand800))),
+                decoration: BoxDecoration(color: context.colors.brand100, borderRadius: BorderRadius.circular(MemoRadius.md)),
+                child: Text('当前：${widget.currentValue(entry)}', style: context.text.subtitle.copyWith(color: context.colors.brand800))),
               const SizedBox(height: MemoSpace.lg),
-              Text(entry.description, style: MemoText.body.copyWith(color: MemoColor.muted, height: 1.6)),
+              Text(entry.description, style: context.text.body.copyWith(color: context.colors.muted, height: 1.6)),
               const SizedBox(height: MemoSpace.xxl),
               FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('前往设置')),
               TextButton(onPressed: () => Navigator.pop(context, false),
-                child: Text('关闭预览', style: MemoText.subtitle.copyWith(color: MemoColor.muted))),
+                child: Text('关闭预览', style: context.text.subtitle.copyWith(color: context.colors.muted))),
             ])))));
     } finally { _previewing = false; }
     if (mounted && open == true) await widget.onOpen(entry.section, target: entry);
@@ -73,15 +73,15 @@ class _SettingsPageState extends State<SettingsPage> {
       child: Padding(padding: const EdgeInsets.all(MemoSpace.lg), child: Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            Expanded(child: Text(entry.title, style: MemoText.subtitle.copyWith(fontSize: 16))),
-            const Icon(Icons.preview_outlined, color: MemoColor.brand500, size: 20),
+            Expanded(child: Text(entry.title, style: context.text.subtitle.copyWith(fontSize: 16))),
+             Icon(Icons.preview_outlined, color: context.colors.brand500, size: 20),
           ]),
           const SizedBox(height: 6),
           Text('${entry.section.title} · 当前：${widget.currentValue(entry)}',
-            style: MemoText.caption.copyWith(color: MemoColor.brand700)),
+            style: context.text.caption.copyWith(color: context.colors.brand700)),
           const SizedBox(height: 4),
           Text(entry.description, maxLines: 2, overflow: TextOverflow.ellipsis,
-            style: MemoText.caption.copyWith(height: 1.5)),
+            style: context.text.caption.copyWith(height: 1.5)),
         ]))));
 
   @override Widget build(BuildContext context) {
@@ -89,8 +89,8 @@ class _SettingsPageState extends State<SettingsPage> {
     final matches = settingsEntries.where((s) => s.matches(query)).toList();
     return ListView(key: const PageStorageKey('settings-overview'),
       padding: const EdgeInsets.fromLTRB(22, 26, 22, 24), children: [
-      Text('设置', style: MemoText.display), const SizedBox(height: 6),
-      Text('让提醒，更适合你。', style: MemoText.body.copyWith(color: MemoColor.muted)),
+      Text('设置', style: context.text.display), const SizedBox(height: 6),
+      Text('让提醒，更适合你。', style: context.text.body.copyWith(color: context.colors.muted)),
       const SizedBox(height: MemoSpace.xxl),
       MemoSearchField(fieldKey: const ValueKey('settings-search'), controller: search, hint: '搜索设置',
         onChanged: (_) => setState(() {}), showClear: query.isNotEmpty,
@@ -105,7 +105,7 @@ class _SettingsPageState extends State<SettingsPage> {
           subtitle: '试试“铃声”“语音”或“振动”'),
       ],
       const SizedBox(height: MemoSpace.xxl),
-      Text('超级提醒 · ${widget.version}', textAlign: TextAlign.center, style: MemoText.caption),
+      Text('超级提醒 · ${widget.version}', textAlign: TextAlign.center, style: context.text.caption),
     ]);
   }
 }
@@ -169,15 +169,15 @@ class _SettingsActionTileState extends State<SettingsActionTile> {
     finally { if (mounted) setState(() => busy = false); }
   }
   @override Widget build(BuildContext context) => Material(
-    color: widget.highlighted ? MemoColor.brand50 : Colors.transparent,
+    color: widget.highlighted ? context.colors.brand50 : Colors.transparent,
     child: ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      leading: Icon(widget.icon, color: MemoColor.brand500, size: 22),
-      title: Text(widget.title, style: MemoText.body.copyWith(fontWeight: FontWeight.w500)),
+      leading: Icon(widget.icon, color: context.colors.brand500, size: 22),
+      title: Text(widget.title, style: context.text.body.copyWith(fontWeight: FontWeight.w500)),
       subtitle: widget.value.isEmpty ? null : Padding(padding: const EdgeInsets.only(top: 3),
-        child: Text(widget.value, style: MemoText.caption.copyWith(height: 1.45))),
+        child: Text(widget.value, style: context.text.caption.copyWith(height: 1.45))),
       trailing: busy
         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-        : const Icon(Icons.chevron_right_rounded, color: MemoColor.muted, size: 20),
+        :  Icon(Icons.chevron_right_rounded, color: context.colors.muted, size: 20),
       onTap: busy ? null : _run));
 }

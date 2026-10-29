@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'app_style.dart';
 import 'design_tokens.dart';
 import 'app_error.dart';
 import 'reminder.dart';
@@ -52,23 +51,23 @@ class _VibrationPickerState extends State<VibrationPicker> {
       const Padding(padding: EdgeInsets.all(12), child: Text('振动模式', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
       Semantics(liveRegion: true, child: Container(width: double.infinity,
         margin: const EdgeInsets.fromLTRB(20, 2, 20, 12), padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: failed ? MemoColor.dangerSurface : lavender, borderRadius: BorderRadius.circular(16)),
+        decoration: BoxDecoration(color: failed ? context.colors.dangerSurface : context.colors.brand100, borderRadius: BorderRadius.circular(16)),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Icon(failed ? Icons.info_outline : active != null ? Icons.vibration : Icons.check_circle_outline,
-            color: failed ? MemoColor.danger : purple, size: 21), const SizedBox(width: 10),
+            color: failed ? context.colors.danger : context.colors.brand500, size: 21), const SizedBox(width: 10),
           Expanded(child: Text(message, key: const ValueKey('vibration-feedback'), style: const TextStyle(fontSize: 13, height: 1.5))),
         ]))),
       Flexible(child: SingleChildScrollView(child: Column(children: vibrations.entries.map((e) => ListTile(
         title: Text(e.value), subtitle: Text(vibrationHints[e.key]!, style: const TextStyle(fontSize: 12)),
         trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-          if (e.key == widget.current) const Icon(Icons.check_rounded, color: purple),
+          if (e.key == widget.current)  Icon(Icons.check_rounded, color: context.colors.brand500),
           if (e.key != 'system' && e.key != 'off') IconButton(tooltip: '试振${e.value}',
             icon: active == e.key ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(Icons.vibration, color: purple),
+              :  Icon(Icons.vibration, color: context.colors.brand500),
             onPressed: active == null ? () => _preview(e.key, e.value) : null),
         ]), onTap: () => Navigator.pop(context, e.key))).toList()))),
-      const Padding(padding: EdgeInsets.fromLTRB(20, 10, 20, 20), child: Text(
+       Padding(padding: EdgeInsets.fromLTRB(20, 10, 20, 20), child: Text(
         '试振和实际提醒使用相同的振动用途，由系统振动与勿扰中的闹钟设置决定。实际提醒还受通知通道设置控制；系统默认节奏请用15秒通知测试。',
-        style: TextStyle(color: muted, fontSize: 12, height: 1.5))),
+        style: TextStyle(color: context.colors.muted, fontSize: 12, height: 1.5))),
     ])));
 }

@@ -39,7 +39,7 @@ class _TaskLibraryPageState extends State<TaskLibraryPage> {
             return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               if (heading) Padding(padding: const EdgeInsets.fromLTRB(24, 16, 24, 10),
                 child: Text('${date.year}年${date.month}月${date.day}日',
-                  style: MemoText.overline.copyWith(color: MemoColor.inkSoft))),
+                  style: context.text.overline.copyWith(color: context.colors.inkSoft))),
               widget.card(r),
             ]);
           })),

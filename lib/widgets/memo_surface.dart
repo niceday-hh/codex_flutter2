@@ -46,8 +46,8 @@ class _MemoCardState extends State<MemoCard> {
   Widget build(BuildContext context) {
     final shape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(widget.radius),
-      side: widget.selected ? const BorderSide(color: MemoColor.brand600, width: 1.6)
-        : widget.border ? const BorderSide(color: MemoColor.line) : BorderSide.none,
+      side: widget.selected ?  BorderSide(color: context.colors.brand600, width: 1.6)
+        : widget.border ?  BorderSide(color: context.colors.line) : BorderSide.none,
     );
     final content = widget.padding == EdgeInsets.zero
       ? widget.child : Padding(padding: widget.padding, child: widget.child);
@@ -65,7 +65,7 @@ class _MemoCardState extends State<MemoCard> {
         duration: MemoMotion.press,
         curve: MemoMotion.curve,
         child: Material(
-          color: widget.color ?? (widget.selected ? MemoColor.brand50 : MemoColor.surface),
+          color: widget.color ?? (widget.selected ? context.colors.brand50 : context.colors.surface),
           shape: shape,
           clipBehavior: Clip.antiAlias,
           child: widget.onTap == null && widget.onLongPress == null
@@ -90,38 +90,48 @@ class MemoTag extends StatelessWidget {
   const MemoTag(this.text, {super.key, this.emphasized = false});
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: MemoSpace.sm, vertical: 3),
-    decoration: BoxDecoration(
-      color: emphasized ? MemoColor.amberDeep : MemoColor.brand100,
-      borderRadius: BorderRadius.circular(MemoRadius.sm),
-    ),
-    child: Text(text, style: MemoText.overline.copyWith(
-      color: emphasized ? Colors.white : MemoColor.brand700, height: 1.35)),
-  );
+  Widget build(BuildContext context) {
+    // The unread chip is the only solid fill in the list. On a dark page the
+    // deep amber does not carry white text any more (#C9761D caps at 3.0:1),
+    // so the fill lightens and the label flips to the page colour — 8.7:1.
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: MemoSpace.sm, vertical: 3),
+      decoration: BoxDecoration(
+        color: emphasized ? (dark ? context.colors.amber : context.colors.amberDeep)
+          : context.colors.brand100,
+        borderRadius: BorderRadius.circular(MemoRadius.sm),
+      ),
+      child: Text(text, style: context.text.overline.copyWith(
+        color: emphasized ? (dark ? context.colors.canvas : Colors.white)
+          : context.colors.brand700, height: 1.35)),
+    );
+  }
 }
 
 /// Permission / status strip that leads somewhere. Tinted surface, not a shadow.
 class MemoBanner extends StatelessWidget {
   final IconData icon;
   final String text;
-  final Color background, foreground;
+  final Color? background, foreground;
   final VoidCallback? onTap;
 
   const MemoBanner({
     super.key,
     required this.icon,
     required this.text,
-    this.background = MemoColor.warningSurface,
-    this.foreground = MemoColor.warning,
+    this.background,
+    this.foreground,
     this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(MemoRadius.lg);
+    final tint = background ?? context.colors.warningSurface;
+    final inkOnTint = foreground ?? context.colors.warning;
     return Material(
-      color: background,
+      color: tint,
       borderRadius: radius,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -130,10 +140,10 @@ class MemoBanner extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
           child: Row(children: [
-            Icon(icon, color: foreground, size: 20),
+            Icon(icon, color: inkOnTint, size: 20),
             const SizedBox(width: MemoSpace.md),
-            Expanded(child: Text(text, style: MemoText.label.copyWith(color: MemoColor.ink))),
-            if (onTap != null) Icon(Icons.chevron_right_rounded, color: foreground, size: 20),
+            Expanded(child: Text(text, style: context.text.label.copyWith(color: context.colors.ink))),
+            if (onTap != null) Icon(Icons.chevron_right_rounded, color: inkOnTint, size: 20),
           ]),
         ),
       ),

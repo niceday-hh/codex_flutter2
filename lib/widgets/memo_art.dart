@@ -5,8 +5,8 @@ import '../design_tokens.dart';
 /// Empty-state illustration: a note card, three lines, a small bell.
 ///
 /// Drawn with paths rather than shipped as an asset — no bundle weight, no
-/// second copy for 3×, and every colour comes from the palette so it cannot
-/// drift away from the rest of the interface.
+/// second copy for 3×, and every colour comes from the active palette so the
+/// drawing flips with the theme instead of glowing white on a dark page.
 class MemoEmptyArt extends StatelessWidget {
   final double size;
   const MemoEmptyArt({super.key, this.size = 148});
@@ -14,17 +14,20 @@ class MemoEmptyArt extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SizedBox(
     width: size, height: size * .78,
-    child: CustomPaint(painter: _EmptyArtPainter()),
+    child: CustomPaint(painter: _EmptyArtPainter(context.colors)),
   );
 }
 
 class _EmptyArtPainter extends CustomPainter {
+  final MemoPalette c;
+  const _EmptyArtPainter(this.c);
+
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width, h = size.height;
 
-    canvas.drawCircle(Offset(w * .46, h * .54), w * .34, Paint()..color = MemoColor.brand100);
-    canvas.drawCircle(Offset(w * .78, h * .24), w * .085, Paint()..color = MemoColor.amberSurface);
+    canvas.drawCircle(Offset(w * .46, h * .54), w * .34, Paint()..color = c.brand100);
+    canvas.drawCircle(Offset(w * .78, h * .24), w * .085, Paint()..color = c.amberSurface);
 
     final note = RRect.fromRectAndRadius(
       Rect.fromCenter(center: Offset(w * .46, h * .54), width: w * .44, height: h * .54),
@@ -34,26 +37,26 @@ class _EmptyArtPainter extends CustomPainter {
     canvas.translate(w * .46, h * .54);
     canvas.rotate(-.055);
     canvas.translate(-w * .46, -h * .54);
-    canvas.drawRRect(note, Paint()..color = MemoColor.surface);
+    canvas.drawRRect(note, Paint()..color = c.surface);
     canvas.drawRRect(note, Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.4
-      ..color = MemoColor.lineStrong);
-    final line = Paint()
-      ..color = MemoColor.lineStrong
+      ..color = c.lineStrong);
+    final rule = Paint()
+      ..color = c.lineStrong
       ..strokeWidth = 2.2
       ..strokeCap = StrokeCap.round;
     for (var i = 0; i < 3; i++) {
       final y = note.top + note.height * (.30 + i * .19);
       final right = i == 2 ? note.left + note.width * .62 : note.right - note.width * .16;
-      canvas.drawLine(Offset(note.left + note.width * .16, y), Offset(right, y), line);
+      canvas.drawLine(Offset(note.left + note.width * .16, y), Offset(right, y), rule);
     }
     canvas.restore();
 
     // A bell, not a dome on a stick: body, base line, clapper.
     final bell = Offset(w * .74, h * .33);
-    final stroke = Paint()
-      ..color = MemoColor.amber
+    final bellStroke = Paint()
+      ..color = c.amber
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.4
       ..strokeCap = StrokeCap.round
@@ -64,12 +67,12 @@ class _EmptyArtPainter extends CustomPainter {
       ..lineTo(bell.dx - r, bell.dy + r * .08)
       ..arcToPoint(Offset(bell.dx + r, bell.dy + r * .08), radius: Radius.circular(r), clockwise: true)
       ..lineTo(bell.dx + r, bell.dy + r * .62);
-    canvas.drawPath(body, stroke);
+    canvas.drawPath(body, bellStroke);
     canvas.drawLine(Offset(bell.dx - r * 1.1, bell.dy + r * .62),
-      Offset(bell.dx + r * 1.1, bell.dy + r * .62), stroke);
-    canvas.drawCircle(Offset(bell.dx, bell.dy + r * .95), r * .17, Paint()..color = MemoColor.amber);
+      Offset(bell.dx + r * 1.1, bell.dy + r * .62), bellStroke);
+    canvas.drawCircle(Offset(bell.dx, bell.dy + r * .95), r * .17, Paint()..color = c.amber);
   }
 
   @override
-  bool shouldRepaint(_EmptyArtPainter oldDelegate) => false;
+  bool shouldRepaint(_EmptyArtPainter oldDelegate) => !identical(oldDelegate.c, c);
 }

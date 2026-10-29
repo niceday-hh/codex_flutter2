@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'app_style.dart';
 import 'design_tokens.dart';
 
 /// A bounded RMS-amplitude history, updated by the existing PCM recorder at 10 Hz.
@@ -30,17 +29,18 @@ class RecordingWaveform extends StatelessWidget {
   const RecordingWaveform({super.key, required this.meter});
   @override Widget build(BuildContext context) => Column(children: [
     RepaintBoundary(child: SizedBox(height: 38, width: double.infinity,
-      child: CustomPaint(painter: RecordingWavePainter(meter)))),
+      child: CustomPaint(painter: RecordingWavePainter(meter, context.colors.brand500)))),
     const SizedBox(height: 8), AnimatedBuilder(animation: meter, builder: (_, child) =>
-      Text(meter.description, style: const TextStyle(color: muted, fontSize: 12))),
+      Text(meter.description, style:  TextStyle(color: context.colors.muted, fontSize: 12))),
   ]);
 }
 
 class RecordingWavePainter extends CustomPainter {
   final RecordingMeter meter;
-  RecordingWavePainter(this.meter) : super(repaint: meter);
+  final Color color;
+  RecordingWavePainter(this.meter, this.color) : super(repaint: meter);
   @override void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = MemoColor.brand500.withValues(alpha: meter.active ? 0.8 : 0.25)
+    final paint = Paint()..color = color.withValues(alpha: meter.active ? 0.8 : 0.25)
       ..strokeWidth = 3..strokeCap = StrokeCap.round;
     final step = (size.width / meter.levels.length).clamp(0.0, 7.0);
     for (var i = 0; i < meter.levels.length; i++) {

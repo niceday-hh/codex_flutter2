@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'app_style.dart';
 import 'design_tokens.dart';
 import 'app_error.dart';
 import 'reminder.dart';
@@ -104,14 +103,14 @@ class _ReminderAudioPanelState extends State<ReminderAudioPanel> {
       final failure = own && preview.error != null;
       final message = failure ? preview.error! : playing ? _playingMessage : _message;
       return Container(width: double.infinity, padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: lavender, borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(color: context.colors.brand100, borderRadius: BorderRadius.circular(20)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('提醒音频', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
           const SizedBox(height: 8),
           Semantics(liveRegion: true, child: Text(message, key: const ValueKey('reminder-audio-feedback'),
-            style: TextStyle(color: _failed || failure ? MemoColor.danger : muted, fontSize: 13, height: 1.5))),
-          if (widget.reminder.speechState == 'off') const Padding(padding: EdgeInsets.only(top: 8), child: Text(
-            '到点语音播报当前关闭；试听和保存不会开启它。', style: TextStyle(color: muted, fontSize: 12))),
+            style: TextStyle(color: _failed || failure ? context.colors.danger : context.colors.muted, fontSize: 13, height: 1.5))),
+          if (widget.reminder.speechState == 'off')  Padding(padding: EdgeInsets.only(top: 8), child: Text(
+            '到点语音播报当前关闭；试听和保存不会开启它。', style: TextStyle(color: context.colors.muted, fontSize: 12))),
           const SizedBox(height: 14),
           Wrap(spacing: 10, runSpacing: 10, children: [
             OutlinedButton.icon(key: const ValueKey('preview-reminder-audio'),

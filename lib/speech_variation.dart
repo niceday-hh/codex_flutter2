@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'app_style.dart';
+import 'design_tokens.dart';
 
 class SpeechVariation {
   final double noise, noiseW;
@@ -16,23 +16,23 @@ Future<SpeechVariation?> chooseSpeechVariation(BuildContext context, {required d
         crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const Text('高级语音设置', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
         const SizedBox(height: 12),
-        const Text('调整同一音色的生成变化。新的参数会用于重新准备音频；选定的版本会保存并重复使用。',
-          style: TextStyle(color: muted, height: 1.5)),
+         Text('调整同一音色的生成变化。新的参数会用于重新准备音频；选定的版本会保存并重复使用。',
+          style: TextStyle(color: context.colors.muted, height: 1.5)),
         if (allowDefault) SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('跟随默认参数'),
           value: inherited, onChanged: (v) => update(() => inherited = v)),
         const SizedBox(height: 20),
         Text('声音变化 · ${(inherited ? defaultNoise : value).toStringAsFixed(3)}',
           style: const TextStyle(fontWeight: FontWeight.w600)),
-        const SizedBox(height: 6), const Text('noise_scale · 影响声音细节的变化幅度，不是明确的情绪强度。',
-          style: TextStyle(color: muted, fontSize: 12, height: 1.5)),
+        const SizedBox(height: 6),  Text('noise_scale · 影响声音细节的变化幅度，不是明确的情绪强度。',
+          style: TextStyle(color: context.colors.muted, fontSize: 12, height: 1.5)),
         Slider(key: const ValueKey('speech-noise'), min: .1, max: 1, divisions: 90,
           value: (inherited ? defaultNoise : value).clamp(.1, 1).toDouble(),
           label: value.toStringAsFixed(3), onChanged: inherited ? null : (v) => update(() => value = (v * 1000).round() / 1000)),
         const SizedBox(height: 12),
         Text('节奏变化 · ${(inherited ? defaultNoiseW : timing).toStringAsFixed(3)}',
           style: const TextStyle(fontWeight: FontWeight.w600)),
-        const SizedBox(height: 6), const Text('noise_scale_w · 影响音素时长的变化幅度；整体快慢仍由语速设置控制。',
-          style: TextStyle(color: muted, fontSize: 12, height: 1.5)),
+        const SizedBox(height: 6),  Text('noise_scale_w · 影响音素时长的变化幅度；整体快慢仍由语速设置控制。',
+          style: TextStyle(color: context.colors.muted, fontSize: 12, height: 1.5)),
         Slider(key: const ValueKey('speech-noise-w'), min: .1, max: 1, divisions: 90,
           value: (inherited ? defaultNoiseW : timing).clamp(.1, 1).toDouble(),
           label: timing.toStringAsFixed(3), onChanged: inherited ? null : (v) => update(() => timing = (v * 1000).round() / 1000)),

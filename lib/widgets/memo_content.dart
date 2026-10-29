@@ -14,9 +14,9 @@ class MemoPageHeader extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(MemoSpace.xxl, MemoSpace.xxl, MemoSpace.xxl, MemoSpace.xl),
     child: Row(children: [
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: MemoText.display),
+        Text(title, style: context.text.display),
         const SizedBox(height: 6),
-        Text(subtitle, style: MemoText.body.copyWith(color: MemoColor.muted)),
+        Text(subtitle, style: context.text.body.copyWith(color: context.colors.muted)),
       ])),
       if (trailing != null) trailing!,
     ]),
@@ -33,9 +33,9 @@ class MemoSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(MemoSpace.xxl, MemoSpace.xxl + 4, MemoSpace.xxl, MemoSpace.md),
     child: Row(children: [
-      Text(title, style: MemoText.headline),
+      Text(title, style: context.text.headline),
       const Spacer(),
-      if (trailing.isNotEmpty) Text(trailing, style: MemoText.caption),
+      if (trailing.isNotEmpty) Text(trailing, style: context.text.caption),
     ]),
   );
 }
@@ -68,13 +68,13 @@ class MemoEmptyState extends StatelessWidget {
     child: Column(children: [
       art ?? Container(
         width: 76, height: 76,
-        decoration: const BoxDecoration(color: MemoColor.brand100, shape: BoxShape.circle),
-        child: Icon(icon, size: 32, color: MemoColor.brand500),
+        decoration:  BoxDecoration(color: context.colors.brand100, shape: BoxShape.circle),
+        child: Icon(icon, size: 32, color: context.colors.brand500),
       ),
       const SizedBox(height: MemoSpace.xl),
-      Text(title, textAlign: TextAlign.center, style: MemoText.headline),
+      Text(title, textAlign: TextAlign.center, style: context.text.headline),
       const SizedBox(height: MemoSpace.sm),
-      Text(subtitle, textAlign: TextAlign.center, style: MemoText.label.copyWith(color: MemoColor.muted)),
+      Text(subtitle, textAlign: TextAlign.center, style: context.text.label.copyWith(color: context.colors.muted)),
       if (actionLabel != null) ...[
         const SizedBox(height: MemoSpace.xl),
         FilledButton.icon(
@@ -114,32 +114,32 @@ class MemoSearchField extends StatelessWidget {
     controller: controller,
     onChanged: onChanged,
     textInputAction: TextInputAction.search,
-    style: MemoText.body,
+    style: context.text.body,
     decoration: InputDecoration(
       hintText: hint,
-      hintStyle: MemoText.body.copyWith(color: MemoColor.muted),
+      hintStyle: context.text.body.copyWith(color: context.colors.muted),
       filled: true,
-      fillColor: MemoColor.surface,
+      fillColor: context.colors.surface,
       isDense: true,
       contentPadding: const EdgeInsets.symmetric(vertical: 13),
-      prefixIcon: const Icon(Icons.search_rounded, color: MemoColor.muted, size: 21),
+      prefixIcon:  Icon(Icons.search_rounded, color: context.colors.muted, size: 21),
       suffixIcon: showClear
         ? IconButton(
             tooltip: '清空搜索',
-            icon: const Icon(Icons.close_rounded, size: 19, color: MemoColor.muted),
+            icon:  Icon(Icons.close_rounded, size: 19, color: context.colors.muted),
             onPressed: onClear)
         : null,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(MemoRadius.md),
-        borderSide: const BorderSide(color: MemoColor.outline),
+        borderSide:  BorderSide(color: context.colors.outline),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(MemoRadius.md),
-        borderSide: const BorderSide(color: MemoColor.outline),
+        borderSide:  BorderSide(color: context.colors.outline),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(MemoRadius.md),
-        borderSide: const BorderSide(color: MemoColor.brand600, width: 1.6),
+        borderSide:  BorderSide(color: context.colors.brand600, width: 1.6),
       ),
     ),
   );
@@ -155,7 +155,7 @@ class MemoMetaRow extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 12),
     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Expanded(flex: 2, child: Text(label, style: MemoText.body.copyWith(color: MemoColor.muted))),
+      Expanded(flex: 2, child: Text(label, style: context.text.body.copyWith(color: context.colors.muted))),
       const SizedBox(width: MemoSpace.md),
       Expanded(flex: 3, child: Align(alignment: Alignment.centerRight, child: value)),
     ]),
@@ -172,6 +172,6 @@ class MemoHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: padding,
-    child: Text(text, textAlign: align, style: MemoText.caption.copyWith(height: 1.6)),
+    child: Text(text, textAlign: align, style: context.text.caption.copyWith(height: 1.6)),
   );
 }

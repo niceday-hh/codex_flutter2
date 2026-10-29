@@ -18,8 +18,8 @@ class MemoSheetShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    decoration: const BoxDecoration(
-      color: MemoColor.surface,
+    decoration:  BoxDecoration(
+      color: context.colors.surface,
       borderRadius: BorderRadius.vertical(top: Radius.circular(MemoRadius.xxl)),
       boxShadow: MemoShadow.sheet,
     ),
@@ -31,18 +31,18 @@ class MemoSheetShell extends StatelessWidget {
           padding: const EdgeInsets.only(top: 10, bottom: 8),
           child: Container(
             width: 36, height: 4,
-            decoration: BoxDecoration(color: MemoColor.lineStrong, borderRadius: BorderRadius.circular(MemoRadius.pill)),
+            decoration: BoxDecoration(color: context.colors.lineStrong, borderRadius: BorderRadius.circular(MemoRadius.pill)),
           ),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(22, 0, 14, 12),
           child: Row(children: [
-            Expanded(child: Text(title, style: MemoText.title)),
+            Expanded(child: Text(title, style: context.text.title)),
             if (onClose != null)
               IconButton(
                 tooltip: '关闭设置分类',
                 onPressed: onClose,
-                style: IconButton.styleFrom(backgroundColor: MemoColor.brand100, foregroundColor: MemoColor.muted),
+                style: IconButton.styleFrom(backgroundColor: context.colors.brand100, foregroundColor: context.colors.muted),
                 icon: const Icon(Icons.close_rounded, size: 20),
               ),
           ]),
@@ -51,9 +51,9 @@ class MemoSheetShell extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(22, 0, 22, 10),
             child: Row(children: [
-              const Icon(Icons.search_rounded, size: 15, color: MemoColor.brand500),
+               Icon(Icons.search_rounded, size: 15, color: context.colors.brand500),
               const SizedBox(width: 6),
-              Expanded(child: Text(hint!, style: MemoText.caption.copyWith(color: MemoColor.brand700))),
+              Expanded(child: Text(hint!, style: context.text.caption.copyWith(color: context.colors.brand700))),
             ]),
           ),
         Expanded(child: child),

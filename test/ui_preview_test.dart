@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:timed_memo/design_tokens.dart';
 import 'package:timed_memo/main.dart';
 import 'package:timed_memo/settings_page.dart';
 import 'package:timed_memo/reminder.dart';
@@ -134,11 +135,11 @@ void main() {
     await flow.reviewText('今天22:30提醒我喝水，休息一下眼睛，每隔3分钟提醒，总共提醒5次，开启语音播报');
     flow.secondsLeft = 18;
     await tester.pumpWidget(RepaintBoundary(key: previewKey, child: MaterialApp(debugShowCheckedModeBanner: false, theme: ThemeData(useMaterial3: true,
-      fontFamily: 'Roboto', colorScheme: ColorScheme.fromSeed(seedColor: purple), scaffoldBackgroundColor: canvas,
-      filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(backgroundColor: purple, foregroundColor: Colors.white,
+      fontFamily: 'Roboto', colorScheme: ColorScheme.fromSeed(seedColor: MemoColor.brand500), scaffoldBackgroundColor: MemoColor.canvas,
+      filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(backgroundColor: MemoColor.brand500, foregroundColor: Colors.white,
         minimumSize: const Size.fromHeight(52), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))))),
       home: Scaffold(body: VoicePage(flow: flow)))));
-    unawaited(showDialog<void>(context: tester.element(find.byType(Scaffold)), barrierColor: ink.withValues(alpha: .20),
+    unawaited(showDialog<void>(context: tester.element(find.byType(Scaffold)), barrierColor: MemoColor.ink.withValues(alpha: .20),
       builder: (_) => VoiceConfirmation(flow: flow, onEdit: () async {})));
     await tester.pump(); await tester.pump(const Duration(milliseconds: 300));
     expect(find.byType(VoiceConfirmation), findsOneWidget);

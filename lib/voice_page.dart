@@ -23,21 +23,21 @@ class _VoicePageState extends State<VoicePage> {
   @override void initState() { super.initState(); text.text = flow.text; flow.addListener(update); }
   @override void dispose() { flow.removeListener(update); text.dispose(); super.dispose(); }
   @override Widget build(BuildContext context) => ListView(padding: const EdgeInsets.fromLTRB(24, 26, 24, 30), children: [
-    Row(children: [Expanded(child: Text('语音新建', style: MemoText.display)),
+    Row(children: [Expanded(child: Text('语音新建', style: context.text.display)),
       Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(color: MemoColor.brand100, borderRadius: BorderRadius.circular(MemoRadius.pill)),
+        decoration: BoxDecoration(color: context.colors.brand100, borderRadius: BorderRadius.circular(MemoRadius.pill)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.graphic_eq, size: 14, color: MemoColor.brand700),
+           Icon(Icons.graphic_eq, size: 14, color: context.colors.brand700),
           const SizedBox(width: 5),
-          Text('离线识别', style: MemoText.overline.copyWith(color: MemoColor.brand700)),
+          Text('离线识别', style: context.text.overline.copyWith(color: context.colors.brand700)),
         ]))]),
-    const SizedBox(height: 6), Text('说下时间和事情，剩下的交给提醒。', style: MemoText.body.copyWith(color: MemoColor.muted)),
+    const SizedBox(height: 6), Text('说下时间和事情，剩下的交给提醒。', style: context.text.body.copyWith(color: context.colors.muted)),
     const SizedBox(height: 28),
     Center(child: Semantics(button: true, label: flow.phase == VoicePhase.recording ? '停止录音并识别' : '开始录音',
       child: Material(type: MaterialType.transparency, child: Ink(width: 150, height: 150,
-        decoration: const BoxDecoration(shape: BoxShape.circle,
+        decoration:  BoxDecoration(shape: BoxShape.circle,
           gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
-            colors: [MemoColor.brand400, MemoColor.brand600])),
+            colors: [context.colors.brand400, context.colors.brand600])),
         child: InkWell(customBorder: const CircleBorder(), onTap: flow.busy ? null : () {
           HapticFeedback.mediumImpact();
           if (flow.phase == VoicePhase.recording) { flow.finish(); } else { flow.startRecording(); }
@@ -45,17 +45,17 @@ class _VoicePageState extends State<VoicePage> {
           ? const SizedBox(width: 48, height: 48, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3))
           : Icon(flow.phase == VoicePhase.recording ? Icons.stop_rounded : Icons.mic_rounded, color: Colors.white, size: 54))))))),
     const SizedBox(height: 18),
-    Text(flow.message.isEmpty ? '点击开始说话' : flow.message, textAlign: TextAlign.center, style: MemoText.headline),
+    Text(flow.message.isEmpty ? '点击开始说话' : flow.message, textAlign: TextAlign.center, style: context.text.headline),
     ValueListenableBuilder<String>(valueListenable: asr.status, builder: (_, status, _) =>
       Text(status, textAlign: TextAlign.center,
-        style: MemoText.caption.copyWith(color: MemoColor.muted))),
+        style: context.text.caption.copyWith(color: context.colors.muted))),
     if (flow.capturing) ValueListenableBuilder<int>(valueListenable: flow.countdown,
       builder: (_, seconds, __) => Text('剩余 $seconds 秒', textAlign: TextAlign.center,
-        style: MemoText.caption.copyWith(fontFeatures: MemoText.tabular))),
+        style: context.text.caption.copyWith(fontFeatures: MemoText.tabular))),
     const SizedBox(height: 18), RecordingWaveform(meter: flow.meter),
     const SizedBox(height: 24),
-    Card(elevation: 0, color: MemoColor.surface, shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(MemoRadius.xl), side: const BorderSide(color: MemoColor.line)),
+    Card(elevation: 0, color: context.colors.surface, shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(MemoRadius.xl), side:  BorderSide(color: context.colors.line)),
       child: Padding(padding: const EdgeInsets.all(16), child:
       TextField(controller: text, enabled: !flow.busy && !flow.capturing, minLines: 3, maxLines: 6,
         onChanged: (v) { flow.text = v; flow.reference = v.trim().isEmpty ? null : flow.reference ?? DateTime.now(); setState(() {}); },

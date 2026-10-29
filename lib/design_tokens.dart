@@ -173,38 +173,112 @@ abstract final class MemoMotion {
   static const enterMaxItems = 6; // past this, items appear without delay
 }
 
+/// Semantic colours, split from the raw palette so a widget never reads a
+/// hex value directly. [light] and [dark] are the only two instances the app
+/// ships; anything else is a one-off that will drift.
+@immutable
+class MemoPalette {
+  final Color surface, canvas, ink, inkSoft, muted, line, lineStrong, outline;
+  final Color brand50, brand100, brand200, brand400, brand500, brand600, brand700, brand800;
+  final Color onBrand, onBrandSoft, amber, amberSurface, amberInk, amberDeep;
+  final Color danger, dangerSurface, success, warning, warningSurface;
+
+  const MemoPalette({
+    required this.surface, required this.canvas, required this.ink, required this.inkSoft,
+    required this.muted, required this.line, required this.lineStrong, required this.outline,
+    required this.brand50, required this.brand100, required this.brand200, required this.brand400,
+    required this.brand500, required this.brand600, required this.brand700, required this.brand800,
+    required this.onBrand, required this.onBrandSoft, required this.amber, required this.amberSurface,
+    required this.amberInk, required this.amberDeep, required this.danger, required this.dangerSurface,
+    required this.success, required this.warning, required this.warningSurface,
+  });
+
+  static const light = MemoPalette(
+    surface: MemoColor.surface, canvas: MemoColor.canvas, ink: MemoColor.ink,
+    inkSoft: MemoColor.inkSoft, muted: MemoColor.muted, line: MemoColor.line,
+    lineStrong: MemoColor.lineStrong, outline: MemoColor.outline,
+    brand50: MemoColor.brand50, brand100: MemoColor.brand100, brand200: MemoColor.brand200,
+    brand400: MemoColor.brand400, brand500: MemoColor.brand500, brand600: MemoColor.brand600,
+    brand700: MemoColor.brand700, brand800: MemoColor.brand800,
+    onBrand: MemoColor.onBrand, onBrandSoft: MemoColor.onBrandSoft,
+    amber: MemoColor.amber, amberSurface: MemoColor.amberSurface, amberInk: MemoColor.amberInk,
+    amberDeep: MemoColor.amberDeep, danger: MemoColor.danger, dangerSurface: MemoColor.dangerSurface,
+    success: MemoColor.success, warning: MemoColor.warning, warningSurface: MemoColor.warningSurface,
+  );
+
+  /// Not an inverted light theme: the surfaces are near-black with a violet
+  /// cast (#121017 / #1B1822) so the brand does not turn grey at night, and
+  /// every text colour clears 4.5:1 against its own surface:
+  /// ink 15.4:1, muted 7.1:1, outline 5.4:1 on [surface].
+  static const dark = MemoPalette(
+    surface: Color(0xFF1B1822), canvas: Color(0xFF121017), ink: Color(0xFFF3EFFA),
+    inkSoft: Color(0xFFD9D3E6), muted: Color(0xFFA79FB9), line: Color(0xFF2E2938),
+    lineStrong: Color(0xFF3D3649), outline: Color(0xFF928AA6),
+    brand50: Color(0xFF1F1A2E), brand100: Color(0xFF2A2340), brand200: Color(0xFF3B3160),
+    brand400: Color(0xFF9B82FF), brand500: Color(0xFF8C74FF), brand600: Color(0xFFA18CFF),
+    brand700: Color(0xFFC3B6FF), brand800: Color(0xFFDFD7FF),
+    onBrand: Color(0xEBFFFFFF), onBrandSoft: Color(0xB8FFFFFF),
+    amber: Color(0xFFF0A34F), amberSurface: Color(0xFF35240F), amberInk: Color(0xFFFFD9AC),
+    amberDeep: Color(0xFFC9761D), danger: Color(0xFFFF8B80), dangerSurface: Color(0xFF3A1D1B),
+    success: Color(0xFF5FD39B), warning: Color(0xFFF0B062), warningSurface: Color(0xFF35240F),
+  );
+}
+
+/// Type scale bound to a palette. Sizes and weights live here; colour comes
+/// from the active [MemoPalette], which is why nothing in `lib/` hard-codes a
+/// text colour any more.
+@immutable
+class MemoType {
+  final MemoPalette c;
+  const MemoType(this.c);
+
+  TextStyle get display => TextStyle(fontSize: 30, height: 1.2, fontWeight: FontWeight.w800, letterSpacing: -.4, color: c.ink);
+  TextStyle get title => TextStyle(fontSize: 22, height: 1.28, fontWeight: FontWeight.w700, color: c.ink);
+  TextStyle get headline => TextStyle(fontSize: 17, height: 1.4, fontWeight: FontWeight.w600, color: c.ink);
+  TextStyle get subtitle => TextStyle(fontSize: 15, height: 1.45, fontWeight: FontWeight.w600, color: c.ink);
+  TextStyle get body => TextStyle(fontSize: 14, height: 1.5, color: c.ink);
+  TextStyle get label => TextStyle(fontSize: 13, height: 1.45, fontWeight: FontWeight.w500, color: c.inkSoft);
+  TextStyle get caption => TextStyle(fontSize: 12, height: 1.45, color: c.muted);
+  TextStyle get overline => TextStyle(fontSize: 12, height: 1.3, fontWeight: FontWeight.w600, letterSpacing: .3, color: c.muted);
+  TextStyle get button => const TextStyle(fontSize: 15, height: 1.4, fontWeight: FontWeight.w600);
+  TextStyle get cardTime => TextStyle(fontSize: 26, height: 1.1, letterSpacing: -.8,
+    fontWeight: FontWeight.w800, color: c.ink, fontFeatures: MemoText.tabular);
+  TextStyle get cardTitle => TextStyle(fontSize: 16, height: 1.45, fontWeight: FontWeight.w600, color: c.ink);
+
+  /// White on the hero gradient in both themes: the card is dark either way.
+  TextStyle get heroTime => const TextStyle(fontSize: 40, height: 1.06, letterSpacing: -1.2,
+    fontWeight: FontWeight.w800, color: Color(0xFFFFFFFF), fontFeatures: MemoText.tabular);
+  TextStyle get heroTitle => const TextStyle(fontSize: 18, height: 1.4, fontWeight: FontWeight.w600, color: Color(0xFFFFFFFF));
+}
+
 /// Theme extension so a future dark theme can swap the whole palette without
 /// touching a single widget. Widgets read it through [MemoTokens.of].
 @immutable
 class MemoTokens extends ThemeExtension<MemoTokens> {
-  final Color ink, inkSoft, muted, line, canvas, surface, brand, brandTint, brandInk;
-  const MemoTokens({
-    required this.ink, required this.inkSoft, required this.muted, required this.line,
-    required this.canvas, required this.surface, required this.brand, required this.brandTint, required this.brandInk,
-  });
+  final MemoPalette colors;
+  final MemoType text;
 
-  static const light = MemoTokens(
-    ink: MemoColor.ink, inkSoft: MemoColor.inkSoft, muted: MemoColor.muted, line: MemoColor.line,
-    canvas: MemoColor.canvas, surface: MemoColor.surface, brand: MemoColor.brand500,
-    brandTint: MemoColor.brand100, brandInk: MemoColor.brand700,
-  );
+  const MemoTokens({required this.colors, required this.text});
+
+  static const light = MemoTokens(colors: MemoPalette.light, text: MemoType(MemoPalette.light));
+  static const dark = MemoTokens(colors: MemoPalette.dark, text: MemoType(MemoPalette.dark));
 
   static MemoTokens of(BuildContext context) =>
     Theme.of(context).extension<MemoTokens>() ?? light;
 
-  @override MemoTokens copyWith({Color? ink, Color? inkSoft, Color? muted, Color? line,
-    Color? canvas, Color? surface, Color? brand, Color? brandTint, Color? brandInk}) => MemoTokens(
-      ink: ink ?? this.ink, inkSoft: inkSoft ?? this.inkSoft, muted: muted ?? this.muted,
-      line: line ?? this.line, canvas: canvas ?? this.canvas, surface: surface ?? this.surface,
-      brand: brand ?? this.brand, brandTint: brandTint ?? this.brandTint, brandInk: brandInk ?? this.brandInk);
+  @override MemoTokens copyWith({MemoPalette? colors, MemoType? text}) =>
+    MemoTokens(colors: colors ?? this.colors, text: text ?? this.text);
 
   @override MemoTokens lerp(ThemeExtension<MemoTokens>? other, double t) {
     if (other is! MemoTokens) return this;
-    return MemoTokens(
-      ink: Color.lerp(ink, other.ink, t)!, inkSoft: Color.lerp(inkSoft, other.inkSoft, t)!,
-      muted: Color.lerp(muted, other.muted, t)!, line: Color.lerp(line, other.line, t)!,
-      canvas: Color.lerp(canvas, other.canvas, t)!, surface: Color.lerp(surface, other.surface, t)!,
-      brand: Color.lerp(brand, other.brand, t)!, brandTint: Color.lerp(brandTint, other.brandTint, t)!,
-      brandInk: Color.lerp(brandInk, other.brandInk, t)!);
+    if (t < .5) return this;
+    return other;
   }
+}
+
+/// `context.colors.ink` and `context.type.body` keep call sites short enough
+/// that nobody reaches for a raw hex value again.
+extension MemoThemeX on BuildContext {
+  MemoPalette get colors => MemoTokens.of(this).colors;
+  MemoType get text => MemoTokens.of(this).text;
 }

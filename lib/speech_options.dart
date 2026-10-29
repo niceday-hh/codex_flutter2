@@ -114,8 +114,8 @@ class _SpeechOptionsState extends State<SpeechOptions> {
           items: voiceGenders.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
           onChanged: (v) async { if (v == null) return; r.speechRandomGender = v; if (!widget.defaultSettings) r.speechVoice = ''; await changed(); })),
       ])),
-      const Padding(padding: EdgeInsets.all(16), child: Text('分组指角色配音来源，不会自动翻译；当前按中文文本朗读。未确认性别的角色只参与“不限角色性别”随机。',
-        style: TextStyle(fontSize: 12, color: muted))),
+       Padding(padding: EdgeInsets.all(16), child: Text('分组指角色配音来源，不会自动翻译；当前按中文文本朗读。未确认性别的角色只参与“不限角色性别”随机。',
+        style: TextStyle(fontSize: 12, color: context.colors.muted))),
       if (!widget.defaultSettings) TextButton.icon(onPressed: reroll, icon: const Icon(Icons.shuffle), label: const Text('重新抽取一个音色')),
     ],
     ListTile(leading: const Icon(Icons.speed, color: _purple), title: const Text('播报语速'),
@@ -146,9 +146,9 @@ class _SpeechOptionsState extends State<SpeechOptions> {
         catch (_) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(memoSnackBar('试听暂未成功，请重试并检查媒体音量', error: true)); }
         finally { if (mounted) setState(() => previewing = false); }
       }, icon: const Icon(Icons.play_circle_outline), label: Text(previewing ? '正在生成试听…' : r.speechRandom && widget.defaultSettings ? '试听随机音色' : '试听当前音色'))),
-    const Padding(padding: EdgeInsets.fromLTRB(16, 4, 16, 12), child: Text(
+     Padding(padding: EdgeInsets.fromLTRB(16, 4, 16, 12), child: Text(
       '保存后异步生成离线语音；请确认“语音已就绪”。到点未就绪时使用原铃声／振动，不会稍后自动补播这一轮。修改正文、音色或语速后需重新生成。此处试听短句每次随机生成；提醒详情可试听正文并换一版。锁屏播报与通知显示分别控制。',
-      style: TextStyle(fontSize: 12, color: muted))),
+      style: TextStyle(fontSize: 12, color: context.colors.muted))),
   ]);
 }
 
@@ -159,7 +159,7 @@ Future<double?> chooseSpeechRate(BuildContext context, double current, {required
       Text('播报语速 ${(1 / length).toStringAsFixed(2)} 倍', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
       Text('length_scale · ${length.toStringAsFixed(3)}'),
       Slider(min: 0.1, max: 2, divisions: 190, value: length.clamp(0.1, 2).toDouble(), label: length.toStringAsFixed(3), onChanged: (v) => update(() => length = (v * 1000).round() / 1000)),
-      const Padding(padding: EdgeInsets.only(bottom: 12), child: Text('与网页版相同：length_scale 越大越慢。保留模型原始停顿；0.1～2.0 对应约 10～0.5 倍语速。极端快语速可能影响清晰度。', style: TextStyle(fontSize: 12, color: muted))),
+       Padding(padding: EdgeInsets.only(bottom: 12), child: Text('与网页版相同：length_scale 越大越慢。保留模型原始停顿；0.1～2.0 对应约 10～0.5 倍语速。极端快语速可能影响清晰度。', style: TextStyle(fontSize: 12, color: context.colors.muted))),
       TextButton(onPressed: () => update(() => length = 1.2), child: const Text('网页版中文默认 · 1.200')),
       if (allowDefault) TextButton(onPressed: () => Navigator.pop(c, 0.0), child: const Text('跟随默认语速')),
       FilledButton(onPressed: () => Navigator.pop(c, 1 / length), child: const Text('使用此语速')),
@@ -218,13 +218,13 @@ Future<String?> chooseSpeechVoice(BuildContext context, String current, {require
           }, icon: const Icon(Icons.shuffle), label: const Text('随机挑一个'))]),
         if (allowDefault) ListTile(title: const Text('跟随默认音色'), onTap: () { speech.stopPreview(); Navigator.pop(c, ''); }),
         if (message != null) Text(message!, style: const TextStyle(fontSize: 12)),
-        const Text('按配音来源和角色性别分组；性别未标注的角色仅在“不限角色性别”中显示。', style: TextStyle(fontSize: 12, color: muted)),
+         Text('按配音来源和角色性别分组；性别未标注的角色仅在“不限角色性别”中显示。', style: TextStyle(fontSize: 12, color: context.colors.muted)),
         Expanded(child: matches.isEmpty ? const Center(child: Text('没有匹配的音色，请调整分组或搜索词')) : ListView.builder(
           itemExtent: 76, itemCount: matches.length, itemBuilder: (_, index) {
             final id = matches[index];
             return ListTile(contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              title: Text(speechVoiceLabel(id), style: MemoText.body.copyWith(fontWeight: FontWeight.w500)),
-              subtitle: Text(catalog.tags(id), style: MemoText.caption),
+              title: Text(speechVoiceLabel(id), style: context.text.body.copyWith(fontWeight: FontWeight.w500)),
+              subtitle: Text(catalog.tags(id), style: context.text.caption),
               leading: id == current ? const Icon(Icons.check_circle, color: _purple) : const Icon(Icons.person_outline),
               trailing: IconButton(tooltip: '试听音色$id', icon: busy == id
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.play_circle_outline),

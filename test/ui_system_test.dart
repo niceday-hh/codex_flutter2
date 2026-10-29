@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -95,11 +96,32 @@ void main() {
     expect(tester.widget<Transform>(find.byType(Transform)), isNotNull);
   });
 
+  test('the dark palette keeps its own text readable', () {
+    double lum(Color c) {
+      double channel(double v) => v <= .03928 ? v / 12.92 : math.pow((v + .055) / 1.055, 2.4).toDouble();
+      return .2126 * channel(c.r) + .7152 * channel(c.g) + .0722 * channel(c.b);
+    }
+    double ratio(Color a, Color b) {
+      final l1 = lum(a), l2 = lum(b);
+      return (math.max(l1, l2) + .05) / (math.min(l1, l2) + .05);
+    }
+    final c = MemoPalette.dark;
+    expect(ratio(c.ink, c.surface), greaterThan(4.5), reason: 'body text');
+    expect(ratio(c.muted, c.surface), greaterThan(4.5), reason: 'captions');
+    expect(ratio(c.brand700, c.surface), greaterThan(4.5), reason: 'links');
+    expect(ratio(c.outline, c.surface), greaterThan(3.0), reason: 'input borders (1.4.11)');
+    expect(ratio(c.canvas, c.surface), isNot(1.0), reason: 'page and card must differ');
+  });
+
   testWidgets('the design tokens are registered on the theme', (tester) async {
     late MemoTokens tokens;
     await tester.pumpWidget(MaterialApp(
       theme: ThemeData(extensions: const [MemoTokens.light]),
       home: Builder(builder: (context) { tokens = MemoTokens.of(context); return const SizedBox(); })));
-    expect(tokens.brand, MemoColor.brand500);
+    expect(tokens.colors.brand500, MemoColor.brand500);
+    expect(tokens.colors.ink, MemoColor.ink);
+    // The dark palette is a real second instance, not a copy of the light one.
+    expect(MemoTokens.dark.colors.canvas, isNot(MemoTokens.light.colors.canvas));
+    expect(MemoTokens.dark.colors.ink, isNot(MemoTokens.light.colors.ink));
   });
 }

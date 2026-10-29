@@ -75,7 +75,7 @@ class _MemoSlideToConfirmState extends State<MemoSlideToConfirm> {
           child: Container(
             height: _height,
             decoration: BoxDecoration(
-              color: enabled ? MemoColor.brand100 : MemoColor.canvas,
+              color: enabled ? context.colors.brand100 : context.colors.canvas,
               borderRadius: BorderRadius.circular(MemoRadius.pill),
             ),
             clipBehavior: Clip.antiAlias,
@@ -86,14 +86,14 @@ class _MemoSlideToConfirmState extends State<MemoSlideToConfirm> {
                 width: left + _thumb + _inset,
                 height: _height,
                 decoration: BoxDecoration(
-                  color: enabled ? MemoColor.brand500 : MemoColor.lineStrong,
+                  color: enabled ? context.colors.brand500 : context.colors.lineStrong,
                   borderRadius: BorderRadius.circular(MemoRadius.pill),
                 ),
               ),
               Center(child: Opacity(
                 opacity: (1 - _progress * 1.8).clamp(0.0, 1.0),
-                child: Text(widget.label, style: MemoText.subtitle.copyWith(
-                  color: enabled ? MemoColor.brand700 : MemoColor.muted)),
+                child: Text(widget.label, style: context.text.subtitle.copyWith(
+                  color: enabled ? context.colors.brand700 : context.colors.muted)),
               )),
               AnimatedPositioned(
                 duration: duration,
@@ -107,9 +107,9 @@ class _MemoSlideToConfirmState extends State<MemoSlideToConfirm> {
                     boxShadow: MemoShadow.card,
                   ),
                   child: _busy
-                    ? const Padding(padding: EdgeInsets.all(14),
-                        child: CircularProgressIndicator(strokeWidth: 2, color: MemoColor.brand500))
-                    : Icon(widget.icon, size: 24, color: enabled ? MemoColor.brand500 : MemoColor.muted),
+                    ?  Padding(padding: EdgeInsets.all(14),
+                        child: CircularProgressIndicator(strokeWidth: 2, color: context.colors.brand500))
+                    : Icon(widget.icon, size: 24, color: enabled ? context.colors.brand500 : context.colors.muted),
                 ),
               ),
             ]),

@@ -22,81 +22,106 @@ import 'voice_catalog.dart';
 import 'vibration_picker.dart';
 import 'widgets/widgets.dart';
 export 'vibration_picker.dart' show chooseVibration, vibrationLabel;
-export 'app_style.dart' show purple, ink, muted, canvas;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent, statusBarIconBrightness: Brightness.dark,
-    statusBarBrightness: Brightness.light,
-    systemNavigationBarColor: canvas, systemNavigationBarIconBrightness: Brightness.dark,
-    systemNavigationBarDividerColor: Colors.transparent,
-    systemStatusBarContrastEnforced: false, systemNavigationBarContrastEnforced: false,
-  ));
   runApp(const MemoApp());
 }
 
-/// Platform text theme for the current platform, so CJK/Arabic fallback keeps
-/// working. Used only as the merge base below — never exposed directly.
-final _baseTextTheme = Typography.material2021(platform: defaultTargetPlatform).black;
+/// Platform text theme used as the merge base, so CJK/Arabic fallback keeps
+/// working. `black` decides the baseline foreground: the dark theme starts from
+/// white, so any style that does not set its own colour still reads.
+TextTheme _platformTextTheme(Brightness brightness) {
+  final typography = Typography.material2021(platform: defaultTargetPlatform);
+  return brightness == Brightness.light ? typography.black : typography.white;
+}
 
-TextTheme _memoTextTheme(TextTheme base) => TextTheme(
-  displayLarge: base.displayLarge?.merge(MemoText.display),
-  headlineLarge: base.headlineLarge?.merge(MemoText.display),
-  headlineSmall: base.headlineSmall?.merge(MemoText.title),
-  titleLarge: base.titleLarge?.merge(MemoText.title),
-  titleMedium: base.titleMedium?.merge(MemoText.headline),
-  bodyLarge: base.bodyLarge?.merge(MemoText.subtitle),
-  bodyMedium: base.bodyMedium?.merge(MemoText.body),
-  bodySmall: base.bodySmall?.merge(MemoText.caption),
-  labelLarge: base.labelLarge?.merge(MemoText.button),
-  labelMedium: base.labelMedium?.merge(MemoText.overline),
-  labelSmall: base.labelSmall?.merge(MemoText.caption),
+TextTheme _memoTextTheme(TextTheme base, MemoType t) => TextTheme(
+  displayLarge: base.displayLarge?.merge(t.display),
+  headlineLarge: base.headlineLarge?.merge(t.display),
+  headlineSmall: base.headlineSmall?.merge(t.title),
+  titleLarge: base.titleLarge?.merge(t.title),
+  titleMedium: base.titleMedium?.merge(t.headline),
+  bodyLarge: base.bodyLarge?.merge(t.subtitle),
+  bodyMedium: base.bodyMedium?.merge(t.body),
+  bodySmall: base.bodySmall?.merge(t.caption),
+  labelLarge: base.labelLarge?.merge(t.button),
+  labelMedium: base.labelMedium?.merge(t.overline),
+  labelSmall: base.labelSmall?.merge(t.caption),
 );
 
 class MemoApp extends StatelessWidget {
   const MemoApp({super.key});
-  @override Widget build(BuildContext context) => MaterialApp(
-    title: '超级提醒', debugShowCheckedModeBanner: false,
-    locale: const Locale('zh', 'CN'),
-    supportedLocales: const [Locale('zh', 'CN')],
-    localizationsDelegates: GlobalMaterialLocalizations.delegates,
-    theme: ThemeData(useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: purple, surface: MemoColor.surface),
-      scaffoldBackgroundColor: canvas,
-      extensions: const [MemoTokens.light],
+
+  ThemeData _theme(Brightness brightness) {
+    final tokens = brightness == Brightness.dark ? MemoTokens.dark : MemoTokens.light;
+    final c = tokens.colors;
+    final t = tokens.text;
+    final base = _platformTextTheme(brightness);
+    // On a light brand fill the label is white; on the lighter dark-mode brand
+    // fill it has to go dark, or it drops under 4.5:1.
+    final onBrandFill = brightness == Brightness.dark ? c.canvas : Colors.white;
+    return ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      colorScheme: ColorScheme.fromSeed(seedColor: c.brand500, surface: c.surface, brightness: brightness),
+      scaffoldBackgroundColor: c.canvas,
+      extensions: [tokens],
       // Every token style is merged onto the platform text theme instead of
       // replacing it. A bare `TextStyle` has no `fontFamily`, and anything that
       // resolves a style straight into a `DefaultTextStyle` — buttons, dialogs,
       // chips — then falls back to the engine default, which in the test harness
       // has no CJK glyphs at all. Merging keeps the platform family while the
       // tokens keep control of size, weight, height and colour.
-      textTheme: _memoTextTheme(_baseTextTheme),
-      // Merged onto the platform baseline for the same reason as `textTheme`:
-      // a bare TextStyle has no fontFamily, and the app bar then renders CJK as
-      // tofu whenever the engine default lacks the glyphs.
-      appBarTheme: AppBarTheme(backgroundColor: canvas, foregroundColor: ink, centerTitle: true,
+      textTheme: _memoTextTheme(base, t),
+      appBarTheme: AppBarTheme(backgroundColor: c.canvas, foregroundColor: c.ink, centerTitle: true,
         elevation: 0, scrolledUnderElevation: 0,
-        titleTextStyle: _baseTextTheme.titleLarge?.merge(MemoText.headline)),
-      inputDecorationTheme: InputDecorationTheme(filled: true, fillColor: MemoColor.brand50,
+        systemOverlayStyle: brightness == Brightness.dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+        titleTextStyle: base.titleLarge?.merge(t.headline)),
+      inputDecorationTheme: InputDecorationTheme(filled: true, fillColor: c.brand50,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(MemoRadius.lg),
-          borderSide: const BorderSide(color: MemoColor.outline)),
+          borderSide: BorderSide(color: c.outline)),
         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(MemoRadius.lg),
-          borderSide: const BorderSide(color: MemoColor.outline)),
+          borderSide: BorderSide(color: c.outline)),
         focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(MemoRadius.lg),
-          borderSide: const BorderSide(color: MemoColor.brand600, width: 1.6))),
+          borderSide: BorderSide(color: c.brand600, width: 1.6))),
       filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(
-        backgroundColor: purple, foregroundColor: Colors.white, elevation: 0,
+        backgroundColor: c.brand500, foregroundColor: onBrandFill, elevation: 0,
         minimumSize: const Size(double.infinity, 52),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MemoRadius.lg)))),
       outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(
-        foregroundColor: MemoColor.brand700, side: const BorderSide(color: MemoColor.brand200),
+        foregroundColor: c.brand700, side: BorderSide(color: c.brand200),
         minimumSize: const Size(0, 48),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MemoRadius.md)))),
       snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating, elevation: 0),
-      dialogTheme: const DialogThemeData(backgroundColor: MemoColor.surface, elevation: 0),
-    ),
+      dialogTheme: DialogThemeData(backgroundColor: c.surface, elevation: 0),
+      bottomSheetTheme: BottomSheetThemeData(backgroundColor: c.surface, surfaceTintColor: Colors.transparent),
+    );
+  }
+
+  @override Widget build(BuildContext context) => MaterialApp(
+    title: '超级提醒', debugShowCheckedModeBanner: false,
+    locale: const Locale('zh', 'CN'),
+    supportedLocales: const [Locale('zh', 'CN')],
+    localizationsDelegates: GlobalMaterialLocalizations.delegates,
+    theme: _theme(Brightness.light),
+    darkTheme: _theme(Brightness.dark),
+    themeMode: ThemeMode.system,
+    // Status and navigation bar icons follow the theme instead of being fixed
+    // to dark-on-light, which made them invisible once the page went dark.
+    builder: (context, child) {
+      final dark = Theme.of(context).brightness == Brightness.dark;
+      return AnnotatedRegion<SystemUiOverlayStyle>(
+        value: (dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark).copyWith(
+          statusBarColor: Colors.transparent,
+          systemNavigationBarColor: dark ? MemoPalette.dark.canvas : MemoPalette.light.canvas,
+          systemNavigationBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+          systemNavigationBarDividerColor: Colors.transparent,
+          systemStatusBarContrastEnforced: false, systemNavigationBarContrastEnforced: false),
+        child: child!,
+      );
+    },
     home: const MemoHome(),
   );
 }
@@ -270,7 +295,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
         if (route != null && route.isActive) Navigator.of(context).removeRoute(route);
       } else if (_voiceDialog == null) {
         final route = DialogRoute<void>(context: context, barrierDismissible: false,
-          barrierColor: ink.withValues(alpha: .20),
+          barrierColor: context.colors.ink.withValues(alpha: .20),
           builder: (_) => VoiceConfirmation(flow: voice, onEdit: _editVoiceDraft));
         _voiceDialog = route;
         Navigator.of(context).push(route).whenComplete(() { if (identical(_voiceDialog, route)) _voiceDialog = null; });
@@ -304,15 +329,15 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   }
   Widget _selectionBar() => Padding(
     padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-    child: Material(color: MemoColor.brand100, borderRadius: BorderRadius.circular(MemoRadius.lg),
+    child: Material(color: context.colors.brand100, borderRadius: BorderRadius.circular(MemoRadius.lg),
       clipBehavior: Clip.antiAlias,
       child: Padding(padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
         child: Row(children: [
-          Text('已选 ${_picked.length} 条', style: MemoText.label.copyWith(color: MemoColor.brand800)),
+          Text('已选 ${_picked.length} 条', style: context.text.label.copyWith(color: context.colors.brand800)),
           const Spacer(),
           TextButton(onPressed: _archivePicked, child: const Text('完成')),
           TextButton(onPressed: _deletePicked,
-            child: const Text('删除', style: TextStyle(color: MemoColor.danger))),
+            child:  Text('删除', style: TextStyle(color: context.colors.danger))),
           IconButton(tooltip: '取消选择', onPressed: () => setState(_picked.clear),
             icon: const Icon(Icons.close_rounded, size: 20)),
         ]))));
@@ -457,14 +482,14 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       if (_selecting) _selectionBar(),
       if (voice.active && voice.pending == null && tab != 2) Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-        child: Material(color: MemoColor.brand100, borderRadius: BorderRadius.circular(MemoRadius.lg),
+        child: Material(color: context.colors.brand100, borderRadius: BorderRadius.circular(MemoRadius.lg),
           clipBehavior: Clip.antiAlias,
           child: ListTile(dense: true,
-            leading: const Icon(Icons.mic_none_rounded, color: MemoColor.brand700, size: 20),
-            title: Text(voice.message, style: MemoText.label.copyWith(color: MemoColor.brand800)),
+            leading:  Icon(Icons.mic_none_rounded, color: context.colors.brand700, size: 20),
+            title: Text(voice.message, style: context.text.label.copyWith(color: context.colors.brand800)),
             subtitle: voice.phase == VoicePhase.commands
               ? ValueListenableBuilder<int>(valueListenable: voice.countdown,
-                  builder: (_, seconds, __) => Text('剩余 $seconds 秒', style: MemoText.caption))
+                  builder: (_, seconds, __) => Text('剩余 $seconds 秒', style: context.text.caption))
               : null,
             trailing: IconButton(tooltip: '停止预听', onPressed: voice.cancel,
               icon: const Icon(Icons.close_rounded, size: 20))))),
@@ -488,21 +513,21 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       ])),
     ]))),
     floatingActionButton: !loading && error == null && !_selecting && (tab == 0 || tab == 1)
-      ? FloatingActionButton(onPressed: () => edit(), backgroundColor: purple,
+      ? FloatingActionButton(onPressed: () => edit(), backgroundColor: context.colors.brand500,
           foregroundColor: Colors.white, tooltip: '新建提醒', child: const Icon(Icons.add_rounded, size: 32)) : null,
     bottomNavigationBar: SafeArea(top: false, child: Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: MemoColor.surface,
+          color: context.colors.surface,
           borderRadius: BorderRadius.circular(MemoRadius.xxl),
-          border: Border.all(color: MemoColor.line),
+          border: Border.all(color: context.colors.line),
           boxShadow: MemoShadow.card,
         ),
         child: ClipRRect(borderRadius: BorderRadius.circular(MemoRadius.xxl), child: NavigationBar(
-          backgroundColor: MemoColor.surface, surfaceTintColor: Colors.transparent,
+          backgroundColor: context.colors.surface, surfaceTintColor: Colors.transparent,
           height: 72, labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          selectedIndex: tab, indicatorColor: MemoColor.brand100,
+          selectedIndex: tab, indicatorColor: context.colors.brand100,
           onDestinationSelected: _selectTab, destinations: const [
             NavigationDestination(icon: Icon(Icons.description_outlined), selectedIcon: Icon(Icons.description_rounded), label: '备忘录'),
             NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month_rounded), label: '日历'),
@@ -560,14 +585,14 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
         ]),
       SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 0), child: MemoCard(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4), onTap: taskLibrary, child: Row(children: [
-        const Icon(Icons.history_rounded, color: MemoColor.brand500, size: 22),
+         Icon(Icons.history_rounded, color: context.colors.brand500, size: 22),
         const SizedBox(width: MemoSpace.md),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('历史任务 · $historyCount 条', style: MemoText.subtitle),
+          Text('历史任务 · $historyCount 条', style: context.text.subtitle),
           const SizedBox(height: 2),
-          Text('完成或主动保留的任务统一收纳，支持搜索和复用', style: MemoText.caption),
+          Text('完成或主动保留的任务统一收纳，支持搜索和复用', style: context.text.caption),
         ])),
-        const Icon(Icons.chevron_right_rounded, color: MemoColor.muted, size: 20),
+         Icon(Icons.chevron_right_rounded, color: context.colors.muted, size: 20),
       ])))),
       if (paused.isNotEmpty) SliverToBoxAdapter(child: section('未启用', '${paused.length} 条')),
       SliverList.builder(itemCount: paused.length, itemBuilder: (_, i) => _reveal(i + 1, reminderCard(paused[i]))),
@@ -596,19 +621,19 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 Icon(r.unread ? Icons.mark_email_unread_outlined : Icons.notifications_active_outlined,
-                  color: MemoColor.onBrand, size: 18),
+                  color: context.colors.onBrand, size: 18),
                 const SizedBox(width: MemoSpace.sm),
                 Text(r.unread ? '待确认提醒' : '下一条提醒',
-                  style: MemoText.label.copyWith(color: MemoColor.onBrand)),
+                  style: context.text.label.copyWith(color: context.colors.onBrand)),
                 const Spacer(),
-                const Icon(Icons.arrow_forward_rounded, color: MemoColor.onBrand, size: 20)]),
+                 Icon(Icons.arrow_forward_rounded, color: context.colors.onBrand, size: 20)]),
               const SizedBox(height: MemoSpace.md),
-              Text(r.time, style: MemoText.heroTime),
+              Text(r.time, style: context.text.heroTime),
               const SizedBox(height: 9),
-              Text(r.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: MemoText.heroTitle),
+              Text(r.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: context.text.heroTitle),
               const SizedBox(height: 13),
               Text(dateLabel(r.displayDate) + (r.repeat != 'none' ? ' · ${r.repeatLabel}' : ''),
-                style: MemoText.caption.copyWith(color: MemoColor.onBrandSoft, letterSpacing: .2)),
+                style: context.text.caption.copyWith(color: context.colors.onBrandSoft, letterSpacing: .2)),
             ])),
           ]))))));
   Key? settingKey(String title) => title == _settingsTargetTitle ? _settingsTargetKey : null;
@@ -638,19 +663,19 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       child: Row(children: [
         if (_selecting) Padding(padding: const EdgeInsets.only(right: 10),
           child: Icon(picked ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-            color: picked ? MemoColor.brand600 : MemoColor.outline, size: 22))
+            color: picked ? context.colors.brand600 : context.colors.outline, size: 22))
         else Container(width: 4, height: 52, decoration: BoxDecoration(
-          color: r.completed ? MemoColor.lineStrong : r.unread ? MemoColor.amber : MemoColor.brand500,
+          color: r.completed ? context.colors.lineStrong : r.unread ? context.colors.amber : context.colors.brand500,
           borderRadius: BorderRadius.circular(MemoRadius.pill))),
         const SizedBox(width: MemoSpace.md),
-        Text(r.time, style: r.completed ? MemoText.cardTime.copyWith(color: MemoColor.muted) : MemoText.cardTime),
+        Text(r.time, style: r.completed ? context.text.cardTime.copyWith(color: context.colors.muted) : context.text.cardTime),
         const SizedBox(width: MemoSpace.md), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(r.text, maxLines: 2, overflow: TextOverflow.ellipsis,
-            style: r.completed ? MemoText.cardTitle.copyWith(color: MemoColor.muted) : MemoText.cardTitle),
+            style: r.completed ? context.text.cardTitle.copyWith(color: context.colors.muted) : context.text.cardTitle),
           const SizedBox(height: 5), Row(children: [
             if (status != null) ...[MemoTag(status, emphasized: r.unread), const SizedBox(width: 6)],
             Flexible(child: Text(meta.toString(), maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: MemoText.caption)),
+              style: context.text.caption)),
           ]),
         ])),
         if (_selecting) const SizedBox(width: 10)
@@ -669,10 +694,10 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       background: const SizedBox.shrink(),
       secondaryBackground: Container(margin: const EdgeInsets.fromLTRB(20, 0, 20, 10),
         padding: const EdgeInsets.symmetric(horizontal: MemoSpace.xl), alignment: Alignment.centerRight,
-        decoration: BoxDecoration(color: MemoColor.brand100, borderRadius: BorderRadius.circular(MemoRadius.xl)),
-        child: const Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.archive_outlined, color: MemoColor.brand700, size: 20), SizedBox(width: 6),
-          Text('保留 / 删除', style: TextStyle(color: MemoColor.brand700, fontWeight: FontWeight.w600,
+        decoration: BoxDecoration(color: context.colors.brand100, borderRadius: BorderRadius.circular(MemoRadius.xl)),
+        child:  Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.archive_outlined, color: context.colors.brand700, size: 20), SizedBox(width: 6),
+          Text('保留 / 删除', style: TextStyle(color: context.colors.brand700, fontWeight: FontWeight.w600,
             fontSize: 14)),
         ])),
       confirmDismiss: (_) async {
@@ -710,10 +735,10 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
             child: AnimatedSwitcher(duration: MemoMotion.fast, transitionBuilder: (child, t) =>
               FadeTransition(opacity: t, child: child),
               child: Text('${first.year}年${first.month}月', key: ValueKey('${first.year}-${first.month}'),
-                style: MemoText.title)))),
+                style: context.text.title)))),
           IconButton(tooltip: '上个月', onPressed: () => _shiftMonth(-1), icon: const Icon(Icons.chevron_left_rounded)),
           IconButton(tooltip: '下个月', onPressed: () => _shiftMonth(1), icon: const Icon(Icons.chevron_right_rounded))]),
-        Row(children: weekdays.map((s) => Expanded(child: Center(child: Text(s, style: MemoText.caption)))).toList()),
+        Row(children: weekdays.map((s) => Expanded(child: Center(child: Text(s, style: context.text.caption)))).toList()),
         const SizedBox(height: MemoSpace.md),
         Material(type: MaterialType.transparency, child: GridView.builder(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, mainAxisSpacing: 4),
@@ -728,7 +753,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
             final radius = BorderRadius.circular(MemoRadius.md);
             return Ink(
               decoration: BoxDecoration(
-                color: selected ? MemoColor.brand500 : Colors.transparent,
+                color: selected ? context.colors.brand500 : Colors.transparent,
                 borderRadius: radius,
               ),
               child: InkWell(
@@ -738,12 +763,12 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text('$d', style: TextStyle(
-                      color: selected ? Colors.white : today ? MemoColor.brand700 : MemoColor.ink,
+                      color: selected ? Colors.white : today ? context.colors.brand700 : context.colors.ink,
                       fontWeight: selected || today ? FontWeight.w700 : FontWeight.w500,
                       fontSize: 14, fontFeatures: MemoText.tabular)),
                     const SizedBox(height: 3),
                     Container(width: 4, height: 4, decoration: BoxDecoration(shape: BoxShape.circle,
-                      color: has ? selected ? Colors.white : MemoColor.brand500 : Colors.transparent)),
+                      color: has ? selected ? Colors.white : context.colors.brand500 : Colors.transparent)),
                   ],
                 ),
               ),
@@ -778,7 +803,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     String? action;
     try {
       action = await showModalBottomSheet<String>(context: context, isScrollControlled: true,
-        useSafeArea: true, backgroundColor: Colors.transparent, barrierColor: ink.withValues(alpha: .20),
+        useSafeArea: true, backgroundColor: Colors.transparent, barrierColor: context.colors.ink.withValues(alpha: .20),
         builder: (_) => SettingsSheet(section: section, changes: store,
           messengerKey: _settingsMessenger, targetKey: _settingsTargetKey, target: target,
           items: (sheetContext) => _settingsItems(section.category, sheetContext)));
@@ -909,13 +934,13 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     ]),
     settingsHint('单次录音最长45秒，确认过程不播放语音。'),
     section('识别方式', ''), settingsGroup([
-      ListTile(key: settingKey('本机离线'), leading: const Icon(Icons.shield_outlined, color: purple), title: const Text('本机离线'),
+      ListTile(key: settingKey('本机离线'), leading:  Icon(Icons.shield_outlined, color: context.colors.brand500), title: const Text('本机离线'),
         subtitle: const Text('录音只在本机识别'), trailing: const MemoTag('已内置')),
     ]),
     settingsHint('无需联网。首次准备或从后台返回时，可能需要稍候。'),
     Padding(padding: const EdgeInsets.fromLTRB(20, 24, 20, 4), child: FilledButton.tonalIcon(key: settingKey('试用免手输入'),
       onPressed: () => _settingsAction(sheetContext, 'voice'),
-      style: FilledButton.styleFrom(backgroundColor: lavender, foregroundColor: purple),
+      style: FilledButton.styleFrom(backgroundColor: context.colors.brand100, foregroundColor: context.colors.brand500),
       icon: const Icon(Icons.mic_none_rounded), label: const Text('试用免手输入'))),
     ],
     SettingsCategory.speech => [
@@ -926,7 +951,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       }),
       defaultSpeechOptions(),
       ValueListenableBuilder<String>(valueListenable: speech.status, builder: (_, value, child) => ListTile(key: settingKey('语音准备状态'),
-        leading: const Icon(Icons.graphic_eq, color: purple), title: const Text('语音准备状态'), subtitle: Text(value))),
+        leading:  Icon(Icons.graphic_eq, color: context.colors.brand500), title: const Text('语音准备状态'), subtitle: Text(value))),
       settingRow(Icons.refresh, '重新准备提醒语音', '补齐未完成的音频，不改变提醒时间', () async {
         await speech.preparePending(retry: true); await reload(); toast(speech.status.value);
       }),
@@ -944,19 +969,19 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
           try { await native.invokeMethod('reliableMode', enabled); await reload(); toast(enabled ? '可靠提醒模式已开启' : '可靠提醒模式已关闭'); }
           catch (e) { await reload(); toast(niceError(e), error: true); }
         }),
-      ListTile(leading: const Icon(Icons.shield_outlined, color: purple), key: settingKey('提醒服务状态'), title: const Text('提醒服务状态'),
+      ListTile(leading:  Icon(Icons.shield_outlined, color: context.colors.brand500), key: settingKey('提醒服务状态'), title: const Text('提醒服务状态'),
         subtitle: Text(store.status['reliableMode'] == false ? '可靠模式已关闭，仍保留系统闹钟'
           : store.status['guardianRunning'] == true ? '正在维护待触发提醒'
           : ((store.status['pending'] as Map?)?['count'] as int? ?? 0) == 0 ? '没有待触发任务，无需常驻运行'
           : '尚未检测到运行，请检查下方系统提示')),
       if ((store.status['guardianError'] as String? ?? '').isNotEmpty) Padding(padding: const EdgeInsets.all(16),
-        child: Text(store.status['guardianError'] as String, style: const TextStyle(color: muted, fontSize: 12))),
+        child: Text(store.status['guardianError'] as String, style:  TextStyle(color: context.colors.muted, fontSize: 12))),
     ]),
     section('隐私与提醒权限', ''),
     settingsGroup([
-      ListTile(leading: const Icon(Icons.notifications_none, color: purple), key: settingKey('通知权限'), title: const Text('通知权限'),
+      ListTile(leading:  Icon(Icons.notifications_none, color: context.colors.brand500), key: settingKey('通知权限'), title: const Text('通知权限'),
         subtitle: Text(store.status['notifications'] == true ? '已开启' : '未开启，请在提醒自检中授权')),
-      ListTile(key: settingKey('锁屏内容保护'), leading: const Icon(Icons.lock_outline, color: purple), title: const Text('锁屏内容保护'),
+      ListTile(key: settingKey('锁屏内容保护'), leading:  Icon(Icons.lock_outline, color: context.colors.brand500), title: const Text('锁屏内容保护'),
         subtitle: const Text('使用系统锁屏隐私保护，解锁自动显示正文；不使用全屏通知')),
       settingRow(Icons.alarm_on_rounded, '精确定时权限', store.status['exact'] == true ? '已开启' : '需开启', () => native.invokeMethod('requestExact')),
       settingRow(Icons.battery_saver_outlined, '后台运行', store.status['battery'] == true ? '不受电池优化' : '检查电池优化', () => native.invokeMethod('batterySettings')),
@@ -967,7 +992,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     section('任务整理', '完成记录自动收起，保留以后使用'),
     settingsGroup([
       ListTile(key: settingKey('历史任务'), title: const Text('历史任务'), subtitle: const Text('完成与主动保留的记录合并显示；编辑保存后重新启用'),
-        leading: const Icon(Icons.inventory_2_outlined, color: purple), trailing: const Icon(Icons.chevron_right), onTap: () => _settingsAction(sheetContext, 'history')),
+        leading:  Icon(Icons.inventory_2_outlined, color: context.colors.brand500), trailing: const Icon(Icons.chevron_right), onTap: () => _settingsAction(sheetContext, 'history')),
       SwitchListTile(key: settingKey('划掉通知后询问整理方式'), title: const Text('划掉通知后询问整理方式'),
         subtitle: const Text('划掉通知先结束本轮，再询问保留或删除；不选择时保留记录与循环，自检自动清理时不再询问'),
         value: store.status['cleanupPrompts'] as bool? ?? true, onChanged: (v) async {
@@ -1010,29 +1035,29 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
         toast('测试提醒已设置，请返回桌面等待15秒');
         await reload();
       }),
-      ListTile(key: settingKey('系统闹钟排程'), leading: const Icon(Icons.alarm_on, color: purple), title: const Text('系统闹钟排程'),
+      ListTile(key: settingKey('系统闹钟排程'), leading:  Icon(Icons.alarm_on, color: context.colors.brand500), title: const Text('系统闹钟排程'),
         subtitle: Text(store.status['exact'] == true ? '精确定时已可用，状态栏可能显示下一闹钟' : '尚未允许精确定时，提醒不会静默降级')),
-      ListTile(key: settingKey('最近实际触发'), leading: const Icon(Icons.schedule, color: purple), title: const Text('最近实际触发'),
+      ListTile(key: settingKey('最近实际触发'), leading:  Icon(Icons.schedule, color: context.colors.brand500), title: const Text('最近实际触发'),
         subtitle: Text(eventTime(store.status['lastReceived']))),
-      ListTile(key: settingKey('最近恢复排程'), leading: const Icon(Icons.restart_alt, color: purple), title: const Text('最近恢复排程'),
+      ListTile(key: settingKey('最近恢复排程'), leading:  Icon(Icons.restart_alt, color: context.colors.brand500), title: const Text('最近恢复排程'),
         subtitle: Text(eventTime(store.status['lastRestored']))),
       settingRow(Icons.bug_report_outlined, '导出提醒诊断', '包含排程、启动前快照与进程退出原因；不含备忘正文', () async {
         final ok = await native.invokeMethod<bool>('exportDiagnostics');
         if (ok == true) { toast('诊断已导出，可用于排查后台提醒问题'); }
       }),
       notificationStylesList(),
-      ListTile(key: settingKey('固定发布签名'), leading: const Icon(Icons.security, color: purple), title: const Text('固定发布签名'),
+      ListTile(key: settingKey('固定发布签名'), leading:  Icon(Icons.security, color: context.colors.brand500), title: const Text('固定发布签名'),
         subtitle: const Text('同一固定签名的版本可覆盖更新，数据保存在本机')),
     ]),
-    section('使用提示', ''), Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: MemoCard(child: const Text(
+    section('使用提示', ''), Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: MemoCard(child:  Text(
       '• 手动划掉系统通知或点击已读后结束本轮重提醒；App 中结束并保留会停用后续提醒。点开通知、横幅自动收起不算已读。\n\n'
       '• 达到总次数后停止再次提醒，但仍保留未读状态。下一次每日／每周提醒重新计数。\n\n'
       '• 荣耀手机请检查应用启动管理，允许自启动与后台运行。系统休眠、勿扰模式、强行停止会影响提醒和亮屏。\n\n'
       '• 提醒使用系统闹钟排程；从最近任务划掉不需要重新打开 App。系统强行停止会阻止提醒，需要手动再打开。\n\n'
       '• 横幅和锁屏通知最终受系统通道设置控制。请用提醒自检测试，并检查允许横幅、锁屏通知和勿扰设置。',
-      style: TextStyle(color: muted, fontSize: 13, height: 1.7)))),
+      style: TextStyle(color: context.colors.muted, fontSize: 13, height: 1.7)))),
     if ((store.status['lastError'] as String? ?? '').isNotEmpty) Padding(padding: const EdgeInsets.all(24),
-      child: Text('最近的系统提示：${store.status['lastError']}', style: const TextStyle(color: muted, fontSize: 12))),
+      child: Text('最近的系统提示：${store.status['lastError']}', style:  TextStyle(color: context.colors.muted, fontSize: 12))),
     ],
   };
   Widget defaultSpeechOptions() {
@@ -1066,11 +1091,11 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       ..sort((a, b) => (b['isDefault'] == true ? 1 : 0).compareTo(a['isDefault'] == true ? 1 : 0));
     final hidden = store.status['hiddenChannelCount'] as int? ?? 0;
     return ExpansionTile(key: settingKey('通知样式') ?? const PageStorageKey('notification-styles'),
-      leading: const Icon(Icons.tune_rounded, color: purple),
+      leading:  Icon(Icons.tune_rounded, color: context.colors.brand500),
       title: Text('通知样式（${styles.length}种）'), subtitle: const Text('按展示、振动和铃声分组'),
       children: [
-        const Padding(padding: EdgeInsets.fromLTRB(18, 0, 18, 8),
-          child: Text('同一样式共用系统设置，修改会影响关联的所有备忘。', style: TextStyle(color: muted, fontSize: 12))),
+         Padding(padding: EdgeInsets.fromLTRB(18, 0, 18, 8),
+          child: Text('同一样式共用系统设置，修改会影响关联的所有备忘。', style: TextStyle(color: context.colors.muted, fontSize: 12))),
         ...styles.map((style) => settingRow(Icons.notifications_outlined, style['name'] as String? ?? '通知样式',
           '${style['isDefault'] == true ? '新建默认 · ' : ''}关联 ${style['count'] ?? 0} 条备忘\n'
           '${style['systemOverridden'] == true ? '系统设置与应用偏好不同' : channelImportanceLabel(style['importance'] as int? ?? 0)}'
@@ -1079,7 +1104,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
           () => native.invokeMethod('channelSettings', style['id']))),
         if (hidden > 0) Padding(padding: const EdgeInsets.all(16), child: Text(
           '已隐藏 $hidden 个无引用的历史通道，手机系统中的原设置仍保留。',
-          style: const TextStyle(color: muted, fontSize: 12))),
+          style:  TextStyle(color: context.colors.muted, fontSize: 12))),
       ]);
   }
   Widget settingsGroup(List<Widget> children) => Padding(padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1119,7 +1144,7 @@ Future<String?> chooseNotificationOption(BuildContext context, String title, Map
     child: Column(mainAxisSize: MainAxisSize.min, children: [
       Padding(padding: const EdgeInsets.all(12), child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
       ...options.entries.map((e) => ListTile(title: Text(e.value),
-        trailing: e.key == current ? const Icon(Icons.check_rounded, color: purple) : null,
+        trailing: e.key == current ?  Icon(Icons.check_rounded, color: context.colors.brand500) : null,
         onTap: () => Navigator.pop(c, e.key))),
     ])));
 
@@ -1130,22 +1155,22 @@ class NotificationDisplayOptions extends StatelessWidget {
   const NotificationDisplayOptions({super.key, required this.presentation, required this.lockscreen,
     required this.onPresentationChanged, required this.onLockscreenChanged, this.defaultSettings = false});
   @override Widget build(BuildContext context) => Column(children: [
-    ListTile(leading: const Icon(Icons.view_agenda_outlined, color: purple),
+    ListTile(leading:  Icon(Icons.view_agenda_outlined, color: context.colors.brand500),
       title: Text(defaultSettings ? '默认展示方式' : '展示方式'),
       subtitle: Text(presentations[presentation] ?? presentations['banner']!), trailing: const Icon(Icons.chevron_right),
       onTap: () async {
         final v = await chooseNotificationOption(context, '通知展示方式', presentations, presentation);
         if (v != null && context.mounted) { onPresentationChanged(v); }
       }),
-    ListTile(leading: const Icon(Icons.lock_outline, color: purple),
+    ListTile(leading:  Icon(Icons.lock_outline, color: context.colors.brand500),
       title: Text(defaultSettings ? '默认锁屏显示' : '锁屏显示'),
       subtitle: Text(lockscreens[lockscreen] ?? lockscreens['private']!), trailing: const Icon(Icons.chevron_right),
       onTap: () async {
         final v = await chooseNotificationOption(context, '锁屏显示方式', lockscreens, lockscreen);
         if (v != null && context.mounted) { onLockscreenChanged(v); }
       }),
-    const Padding(padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Text('实际显示受系统设置控制。隐藏正文时，请同时在系统通知设置中关闭“显示敏感内容”；解锁后由系统显示正文。', style: TextStyle(color: muted, fontSize: 12))),
+     Padding(padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Text('实际显示受系统设置控制。隐藏正文时，请同时在系统通知设置中关闭“显示敏感内容”；解锁后由系统显示正文。', style: TextStyle(color: context.colors.muted, fontSize: 12))),
   ]);
 }
 Future<int?> numberDialog(BuildContext context, String title, int current, int min, int max) async {
@@ -1190,16 +1215,16 @@ class _ReminderDetailState extends State<ReminderDetail> {
     return SafeArea(child: SingleChildScrollView(padding: EdgeInsets.fromLTRB(24, 0, 24, 28 + MediaQuery.of(context).viewInsets.bottom),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         const SizedBox(height: MemoSpace.sm),
-        Text(r.time, style: const TextStyle(fontSize: 42, height: 1.1, fontWeight: FontWeight.w700,
-          color: MemoColor.brand500, fontFeatures: MemoText.tabular)),
+        Text(r.time, style:  TextStyle(fontSize: 42, height: 1.1, fontWeight: FontWeight.w700,
+          color: context.colors.brand500, fontFeatures: MemoText.tabular)),
         const SizedBox(height: 2),
-        Text('${dateLabel(r.displayDate)} · ${r.repeatLabel}', style: MemoText.body.copyWith(color: MemoColor.muted)),
+        Text('${dateLabel(r.displayDate)} · ${r.repeatLabel}', style: context.text.body.copyWith(color: context.colors.muted)),
         const SizedBox(height: MemoSpace.xl),
         ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.35),
-          child: SingleChildScrollView(child: Text(r.text, style: MemoText.title.copyWith(height: 1.45)))),
+          child: SingleChildScrollView(child: Text(r.text, style: context.text.title.copyWith(height: 1.45)))),
         const SizedBox(height: MemoSpace.xl),
         if (r.unread) ...[
-          Text('已提醒 ${r.attempts}/${r.totalCount} 次', style: MemoText.caption),
+          Text('已提醒 ${r.attempts}/${r.totalCount} 次', style: context.text.caption),
           const SizedBox(height: MemoSpace.sm),
           MemoSlideToConfirm(
             label: '向右滑动，确认已读',
@@ -1210,11 +1235,11 @@ class _ReminderDetailState extends State<ReminderDetail> {
         ] else
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(color: MemoColor.brand50, borderRadius: BorderRadius.circular(MemoRadius.md)),
+            decoration: BoxDecoration(color: context.colors.brand50, borderRadius: BorderRadius.circular(MemoRadius.md)),
             child: Row(children: [
-              const Icon(Icons.notifications_none_rounded, size: 18, color: MemoColor.brand700),
+               Icon(Icons.notifications_none_rounded, size: 18, color: context.colors.brand700),
               const SizedBox(width: MemoSpace.sm),
-              Expanded(child: Text('到时会通过系统通知提醒你', style: MemoText.label)),
+              Expanded(child: Text('到时会通过系统通知提醒你', style: context.text.label)),
             ]),
           ),
         const SizedBox(height: MemoSpace.xl),
@@ -1281,7 +1306,7 @@ class _ReminderEditorState extends State<ReminderEditor> {
     body: ListView(padding: const EdgeInsets.fromLTRB(20, 16, 20, 24), children: [
       if (widget.voice != null) ...[
         MemoCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(!r.dateConfirmed ? '日期无效，请手动选择日期' : !r.timeConfirmed ? '请手动选择有效时间' : r.repeat == 'none' && !r.date.isAfter(DateTime.now()) ? '目标时间已过期，请修改或明确重新计时' : '请确认识别出的时间和内容', style: const TextStyle(color: danger)),
+          Text(!r.dateConfirmed ? '日期无效，请手动选择日期' : !r.timeConfirmed ? '请手动选择有效时间' : r.repeat == 'none' && !r.date.isAfter(DateTime.now()) ? '目标时间已过期，请修改或明确重新计时' : '请确认识别出的时间和内容', style:  TextStyle(color: context.colors.danger)),
           if (widget.voice!.settings.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(widget.voice!.settings.join(' · '))),
           if (widget.voice!.relativeDelay != null) ...[
             Text(manualTime ? '已手动修改，按下方日期和时间提醒' : '以 ${countdownReference!.hour}:${countdownReference!.minute.toString().padLeft(2, '0')}:${countdownReference!.second.toString().padLeft(2, '0')} 为基准计时，目标为 ${r.date.year}年${r.date.month}月${r.date.day}日 ${r.preciseTime}'),
@@ -1295,9 +1320,9 @@ class _ReminderEditorState extends State<ReminderEditor> {
           decoration: const InputDecoration(hintText: '写下一件重要的事…')),
       ])), const SizedBox(height: 14),
       MemoCard(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
-        ListTile(leading: const Icon(Icons.calendar_today_outlined, color: purple), title: const Text('日期'),
+        ListTile(leading:  Icon(Icons.calendar_today_outlined, color: context.colors.brand500), title: const Text('日期'),
           trailing: Text(r.dateConfirmed ? '${r.date.year}年${r.date.month}月${r.date.day}日' : '请选择有效日期'), onTap: pickDate),
-        ListTile(leading: const Icon(Icons.schedule_rounded, color: purple), title: const Text('时间'), trailing: Text(r.timeConfirmed ? r.preciseTime : '请选择时间'), onTap: pickTime),
+        ListTile(leading:  Icon(Icons.schedule_rounded, color: context.colors.brand500), title: const Text('时间'), trailing: Text(r.timeConfirmed ? r.preciseTime : '请选择时间'), onTap: pickTime),
       ])), const SizedBox(height: 14),
       MemoCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('重复', style: TextStyle(fontWeight: FontWeight.w600)), const SizedBox(height: 14),
@@ -1312,19 +1337,19 @@ class _ReminderEditorState extends State<ReminderEditor> {
         NotificationDisplayOptions(presentation: r.presentation, lockscreen: r.lockscreen,
           onPresentationChanged: (v) => setState(() => r.presentation = v),
           onLockscreenChanged: (v) => setState(() => r.lockscreen = v)),
-        ListTile(leading: const Icon(Icons.tune_rounded, color: purple), title: const Text('这条提醒的系统通知设置'),
+        ListTile(leading:  Icon(Icons.tune_rounded, color: context.colors.brand500), title: const Text('这条提醒的系统通知设置'),
           subtitle: const Text('请选择允许横幅／悬浮通知；相同样式共用系统设置。亮屏卡片增强可在设置开启'), trailing: const Icon(Icons.open_in_new_rounded),
           onTap: () async {
             try { await widget.store.openNotificationSettings(r); }
             catch (e) { if (context.mounted) { ScaffoldMessenger.of(context).showSnackBar(memoSnackBar(niceError(e), error: true)); } }
           }),
         SwitchListTile(title: const Text('尝试亮屏'), subtitle: const Text('保持锁屏，遵循手机系统限制'), value: r.wakeScreen, onChanged: (v) => setState(() => r.wakeScreen = v)),
-        ListTile(leading: const Icon(Icons.vibration, color: purple), title: const Text('振动'), subtitle: Text(vibrationLabel(r.vibration)),
+        ListTile(leading:  Icon(Icons.vibration, color: context.colors.brand500), title: const Text('振动'), subtitle: Text(vibrationLabel(r.vibration)),
           trailing: const Icon(Icons.chevron_right), onTap: () async {
             final v = await chooseVibration(context, r.vibration); if (v != null && mounted) setState(() => r.vibration = v);
           }),
         SwitchListTile(title: const Text('铃声'), value: r.sound, onChanged: (v) => setState(() => r.sound = v)),
-        if (r.sound) ListTile(leading: const Icon(Icons.music_note_outlined, color: purple), title: const Text('从系统选择铃声'),
+        if (r.sound) ListTile(leading:  Icon(Icons.music_note_outlined, color: context.colors.brand500), title: const Text('从系统选择铃声'),
           subtitle: Text(r.ringtone.isEmpty ? '系统默认' : '已选择系统铃声'), trailing: const Icon(Icons.chevron_right), onTap: () async {
             try { final v = await native.invokeMethod<String>('pickRingtone', r.ringtone); if (v != null && mounted) setState(() => r.ringtone = v); }
             catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(memoSnackBar(niceError(e), error: true)); }
@@ -1336,17 +1361,17 @@ class _ReminderEditorState extends State<ReminderEditor> {
       ])), const SizedBox(height: 14),
       MemoCard(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
         const ListTile(title: Text('未读再次提醒', style: TextStyle(fontWeight: FontWeight.w700)), subtitle: Text('手动划掉通知或滑动确认后停止')),
-        ListTile(leading: const Icon(Icons.timer_outlined, color: purple), title: const Text('时间间隔'), trailing: Text('${r.intervalMinutes} 分钟'), onTap: () async {
+        ListTile(leading:  Icon(Icons.timer_outlined, color: context.colors.brand500), title: const Text('时间间隔'), trailing: Text('${r.intervalMinutes} 分钟'), onTap: () async {
           final n = await numberDialog(context, '再次提醒间隔（分钟）', r.intervalMinutes, 1, 1440);
           if (n != null && mounted) setState(() => r.intervalMinutes = n);
         }),
-        ListTile(leading: const Icon(Icons.repeat_rounded, color: purple), title: const Text('总次数（含首次）'), trailing: Text('${r.totalCount} 次'), onTap: () async {
+        ListTile(leading:  Icon(Icons.repeat_rounded, color: context.colors.brand500), title: const Text('总次数（含首次）'), trailing: Text('${r.totalCount} 次'), onTap: () async {
           final n = await numberDialog(context, '提醒总次数（包含第一次）', r.totalCount, 1, 20);
           if (n != null && mounted) setState(() => r.totalCount = n);
         }),
       ])), const SizedBox(height: 24),
       FilledButton(onPressed: saving ? null : save, child: Text(saving ? '正在保存…' : '保存提醒')),
-      const SizedBox(height: 14), const Text('到达次数上限后仍保留未读状态。编辑会重新安排这条提醒。', textAlign: TextAlign.center, style: TextStyle(color: muted, fontSize: 12)),
+      const SizedBox(height: 14),  Text('到达次数上限后仍保留未读状态。编辑会重新安排这条提醒。', textAlign: TextAlign.center, style: TextStyle(color: context.colors.muted, fontSize: 12)),
     ]),
   );
 }
@@ -1357,7 +1382,7 @@ bool calendarOccursOn(Reminder r, DateTime date) => r.completed || r.archived ? 
 DateTime historyCalendarDate(Reminder r) => r.historyScheduledAt > 0 ? DateTime.fromMillisecondsSinceEpoch(r.historyScheduledAt) : r.activeOccurrence > 0 ? DateTime.fromMillisecondsSinceEpoch(r.activeOccurrence) : r.date;
 
 /// Pinned day header. It is opaque on purpose: a translucent header would let
-/// cards scroll through it, and `MemoColor.canvas` matches the page behind.
+/// cards scroll through it, and `context.colors.canvas` matches the page behind.
 class _GroupHeader extends SliverPersistentHeaderDelegate {
   final String label;
   final int count;
@@ -1368,13 +1393,13 @@ class _GroupHeader extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => Container(
-    height: 44, color: MemoColor.canvas,
+    height: 44, color: context.colors.canvas,
     padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
     alignment: Alignment.bottomLeft,
     child: Row(children: [
-      Text(label, style: MemoText.caption.copyWith(fontWeight: FontWeight.w700, color: MemoColor.ink, letterSpacing: .4)),
+      Text(label, style: context.text.caption.copyWith(fontWeight: FontWeight.w700, color: context.colors.ink, letterSpacing: .4)),
       const SizedBox(width: 8),
-      Text('$count', style: MemoText.caption.copyWith(color: MemoColor.muted)),
+      Text('$count', style: context.text.caption.copyWith(color: context.colors.muted)),
     ]));
 
   @override bool shouldRebuild(_GroupHeader old) => old.label != label || old.count != count;
