@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "os": "Ubuntu 24.04 x86_64",
+  "flutter": {
+    "version": "3.35.7",
+    "dart": "3.9.2",
+    "commit": "adc901062556672b4138e18a4dc62a4be8f4b3c2",
+    "url": "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.35.7-stable.tar.xz",
+    "sha256": "146df531f9ac6a11a918013c1a70faafc053d4811c8cb69a413fd70748d51c3d"
+  },
+  "jdk": {
+    "version": "17.0.20.1+1",
+    "url": "https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20.1%2B1/OpenJDK17U-jdk_x64_linux_hotspot_17.0.20.1_1.tar.gz",
+    "sha256": "3808d1d15e3ec6bd5b84057fb5d84c33d8a1536a258146bcea2e603fc726e08e"
+  },
+  "android_command_line_tools": {
+    "version": "19.0",
+    "url": "https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip",
+    "sha1": "5fdcc763663eefb86a5b8879697aa6088b041e70"
+  },
+  "android_packages": [
+    "platform-tools",
+    "platforms;android-36",
+    "build-tools;36.0.0",
+    "ndk;27.0.12077973",
+    "cmake;3.22.1"
+  ],
+  "emulator_packages": [
+    "emulator",
+    "system-images;android-33;google_apis;x86_64",
+    "system-images;android-35;google_apis;x86_64"
+  ]
+}
