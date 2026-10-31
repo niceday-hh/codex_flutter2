@@ -99,8 +99,8 @@ class MemoApp extends StatelessWidget {
         minimumSize: const Size(0, 48),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MemoRadius.md)))),
       snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating, elevation: 0),
-      dialogTheme: DialogThemeData(backgroundColor: c.surface, elevation: 0),
-      bottomSheetTheme: BottomSheetThemeData(backgroundColor: c.surface, surfaceTintColor: Colors.transparent),
+      dialogTheme: DialogThemeData(backgroundColor: c.surfaceAlt, elevation: 0),
+      bottomSheetTheme: BottomSheetThemeData(backgroundColor: c.surfaceAlt, surfaceTintColor: Colors.transparent),
     );
   }
 
@@ -443,7 +443,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     final selection = _detailSelection = ValueNotifier(r);
     try {
       await showModalBottomSheet<void>(context: context, isScrollControlled: true,
-        backgroundColor: context.colors.surface, showDragHandle: true,
+        backgroundColor: context.colors.surfaceAlt, showDragHandle: true,
         builder: (sheetContext) => ValueListenableBuilder<Reminder>(valueListenable: selection,
           builder: (_, current, _) => ReminderDetail(key: ValueKey(current.id), reminder: current, onAck: () async {
           HapticFeedback.lightImpact();
@@ -583,7 +583,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
           IconButton(icon: const Icon(Icons.inventory_2_outlined), tooltip: '历史任务', onPressed: taskLibrary),
         ])),
         Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: Text(
-          '${now.month}月${now.day}日  周${weekdays[now.weekday - 1]}', style: const TextStyle(fontWeight: FontWeight.w600))),
+          '${now.month}月${now.day}日  周${weekdays[now.weekday - 1]}', style: context.text.label)),
         const SizedBox(height: 16),
         if (active.isNotEmpty && !_selecting) _reveal(0, heroCard(active.first, now)),
         if (store.status['notifications'] != true || store.status['exact'] != true) permissionBanner(),
@@ -618,7 +618,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   Widget heroCard(Reminder r, DateTime now) => Padding(padding: const EdgeInsets.symmetric(horizontal: 20),
     child: Container(decoration: BoxDecoration(
       borderRadius: BorderRadius.circular(MemoRadius.xxl),
-      boxShadow: MemoShadow.hero),
+      boxShadow: MemoShadow.heroFor(context.colors.brand600)),
       child: Material(type: MaterialType.transparency, child: Ink(
         decoration: BoxDecoration(
           gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
@@ -678,7 +678,10 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
         if (_selecting) Padding(padding: const EdgeInsets.only(right: 10),
           child: Icon(picked ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
             color: picked ? context.colors.brand600 : context.colors.outline, size: 22))
-        else Container(width: 4, height: 52, decoration: BoxDecoration(
+        // 40px: tall enough to bracket the clock and the title, short enough
+        // that it stops reading as a full-height rule once the clock dropped to
+        // 21px. 3px wide reads as a mark, not a border.
+        else Container(width: 3, height: 40, decoration: BoxDecoration(
           color: r.completed ? context.colors.lineStrong : r.unread ? context.colors.amber : context.colors.brand500,
           borderRadius: BorderRadius.circular(MemoRadius.pill))),
         const SizedBox(width: MemoSpace.md),
@@ -778,7 +781,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
                   children: [
                     Text('$d', style: TextStyle(
                       color: selected ? Colors.white : today ? context.colors.brand700 : context.colors.ink,
-                      fontWeight: selected || today ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: selected ? FontWeight.w600 : today ? FontWeight.w500 : FontWeight.w400,
                       fontSize: 14, fontFeatures: MemoText.tabular)),
                     const SizedBox(height: 3),
                     Container(width: 4, height: 4, decoration: BoxDecoration(shape: BoxShape.circle,
@@ -1208,7 +1211,7 @@ String channelImportanceLabel(int importance) => switch (importance) {
 Future<String?> chooseNotificationOption(BuildContext context, String title, Map<String, String> options, String current) =>
   showModalBottomSheet<String>(context: context, showDragHandle: true, builder: (c) => SafeArea(
     child: Column(mainAxisSize: MainAxisSize.min, children: [
-      Padding(padding: const EdgeInsets.all(12), child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
+      Padding(padding: const EdgeInsets.all(12), child: Text(title, style: context.text.title)),
       ...options.entries.map((e) => ListTile(title: Text(e.value),
         trailing: e.key == current ?  Icon(Icons.check_rounded, color: context.colors.brand500) : null,
         onTap: () => Navigator.pop(c, e.key))),
@@ -1281,8 +1284,7 @@ class _ReminderDetailState extends State<ReminderDetail> {
     return SafeArea(child: SingleChildScrollView(padding: EdgeInsets.fromLTRB(24, 0, 24, 28 + MediaQuery.of(context).viewInsets.bottom),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         const SizedBox(height: MemoSpace.sm),
-        Text(r.displayTime, style:  TextStyle(fontSize: 42, height: 1.1, fontWeight: FontWeight.w700,
-          color: context.colors.brand500, fontFeatures: MemoText.tabular)),
+        Text(r.displayTime, style: context.text.heroTime.copyWith(color: context.colors.brand500)),
         const SizedBox(height: 2),
         Text('${dateLabel(r.displayDate)} · ${r.repeatLabel}', style: context.text.body.copyWith(color: context.colors.muted)),
         const SizedBox(height: MemoSpace.xl),
@@ -1391,7 +1393,7 @@ class _ReminderEditorState extends State<ReminderEditor> {
         ListTile(leading:  Icon(Icons.schedule_rounded, color: context.colors.brand500), title: const Text('时间'), trailing: Text(r.timeConfirmed ? r.preciseTime : '请选择时间'), onTap: pickTime),
       ])), const SizedBox(height: 14),
       MemoCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('重复', style: TextStyle(fontWeight: FontWeight.w600)), const SizedBox(height: 14),
+        Text('重复', style: context.text.subtitle), const SizedBox(height: 14),
         SizedBox(width: double.infinity, child: SegmentedButton<String>(showSelectedIcon: false,
           segments: const [ButtonSegment(value: 'none', label: Text('仅一次')), ButtonSegment(value: 'daily', label: Text('每天')), ButtonSegment(value: 'weekly', label: Text('每周'))],
           selected: {r.repeat}, onSelectionChanged: (v) => setState(() { r.repeat = v.first; if (r.repeat == 'weekly' && r.days.isEmpty) r.days = [r.date.weekday]; }))),
@@ -1399,7 +1401,7 @@ class _ReminderEditorState extends State<ReminderEditor> {
           label: Text(weekdays[i]), selected: r.days.contains(i + 1), onSelected: (v) => setState(() { if (v) { r.days.add(i + 1); } else { r.days.remove(i + 1); } }))))],
       ])), const SizedBox(height: 14),
       MemoCard(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
-        const ListTile(title: Text('提醒方式', style: TextStyle(fontWeight: FontWeight.w700))),
+        ListTile(title: Text('提醒方式', style: context.text.subtitle)),
         NotificationDisplayOptions(presentation: r.presentation, lockscreen: r.lockscreen,
           onPresentationChanged: (v) => setState(() => r.presentation = v),
           onLockscreenChanged: (v) => setState(() => r.lockscreen = v)),
@@ -1422,11 +1424,11 @@ class _ReminderEditorState extends State<ReminderEditor> {
           }),
       ])), const SizedBox(height: 14),
       MemoCard(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
-        const ListTile(title: Text('语音播报', style: TextStyle(fontWeight: FontWeight.w700))),
+        ListTile(title: Text('语音播报', style: context.text.subtitle)),
         SpeechOptions(groups: widget.store.voiceGroups, reminder: r, defaults: widget.store.defaults, onChanged: () async { if (mounted) setState(() {}); }),
       ])), const SizedBox(height: 14),
       MemoCard(padding: const EdgeInsets.symmetric(vertical: 5), child: Column(children: [
-        const ListTile(title: Text('未读再次提醒', style: TextStyle(fontWeight: FontWeight.w700)), subtitle: Text('手动划掉通知或滑动确认后停止')),
+        ListTile(title: Text('未读再次提醒', style: context.text.subtitle), subtitle: Text('手动划掉通知或滑动确认后停止')),
         ListTile(leading:  Icon(Icons.timer_outlined, color: context.colors.brand500), title: const Text('时间间隔'), trailing: Text('${r.intervalMinutes} 分钟'), onTap: () async {
           final n = await numberDialog(context, '再次提醒间隔（分钟）', r.intervalMinutes, 1, 1440);
           if (n != null && mounted) setState(() => r.intervalMinutes = n);
@@ -1437,7 +1439,7 @@ class _ReminderEditorState extends State<ReminderEditor> {
         }),
       ])), const SizedBox(height: 24),
       FilledButton(onPressed: saving ? null : save, child: Text(saving ? '正在保存…' : '保存提醒')),
-      const SizedBox(height: 14),  Text('到达次数上限后仍保留未读状态。编辑会重新安排这条提醒。', textAlign: TextAlign.center, style: TextStyle(color: context.colors.muted, fontSize: 12)),
+      const SizedBox(height: 14),  Text('到达次数上限后仍保留未读状态。编辑会重新安排这条提醒。', textAlign: TextAlign.center, style: context.text.caption),
     ]),
   );
 }
@@ -1449,23 +1451,39 @@ DateTime historyCalendarDate(Reminder r) => r.historyScheduledAt > 0 ? DateTime.
 
 /// Pinned day header. It is opaque on purpose: a translucent header would let
 /// cards scroll through it, and `context.colors.canvas` matches the page behind.
+///
+/// It used to be a full-width band of `ink` text at w700, which in dark mode
+/// made the pinned strip the brightest thing on screen — a white caption on a
+/// black bar, cutting through the hero card as it scrolled. It is now a rule,
+/// not a heading: muted caption weight, a 12px brand dash, and a hairline that
+/// runs to the right edge so the group reads as a section.
 class _GroupHeader extends SliverPersistentHeaderDelegate {
   final String label;
   final int count;
   const _GroupHeader(this.label, this.count);
 
-  @override double get minExtent => 44;
-  @override double get maxExtent => 44;
+  static const _height = 40.0;
+
+  @override double get minExtent => _height;
+  @override double get maxExtent => _height;
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => Container(
-    height: 44, color: context.colors.canvas,
-    padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
+    height: _height, color: context.colors.canvas,
+    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
     alignment: Alignment.bottomLeft,
     child: Row(children: [
-      Text(label, style: context.text.caption.copyWith(fontWeight: FontWeight.w700, color: context.colors.ink, letterSpacing: .4)),
+      Container(width: 14, height: 2, decoration: BoxDecoration(
+        color: context.colors.brand500.withValues(alpha: .75),
+        borderRadius: BorderRadius.circular(1))),
       const SizedBox(width: 8),
-      Text('$count', style: context.text.caption.copyWith(color: context.colors.muted)),
+      Text(label, style: context.text.groupLabel),
+      const SizedBox(width: 8),
+      Text('$count', style: context.text.groupLabel.copyWith(fontFeatures: MemoText.tabular)),
+      const SizedBox(width: 12),
+      // The rule continues the label instead of leaving the rest of the strip
+      // empty; at 1px it separates without drawing a second border.
+      Expanded(child: Container(height: 1, color: context.colors.line)),
     ]));
 
   @override bool shouldRebuild(_GroupHeader old) => old.label != label || old.count != count;

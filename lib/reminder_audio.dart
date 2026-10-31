@@ -105,7 +105,7 @@ class _ReminderAudioPanelState extends State<ReminderAudioPanel> {
       return Container(width: double.infinity, padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(color: context.colors.brand100, borderRadius: BorderRadius.circular(20)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('提醒音频', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+          Text('提醒音频', style: context.text.subtitle),
           const SizedBox(height: 8),
           Semantics(liveRegion: true, child: Text(message, key: const ValueKey('reminder-audio-feedback'),
             style: TextStyle(color: _failed || failure ? context.colors.danger : context.colors.muted, fontSize: 13, height: 1.5))),

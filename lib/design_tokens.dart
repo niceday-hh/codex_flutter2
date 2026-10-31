@@ -33,7 +33,7 @@ abstract final class MemoColor {
   static const canvas = Color(0xFFF8F6FC);
   /// The dark canvas. Also the label colour for pastel fills in dark mode,
   /// where white would only reach 3.5:1.
-  static const night = Color(0xFF121017);
+  static const night = Color(0xFF0E0D13);
   static const surface = Color(0xFFFFFFFF);
   static const surfaceAlt = Color(0xFFFBFAFE);
 
@@ -185,32 +185,41 @@ Color inkOn(Color swatch) {
   return white >= night ? Colors.white : MemoColor.night;
 }
 
-/// Eight steps, no free-form font sizes. Line heights are pre-baked so text
+  /// Eight steps, no free-form font sizes. Line heights are pre-baked so text
 /// never relies on the default 1.2 that makes Chinese paragraphs look cramped.
+///
+/// **Three weights, no more.** 400 body, 500 emphasis, 600 headings. The old
+/// scale ran w800 on five levels of the same screen, so "bold" stopped meaning
+/// anything and every paragraph read as a headline. Weight is a hierarchy
+/// signal; spending it everywhere removes the hierarchy.
+///
+/// **No negative tracking on Chinese.** Latin can take -0.4px at 30px, Han
+/// glyphs cannot: their strokes start touching and a bold face turns into a
+/// slab. Only the tabular time keeps a little, because digits are narrow.
 abstract final class MemoText {
-  static const display = TextStyle(fontSize: 30, height: 1.2, fontWeight: FontWeight.w800, letterSpacing: -.4, color: MemoColor.ink);
-  static const title = TextStyle(fontSize: 22, height: 1.28, fontWeight: FontWeight.w700, color: MemoColor.ink);
-  static const headline = TextStyle(fontSize: 17, height: 1.4, fontWeight: FontWeight.w600, color: MemoColor.ink);
-  static const subtitle = TextStyle(fontSize: 15, height: 1.45, fontWeight: FontWeight.w600, color: MemoColor.ink);
-  static const body = TextStyle(fontSize: 14, height: 1.5, color: MemoColor.ink);
-  static const label = TextStyle(fontSize: 13, height: 1.45, fontWeight: FontWeight.w500, color: MemoColor.inkSoft);
-  static const caption = TextStyle(fontSize: 12, height: 1.45, color: MemoColor.muted);
-  static const overline = TextStyle(fontSize: 12, height: 1.3, fontWeight: FontWeight.w600, letterSpacing: .3, color: MemoColor.muted);
+  static const display = TextStyle(fontSize: 30, height: 1.24, fontWeight: FontWeight.w600, color: MemoColor.ink);
+  static const title = TextStyle(fontSize: 21, height: 1.3, fontWeight: FontWeight.w600, color: MemoColor.ink);
+  static const headline = TextStyle(fontSize: 17, height: 1.45, fontWeight: FontWeight.w500, color: MemoColor.ink);
+  static const subtitle = TextStyle(fontSize: 15, height: 1.5, fontWeight: FontWeight.w500, color: MemoColor.ink);
+  static const body = TextStyle(fontSize: 14, height: 1.62, color: MemoColor.ink);
+  static const label = TextStyle(fontSize: 13, height: 1.5, fontWeight: FontWeight.w500, color: MemoColor.inkSoft);
+  static const caption = TextStyle(fontSize: 12, height: 1.5, color: MemoColor.muted);
+  static const overline = TextStyle(fontSize: 12, height: 1.3, fontWeight: FontWeight.w600, color: MemoColor.muted);
 
   /// Buttons: no baked-in colour, so `foregroundColor` from the theme wins.
-  static const button = TextStyle(fontSize: 15, height: 1.4, fontWeight: FontWeight.w600);
+  static const button = TextStyle(fontSize: 15, height: 1.4, fontWeight: FontWeight.w500);
 
   /// The two display numbers. Big enough that the time reads before the text,
   /// which is what makes a list of reminders scannable rather than readable.
-  static const heroTime = TextStyle(fontSize: 40, height: 1.06, letterSpacing: -1.2,
-    fontWeight: FontWeight.w800, color: Color(0xFFFFFFFF), fontFeatures: tabular);
-  static const cardTime = TextStyle(fontSize: 26, height: 1.1, letterSpacing: -.8,
-    fontWeight: FontWeight.w800, color: MemoColor.ink, fontFeatures: tabular);
+  static const heroTime = TextStyle(fontSize: 34, height: 1.08, letterSpacing: -.6,
+    fontWeight: FontWeight.w600, color: Color(0xFFFFFFFF), fontFeatures: tabular);
+  static const cardTime = TextStyle(fontSize: 21, height: 1.14, letterSpacing: -.2,
+    fontWeight: FontWeight.w600, color: MemoColor.ink, fontFeatures: tabular);
 
   /// Card title: one step above [subtitle], so the clock and the text are not
   /// competing at almost the same size.
-  static const cardTitle = TextStyle(fontSize: 16, height: 1.45, fontWeight: FontWeight.w600, color: MemoColor.ink);
-  static const heroTitle = TextStyle(fontSize: 18, height: 1.4, fontWeight: FontWeight.w600, color: Color(0xFFFFFFFF));
+  static const cardTitle = TextStyle(fontSize: 15.5, height: 1.5, fontWeight: FontWeight.w500, color: MemoColor.ink);
+  static const heroTitle = TextStyle(fontSize: 17, height: 1.45, fontWeight: FontWeight.w500, color: Color(0xFFFFFFFF));
 
   /// Numbers that must not jitter (countdowns, clocks, dates).
   static const tabular = <FontFeature>[FontFeature.tabularFigures()];
@@ -247,8 +256,12 @@ abstract final class MemoShadow {
   static const float = <BoxShadow>[BoxShadow(color: Color(0x120E0824), blurRadius: 22, offset: Offset(0, 10))];
   static const sheet = <BoxShadow>[BoxShadow(color: Color(0x240E0824), blurRadius: 40, offset: Offset(0, 18))];
 
-  /// Brand-tinted lift under the hero card, so it reads as lit rather than cut out.
-  static const hero = <BoxShadow>[BoxShadow(color: Color(0x3D4A2BC4), blurRadius: 26, offset: Offset(0, 12))];
+  /// Brand-tinted lift under the hero card, so it reads as lit rather than cut
+  /// out. Takes the colour from the active ramp: a violet shadow under a teal
+  /// card looked like a bruise.
+  static List<BoxShadow> heroFor(Color brand600) =>
+    [BoxShadow(color: brand600.withValues(alpha: .24), blurRadius: 26, offset: const Offset(0, 12))];
+
 
   /// Pressed card: the shadow tightens as the card dips, so the finger gets a
   /// second, cheaper signal on top of the ripple.
@@ -283,7 +296,12 @@ abstract final class MemoMotion {
 /// ships; anything else is a one-off that will drift.
 @immutable
 class MemoPalette {
-  final Color surface, canvas, ink, inkSoft, muted, line, lineStrong, outline;
+  /// Three surfaces, not two. `canvas` is the page, `surface` is a resting card,
+  /// `surfaceAlt` is something lifted off the page (sheets, menus, the selected
+  /// swatch frame). In dark mode the three are only ~4% apart in luminance —
+  /// enough to read as layers, not enough to glow.
+  final Color surface, surfaceAlt, canvas;
+  final Color ink, inkSoft, muted, line, lineStrong, outline;
   final Color brand50, brand100, brand200, brand400, brand500, brand600, brand700, brand800;
   final Color onBrand, onBrandSoft, amber, amberSurface, amberInk, amberDeep;
   final Color danger, dangerSurface, success, warning, warningSurface;
@@ -301,6 +319,7 @@ class MemoPalette {
     required this.onBrand, required this.onBrandSoft, required this.amber, required this.amberSurface,
     required this.amberInk, required this.amberDeep, required this.danger, required this.dangerSurface,
     required this.success, required this.warning, required this.warningSurface,
+    this.surfaceAlt = MemoColor.surfaceAlt,
     this.brand = brandVioletLight, this.accent = MemoAccent.violet,
   });
 
@@ -310,8 +329,8 @@ class MemoPalette {
   MemoPalette withBrand(MemoAccent accent, Brightness brightness) {
     final b = brandFor(accent, brightness);
     return MemoPalette(
-      surface: surface, canvas: canvas, ink: ink, inkSoft: inkSoft, muted: muted, line: line,
-      lineStrong: lineStrong, outline: outline,
+      surface: surface, surfaceAlt: surfaceAlt, canvas: canvas, ink: ink, inkSoft: inkSoft,
+      muted: muted, line: line, lineStrong: lineStrong, outline: outline,
       brand50: b.c50, brand100: b.c100, brand200: b.c200, brand400: b.c400,
       brand500: b.c500, brand600: b.c600, brand700: b.c700, brand800: b.c800,
       onBrand: onBrand, onBrandSoft: onBrandSoft, amber: amber, amberSurface: amberSurface,
@@ -326,7 +345,8 @@ class MemoPalette {
     ? brand.gradientDawn : hour >= 10 && hour < 17 ? brand.gradientDay : brand.gradientNight;
 
   static const light = MemoPalette(
-    surface: MemoColor.surface, canvas: MemoColor.canvas, ink: MemoColor.ink,
+    surface: MemoColor.surface, surfaceAlt: MemoColor.surfaceAlt, canvas: MemoColor.canvas,
+    ink: MemoColor.ink,
     inkSoft: MemoColor.inkSoft, muted: MemoColor.muted, line: MemoColor.line,
     lineStrong: MemoColor.lineStrong, outline: MemoColor.outline,
     brand50: MemoColor.brand50, brand100: MemoColor.brand100, brand200: MemoColor.brand200,
@@ -338,14 +358,18 @@ class MemoPalette {
     success: MemoColor.success, warning: MemoColor.warning, warningSurface: MemoColor.warningSurface,
   );
 
-  /// Not an inverted light theme: the surfaces are near-black with a violet
-  /// cast (#121017 / #1B1822) so the brand does not turn grey at night, and
-  /// every text colour clears 4.5:1 against its own surface:
-  /// ink 15.4:1, muted 7.1:1, outline 5.4:1 on [surface].
+  /// Not an inverted light theme: three near-black surfaces with a violet cast
+  /// (#0E0D13 page → #191622 card → #221E2D lifted) so the brand does not turn
+  /// grey at night, and every text colour clears 4.5:1 against its own surface:
+  /// ink 14.4:1, muted 7.1:1, outline 6.2:1 on [surface].
+  ///
+  /// `ink` used to be #F3EFFA. Dropping four percent of its luminance keeps it
+  /// above AAA (14.4:1) while taking the glare off long paragraphs at 2 a.m.
   static const dark = MemoPalette(
-    surface: Color(0xFF1B1822), canvas: MemoColor.night, ink: Color(0xFFF3EFFA),
-    inkSoft: Color(0xFFD9D3E6), muted: Color(0xFFA79FB9), line: Color(0xFF2E2938),
-    lineStrong: Color(0xFF3D3649), outline: Color(0xFF928AA6),
+    surface: Color(0xFF191622), surfaceAlt: Color(0xFF221E2D), canvas: MemoColor.night,
+    ink: Color(0xFFE9E4F4),
+    inkSoft: Color(0xFFD9D3E6), muted: Color(0xFFA79FB9), line: Color(0xFF383244),
+    lineStrong: Color(0xFF453D55), outline: Color(0xFF928AA6),
     brand50: Color(0xFF1F1A2E), brand100: Color(0xFF2A2340), brand200: Color(0xFF3B3160),
     brand400: Color(0xFF9B82FF), brand500: Color(0xFF8C74FF), brand600: Color(0xFFA18CFF),
     brand700: Color(0xFFC3B6FF), brand800: Color(0xFFDFD7FF),
@@ -370,23 +394,30 @@ class MemoType {
   final MemoPalette c;
   const MemoType(this.c);
 
-  TextStyle get display => TextStyle(fontSize: 30, height: 1.2, fontWeight: FontWeight.w800, letterSpacing: -.4, color: c.ink);
-  TextStyle get title => TextStyle(fontSize: 22, height: 1.28, fontWeight: FontWeight.w700, color: c.ink);
-  TextStyle get headline => TextStyle(fontSize: 17, height: 1.4, fontWeight: FontWeight.w600, color: c.ink);
-  TextStyle get subtitle => TextStyle(fontSize: 15, height: 1.45, fontWeight: FontWeight.w600, color: c.ink);
-  TextStyle get body => TextStyle(fontSize: 14, height: 1.5, color: c.ink);
-  TextStyle get label => TextStyle(fontSize: 13, height: 1.45, fontWeight: FontWeight.w500, color: c.inkSoft);
-  TextStyle get caption => TextStyle(fontSize: 12, height: 1.45, color: c.muted);
-  TextStyle get overline => TextStyle(fontSize: 12, height: 1.3, fontWeight: FontWeight.w600, letterSpacing: .3, color: c.muted);
-  TextStyle get button => const TextStyle(fontSize: 15, height: 1.4, fontWeight: FontWeight.w600);
-  TextStyle get cardTime => TextStyle(fontSize: 26, height: 1.1, letterSpacing: -.8,
-    fontWeight: FontWeight.w800, color: c.ink, fontFeatures: MemoText.tabular);
-  TextStyle get cardTitle => TextStyle(fontSize: 16, height: 1.45, fontWeight: FontWeight.w600, color: c.ink);
+  TextStyle get display => TextStyle(fontSize: 30, height: 1.24, fontWeight: FontWeight.w600, color: c.ink);
+  TextStyle get title => TextStyle(fontSize: 21, height: 1.3, fontWeight: FontWeight.w600, color: c.ink);
+  TextStyle get headline => TextStyle(fontSize: 17, height: 1.45, fontWeight: FontWeight.w500, color: c.ink);
+  TextStyle get subtitle => TextStyle(fontSize: 15, height: 1.5, fontWeight: FontWeight.w500, color: c.ink);
+  TextStyle get body => TextStyle(fontSize: 14, height: 1.62, color: c.ink);
+  TextStyle get label => TextStyle(fontSize: 13, height: 1.5, fontWeight: FontWeight.w500, color: c.inkSoft);
+  TextStyle get caption => TextStyle(fontSize: 12, height: 1.5, color: c.muted);
+  TextStyle get overline => TextStyle(fontSize: 12, height: 1.3, fontWeight: FontWeight.w600, color: c.muted);
+  TextStyle get button => const TextStyle(fontSize: 15, height: 1.4, fontWeight: FontWeight.w500);
+  TextStyle get cardTime => TextStyle(fontSize: 21, height: 1.14, letterSpacing: -.2,
+    fontWeight: FontWeight.w600, color: c.ink, fontFeatures: MemoText.tabular);
+  TextStyle get cardTitle => TextStyle(fontSize: 15.5, height: 1.5, fontWeight: FontWeight.w500, color: c.ink);
+
+  /// Day-bucket label above a run of cards. It names a range, it is not a
+  /// heading: at caption size in [MemoPalette.muted] it reads as a rule on the
+  /// page, where ink-weight text used to make the pinned band the brightest
+  /// thing on a dark screen.
+  TextStyle get groupLabel => TextStyle(fontSize: 12, height: 1.2,
+    fontWeight: FontWeight.w500, color: c.muted);
 
   /// White on the hero gradient in both themes: the card is dark either way.
-  TextStyle get heroTime => const TextStyle(fontSize: 40, height: 1.06, letterSpacing: -1.2,
-    fontWeight: FontWeight.w800, color: Color(0xFFFFFFFF), fontFeatures: MemoText.tabular);
-  TextStyle get heroTitle => const TextStyle(fontSize: 18, height: 1.4, fontWeight: FontWeight.w600, color: Color(0xFFFFFFFF));
+  TextStyle get heroTime => const TextStyle(fontSize: 34, height: 1.08, letterSpacing: -.6,
+    fontWeight: FontWeight.w600, color: Color(0xFFFFFFFF), fontFeatures: MemoText.tabular);
+  TextStyle get heroTitle => const TextStyle(fontSize: 17, height: 1.45, fontWeight: FontWeight.w500, color: Color(0xFFFFFFFF));
 }
 
 /// Theme extension so a future dark theme can swap the whole palette without

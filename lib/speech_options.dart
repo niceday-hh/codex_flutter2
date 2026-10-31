@@ -156,7 +156,7 @@ Future<double?> chooseSpeechRate(BuildContext context, double current, {required
   var length = 1 / (current == 0 ? 1.0 : current);
   return showModalBottomSheet<double>(context: context, showDragHandle: true, builder: (c) => StatefulBuilder(
     builder: (c, update) => SafeArea(child: SingleChildScrollView(padding: const EdgeInsets.all(20), child: Column(mainAxisSize: MainAxisSize.min, children: [
-      Text('播报语速 ${(1 / length).toStringAsFixed(2)} 倍', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+      Text('播报语速 ${(1 / length).toStringAsFixed(2)} 倍', style: context.text.title),
       Text('length_scale · ${length.toStringAsFixed(3)}'),
       Slider(min: 0.1, max: 2, divisions: 190, value: length.clamp(0.1, 2).toDouble(), label: length.toStringAsFixed(3), onChanged: (v) => update(() => length = (v * 1000).round() / 1000)),
        Padding(padding: EdgeInsets.only(bottom: 12), child: Text('与网页版相同：length_scale 越大越慢。保留模型原始停顿；0.1～2.0 对应约 10～0.5 倍语速。极端快语速可能影响清晰度。', style: TextStyle(fontSize: 12, color: context.colors.muted))),
@@ -186,7 +186,7 @@ Future<String?> chooseSpeechVoice(BuildContext context, String current, {require
       padding: EdgeInsets.fromLTRB(16, 0, 16, MediaQuery.viewInsetsOf(c).bottom),
       child: SizedBox(height: (MediaQuery.sizeOf(c).height - MediaQuery.viewInsetsOf(c).bottom) * 0.8,
       child: Column(children: [
-        const Text('选择播报音色', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+        Text('选择播报音色', style: context.text.title),
         const Text('VITS-MNN · 804个音色条目', style: TextStyle(fontSize: 12)),
         if (groups.isNotEmpty) DropdownButtonFormField<String>(initialValue: selectedGroup, isExpanded: true,
           decoration: const InputDecoration(labelText: '角色组'),

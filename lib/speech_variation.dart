@@ -14,7 +14,7 @@ Future<SpeechVariation?> chooseSpeechVariation(BuildContext context, {required d
     builder: (c) => StatefulBuilder(builder: (c, update) => SafeArea(child: SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 24), child: Column(mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const Text('高级语音设置', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+        Text('高级语音设置', style: context.text.title),
         const SizedBox(height: 12),
          Text('调整同一音色的生成变化。新的参数会用于重新准备音频；选定的版本会保存并重复使用。',
           style: TextStyle(color: context.colors.muted, height: 1.5)),

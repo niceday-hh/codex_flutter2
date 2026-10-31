@@ -174,4 +174,68 @@ void main() {
     expect(MemoTokens.dark.colors.canvas, isNot(MemoTokens.light.colors.canvas));
     expect(MemoTokens.dark.colors.ink, isNot(MemoTokens.light.colors.ink));
   });
+
+  test('type sits on three weights and never tightens Chinese', () {
+    final weights = <String>[];
+    final tracking = <String>[];
+    final weight = RegExp(r'FontWeight\.w(\d{3})');
+    final negative = RegExp(r'letterSpacing:\s*-(?:[0-9]*\.)?[0-9]+');
+    for (final entity in Directory('lib').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      final source = entity.readAsStringSync();
+      for (final m in weight.allMatches(source)) {
+        if (!const {'400', '500', '600'}.contains(m.group(1))) {
+          weights.add('${entity.path}: ${m.group(0)}');
+        }
+      }
+      // Negative tracking is legal on exactly one thing: the tabular clocks.
+      // Digits are narrow enough to take it; Han glyphs are not, and at 30px a
+      // tightened bold face turns strokes into slabs.
+      for (final line in source.split('\n')) {
+        if (!negative.hasMatch(line)) continue;
+        final isClock = line.contains('heroTime') || line.contains('cardTime') ||
+          line.contains('fontFeatures');
+        if (!isClock) tracking.add('${entity.path}: ${line.trim()}');
+      }
+    }
+    // w700 and w800 were spent on 43 of 49 call sites, which is why the whole
+    // app read as bold: a hierarchy where everything is loud has none.
+    expect(weights, isEmpty, reason: 'weights outside 400/500/600:\n${weights.join('\n')}');
+    expect(tracking, isEmpty, reason: 'negative tracking outside the clocks:\n${tracking.join('\n')}');
+  });
+
+  test('the clocks stay subordinate to the content', () {
+    final t = MemoType(MemoPalette.light);
+    expect(t.heroTime.fontSize, lessThanOrEqualTo(36), reason: '40px w800 swallowed the card');
+    expect(t.cardTime.fontSize, lessThanOrEqualTo(24), reason: 'a 26px clock is a headline');
+    expect(t.heroTime.fontWeight, FontWeight.w600);
+    expect(t.cardTime.fontWeight, FontWeight.w600);
+  });
+
+  test('day headers read as a rule, not a heading', () {
+    final t = MemoType(MemoPalette.dark);
+    expect(t.groupLabel.fontWeight, FontWeight.w500);
+    expect(t.groupLabel.color, MemoPalette.dark.muted, reason: 'ink made the pinned strip glow');
+    expect(t.groupLabel.letterSpacing, isNull);
+    expect(t.groupLabel.fontSize, lessThanOrEqualTo(t.caption.fontSize!));
+  });
+
+  test('the dark theme stacks three surfaces without glare', () {
+    double lum(Color c) {
+      double channel(double v) => v <= .03928 ? v / 12.92 : math.pow((v + .055) / 1.055, 2.4).toDouble();
+      return .2126 * channel(c.r) + .7152 * channel(c.g) + .0722 * channel(c.b);
+    }
+    double ratio(Color a, Color b) {
+      final l1 = lum(a), l2 = lum(b);
+      return (math.max(l1, l2) + .05) / (math.min(l1, l2) + .05);
+    }
+    final c = MemoPalette.dark;
+    // Page → card → lifted sheet: each step has to be visible, none may glow.
+    expect(ratio(c.surface, c.canvas), greaterThan(1.05), reason: 'page and card must separate');
+    expect(ratio(c.surfaceAlt, c.surface), greaterThan(1.05), reason: 'a sheet must lift off a card');
+    expect(ratio(c.surfaceAlt, c.surface), lessThan(1.5), reason: 'a lifted surface must not glow');
+    expect(ratio(c.ink, c.surface), greaterThan(7.0), reason: 'body text keeps AAA at night');
+    expect(c.ink, isNot(const Color(0xFFF3EFFA)), reason: 'white glare was dialled back');
+    expect(ratio(c.line, c.surface), greaterThan(1.2), reason: 'a hairline has to be visible on #191622');
+  });
 }

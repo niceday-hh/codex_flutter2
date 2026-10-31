@@ -48,7 +48,7 @@ class _VibrationPickerState extends State<VibrationPicker> {
   @override Widget build(BuildContext context) => SafeArea(child: ConstrainedBox(
     constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .85),
     child: Column(mainAxisSize: MainAxisSize.min, children: [
-      const Padding(padding: EdgeInsets.all(12), child: Text('振动模式', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700))),
+      Padding(padding: const EdgeInsets.all(12), child: Text('振动模式', style: context.text.title)),
       Semantics(liveRegion: true, child: Container(width: double.infinity,
         margin: const EdgeInsets.fromLTRB(20, 2, 20, 12), padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(color: failed ? context.colors.dangerSurface : context.colors.brand100, borderRadius: BorderRadius.circular(16)),
