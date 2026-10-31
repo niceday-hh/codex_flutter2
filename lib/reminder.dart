@@ -105,6 +105,7 @@ class Reminder {
     'speechHideLocked': speechHideLocked, 'speechRepeat': speechRepeat,
   };
   String get time => '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  String get displayTime => '${displayDate.hour.toString().padLeft(2, '0')}:${displayDate.minute.toString().padLeft(2, '0')}';
   String get preciseTime => '$time:${date.second.toString().padLeft(2, '0')}';
   String get repeatLabel => switch (repeat) {
     'daily' => '每天',

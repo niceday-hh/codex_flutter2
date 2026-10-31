@@ -19,6 +19,8 @@ class ReminderSearchPage extends StatefulWidget {
 
 class _ReminderSearchPageState extends State<ReminderSearchPage> {
   String query = '';
+  final controller = TextEditingController();
+  @override void dispose() { controller.dispose(); super.dispose(); }
 
   static String _date(DateTime d) => '${d.month}月${d.day}日';
 
@@ -29,7 +31,7 @@ class _ReminderSearchPageState extends State<ReminderSearchPage> {
       r.text,
       r.time,
       '${r.date.year}-${r.date.month}-${r.date.day}',
-      _date(r.date),
+      _date(r.displayDate),
       if (r.repeat != 'none') r.repeatLabel,
     ].join(' ').toLowerCase();
     return haystack.contains(q);
@@ -54,10 +56,11 @@ class _ReminderSearchPageState extends State<ReminderSearchPage> {
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
           child: MemoSearchField(
+            controller: controller,
             hint: '搜索内容、日期或重复规则',
             showClear: query.isNotEmpty,
             onChanged: (v) => setState(() => query = v),
-            onClear: () => setState(() => query = ''),
+            onClear: () { controller.clear(); setState(() => query = ''); },
           ),
         ),
         Expanded(child: switch ((query.trim().isEmpty, found.isEmpty)) {
@@ -76,13 +79,13 @@ class _ReminderSearchPageState extends State<ReminderSearchPage> {
                   padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
                   onTap: () => Navigator.pop(context, r),
                   child: Row(children: [
-                    SizedBox(width: 54, child: Text(r.time, style: context.text.cardTime.copyWith(fontSize: 20))),
+                    SizedBox(width: 54, child: Text(r.displayTime, style: context.text.cardTime.copyWith(fontSize: 20))),
                     const SizedBox(width: MemoSpace.sm),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(r.text, maxLines: 1, overflow: TextOverflow.ellipsis, style: context.text.cardTitle),
                       const SizedBox(height: 4),
                       Text([
-                        _date(r.date),
+                        _date(r.displayDate),
                         if (r.repeat != 'none') r.repeatLabel,
                         if (r.completed) '已完成',
                         if (r.archived && !r.completed) '已归档',

@@ -343,7 +343,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
         child: Row(children: [
           Text('已选 ${_picked.length} 条', style: context.text.label.copyWith(color: context.colors.brand800)),
           const Spacer(),
-          TextButton(onPressed: _archivePicked, child: const Text('完成')),
+          TextButton(onPressed: _completePicked, child: const Text('完成本次')),
           TextButton(onPressed: _deletePicked,
             child:  Text('删除', style: TextStyle(color: context.colors.danger))),
           IconButton(tooltip: '取消选择', onPressed: () => setState(_picked.clear),
@@ -365,13 +365,16 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     HapticFeedback.selectionClick();
     setState(() { if (!_picked.remove(r.id)) _picked.add(r.id); });
   }
-  Future<void> _archivePicked() async {
-    final ids = [..._picked];
-    if (ids.isEmpty) return;
-    HapticFeedback.mediumImpact();
-    setState(_picked.clear);
-    try { await store.archiveAll(ids); await reload(); toast('已保留 ${ids.length} 条到历史任务'); }
-    catch (e) { toast(niceError(e), error: true); }
+  Future<void> _completePicked() async {
+    final rows = store.reminders.where((r) => _picked.contains(r.id) && r.unread).toList();
+    if (rows.isEmpty) { toast('所选提醒尚未触发，无需完成本次'); return; }
+    final ids = rows.map((r) => r.id).toSet();
+    setState(() => _picked.removeAll(ids));
+    try {
+      for (final r in rows) { await store.ack(r); }
+      await reload();
+      toast('已完成本次 ${rows.length} 条，循环提醒将继续；未触发项保持不变');
+    } catch (e) { await reload(); toast(niceError(e), error: true); }
   }
   Future<void> _deletePicked() async {
     final ids = [..._picked];
@@ -398,6 +401,9 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     _editorOpen = true; _pauseForNavigation();
     try {
       final draft = existing == null ? store.draft() : Reminder.fromJson({...existing.toJson()});
+      if (existing == null && tab == 1) {
+        draft.date = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, draft.date.hour, draft.date.minute);
+      }
       draft.enabled = true;
       draft.completed = false;
       draft.archived = false;
@@ -437,7 +443,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     final selection = _detailSelection = ValueNotifier(r);
     try {
       await showModalBottomSheet<void>(context: context, isScrollControlled: true,
-        backgroundColor: Colors.white, showDragHandle: true,
+        backgroundColor: context.colors.surface, showDragHandle: true,
         builder: (sheetContext) => ValueListenableBuilder<Reminder>(valueListenable: selection,
           builder: (_, current, _) => ReminderDetail(key: ValueKey(current.id), reminder: current, onAck: () async {
           HapticFeedback.lightImpact();
@@ -636,7 +642,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
                 const Spacer(),
                  Icon(Icons.arrow_forward_rounded, color: context.colors.onBrand, size: 20)]),
               const SizedBox(height: MemoSpace.md),
-              Text(r.time, style: context.text.heroTime),
+              Text(r.displayTime, style: context.text.heroTime),
               const SizedBox(height: 9),
               Text(r.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: context.text.heroTitle),
               const SizedBox(height: 13),
@@ -676,7 +682,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
           color: r.completed ? context.colors.lineStrong : r.unread ? context.colors.amber : context.colors.brand500,
           borderRadius: BorderRadius.circular(MemoRadius.pill))),
         const SizedBox(width: MemoSpace.md),
-        Text(r.time, style: r.completed ? context.text.cardTime.copyWith(color: context.colors.muted) : context.text.cardTime),
+        Text(r.displayTime, style: r.completed ? context.text.cardTime.copyWith(color: context.colors.muted) : context.text.cardTime),
         const SizedBox(width: MemoSpace.md), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(r.text, maxLines: 2, overflow: TextOverflow.ellipsis,
             style: r.completed ? context.text.cardTitle.copyWith(color: context.colors.muted) : context.text.cardTitle),
@@ -1275,7 +1281,7 @@ class _ReminderDetailState extends State<ReminderDetail> {
     return SafeArea(child: SingleChildScrollView(padding: EdgeInsets.fromLTRB(24, 0, 24, 28 + MediaQuery.of(context).viewInsets.bottom),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         const SizedBox(height: MemoSpace.sm),
-        Text(r.time, style:  TextStyle(fontSize: 42, height: 1.1, fontWeight: FontWeight.w700,
+        Text(r.displayTime, style:  TextStyle(fontSize: 42, height: 1.1, fontWeight: FontWeight.w700,
           color: context.colors.brand500, fontFeatures: MemoText.tabular)),
         const SizedBox(height: 2),
         Text('${dateLabel(r.displayDate)} · ${r.repeatLabel}', style: context.text.body.copyWith(color: context.colors.muted)),
