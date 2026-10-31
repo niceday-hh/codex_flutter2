@@ -94,7 +94,14 @@ void main() {
     await tester.pumpWidget(Directionality(textDirection: TextDirection.ltr,
       child: MemoReveal(animation: const AlwaysStoppedAnimation(.4), child: const Text('mid'))));
     expect(tester.widget<Opacity>(find.byType(Opacity)).opacity, .4);
-    expect(tester.widget<Transform>(find.byType(Transform)), isNotNull);
+    // Two transforms now: the upward drift and the last 0.8% of scale. Checked
+    // by matrix rather than by count, so adding a third would still be caught
+    // only if it stopped doing one of these two things.
+    final matrices = tester.widgetList<Transform>(find.byType(Transform)).map((t) => t.transform).toList();
+    expect(matrices.any((m) => m.getTranslation().y > 0), isTrue,
+      reason: 'a mid-flight item sits below its final slot');
+    expect(matrices.any((m) => m.storage[0] < 1), isTrue,
+      reason: 'and is still slightly smaller than its final size');
   });
 
   test('the dark palette keeps its own text readable', () {

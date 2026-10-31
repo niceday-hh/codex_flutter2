@@ -113,6 +113,10 @@ class MemoApp extends StatelessWidget {
     locale: const Locale('zh', 'CN'),
     supportedLocales: const [Locale('zh', 'CN')],
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
+    // One scroll physics for the whole app. Doing it here instead of per list
+    // keeps every long page — detail sheets, settings, the editor — on the
+    // same rubber band, including the ones built later.
+    scrollBehavior: const MemoScrollBehavior(),
     theme: _theme(Brightness.light, look.accent),
     darkTheme: _theme(Brightness.dark, look.accent),
     themeMode: look.mode,
@@ -168,6 +172,27 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   late final AnimationController _enter;
   final Map<int, Animation<double>> _revealCache = {};
   bool _entered = false;
+
+  /// The composer button retreats while the list scrolls down and comes back
+  /// when the finger stops. It is the only control that floats over content,
+  /// so it was the only one that could cover a row; hiding it during the
+  /// gesture that moves content under it removes the problem without shrinking
+  /// the tap target. Only the button listens, so the list never rebuilds.
+  final ValueNotifier<bool> _fabShown = ValueNotifier(true);
+  Timer? _fabTimer;
+  bool _onScroll(ScrollNotification n) {
+    if (n is ScrollUpdateNotification) {
+      final delta = n.scrollDelta ?? 0;
+      if (delta > 1) { _fabTimer?.cancel(); _fabShown.value = false; }
+      else if (delta < -1) { _fabTimer?.cancel(); _fabShown.value = true; }
+    } else if (n is ScrollEndNotification) {
+      _fabTimer?.cancel();
+      _fabTimer = Timer(const Duration(milliseconds: 650), () {
+        if (mounted) _fabShown.value = true;
+      });
+    }
+    return false;
+  }
 
   Animation<double> _revealAt(int i) => _revealCache.putIfAbsent(i, () {
     final begin = (i.clamp(0, MemoMotion.enterMaxItems) * MemoMotion.enterStep)
@@ -252,6 +277,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     HapticFeedback.selectionClick();
     _entryPending = false; _entryEpoch++; speech.stopPreview();
     final stopped = voice.active || voice.pending != null ? voice.pause(keepDraft: false) : Future<void>.value();
+    _fabShown.value = true;
     setState(() { tab = i; _picked.clear(); });
     unawaited(stopped.then((_) async {
       if (!mounted || !_foreground || tab != i || voice.active) return;
@@ -274,6 +300,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     for (final a in _revealCache.values) { if (a is CurvedAnimation) a.dispose(); }
     _revealCache.clear();
     _enter.dispose();
+    _fabTimer?.cancel(); _fabShown.dispose();
     WidgetsBinding.instance.removeObserver(this); native.setMethodCallHandler(null); super.dispose();
   }
   @override void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -437,6 +464,13 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     if (selection != null) { selection.value = matches.first; return; }
     viewReminder(matches.first);
   }
+  /// Tap feedback before a detail sheet. `lightImpact` is the lightest tick
+  /// the platform has, which is what iOS puts on navigation like this; batch
+  /// selection keeps its own `selectionClick`, so the two never stack.
+  void _openDetail(Reminder r) {
+    HapticFeedback.lightImpact();
+    unawaited(viewReminder(r));
+  }
   Future<void> viewReminder(Reminder r) async {
     if (!mounted || _detailOpen || _editorOpen) return;
     _detailOpen = true; _pauseForNavigation();
@@ -444,6 +478,16 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     try {
       await showModalBottomSheet<void>(context: context, isScrollControlled: true,
         backgroundColor: context.colors.surfaceAlt, showDragHandle: true,
+        // Asymmetric on purpose: up in 260ms, down in 200ms. The default pair
+        // (300/250, easeInOut) makes every sheet feel like a drawer being
+        // pulled; this one feels thrown.
+        sheetAnimationStyle: const AnimationStyle(
+          duration: MemoMotion.sheet, reverseDuration: MemoMotion.sheetOut,
+          curve: MemoMotion.curve, reverseCurve: Curves.easeInCubic),
+        // A hair darker than Material's default black54: the page behind a
+        // detail sheet should recede, not compete with the sheet's own text.
+        barrierColor: Colors.black.withValues(
+          alpha: Theme.of(context).brightness == Brightness.dark ? .62 : .32),
         builder: (sheetContext) => ValueListenableBuilder<Reminder>(valueListenable: selection,
           builder: (_, current, _) => ReminderDetail(key: ValueKey(current.id), reminder: current, onAck: () async {
           HapticFeedback.lightImpact();
@@ -492,7 +536,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     if (mounted) await reload();
   }
   @override Widget build(BuildContext context) => Scaffold(
-    body: MemoGlow(child: SafeArea(child: Column(children: [
+    body: NotificationListener<ScrollNotification>(onNotification: _onScroll,
+      child: MemoGlow(child: SafeArea(child: Column(children: [
       if (_selecting) _selectionBar(),
       if (voice.active && voice.pending == null && tab != 2) Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
@@ -525,30 +570,48 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
         TickerMode(enabled: tab == 2, child: RepaintBoundary(child: VoicePage(flow: voice))),
         RepaintBoundary(child: settingsPage()),
       ])),
-    ]))),
+    ])))),
+
     floatingActionButton: !loading && error == null && !_selecting && (tab == 0 || tab == 1)
-      ? FloatingActionButton(onPressed: () => edit(), backgroundColor: context.colors.brand500,
-          foregroundColor: Colors.white, tooltip: '新建提醒', child: const Icon(Icons.add_rounded, size: 32)) : null,
-    bottomNavigationBar: SafeArea(top: false, child: Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: context.colors.surface,
-          borderRadius: BorderRadius.circular(MemoRadius.xxl),
-          border: Border.all(color: context.colors.line),
-          boxShadow: MemoShadow.card,
+      ? ValueListenableBuilder<bool>(valueListenable: _fabShown,
+          builder: (_, shown, child) => IgnorePointer(ignoring: !shown,
+            child: AnimatedScale(scale: shown ? 1 : 0, duration: MemoMotion.press,
+              curve: MemoMotion.curve, child: child)),
+          child: FloatingActionButton(onPressed: () => edit(), backgroundColor: context.colors.brand500,
+            foregroundColor: Colors.white, tooltip: '新建提醒', elevation: 0, highlightElevation: 0,
+            // The default FAB shadow is black and reads as a smudge on the
+            // light canvas; a brand-tinted one matches the hero card above it.
+            shape: const CircleBorder(),
+            child: DecoratedBox(decoration: BoxDecoration(shape: BoxShape.circle,
+              boxShadow: MemoShadow.heroFor(context.colors.brand600)),
+              child: const SizedBox(width: 56, height: 56,
+                child: Icon(Icons.add_rounded, size: 30)))))
+      : null,
+    // A flush tab bar, not a floating pill. The pill was drawing a second card
+    // at the bottom of a page whose whole point is that only one card exists;
+    // a hairline plus a tinted icon is the iOS shape and gets out of the way of
+    // the list scrolling underneath it.
+    bottomNavigationBar: DecoratedBox(
+      decoration: BoxDecoration(color: context.colors.surface,
+        border: Border(top: BorderSide(color: context.colors.line, width: .6))),
+      child: SafeArea(top: false, child: NavigationBarTheme(
+        data: NavigationBarThemeData(
+          backgroundColor: Colors.transparent, surfaceTintColor: Colors.transparent, elevation: 0,
+          indicatorColor: Colors.transparent,
+          labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
+            fontSize: 12, height: 1.35, fontWeight: FontWeight.w500,
+            color: states.contains(WidgetState.selected) ? context.colors.brand600 : context.colors.muted)),
+          iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
+            size: 24, color: states.contains(WidgetState.selected) ? context.colors.brand600 : context.colors.muted)),
         ),
-        child: ClipRRect(borderRadius: BorderRadius.circular(MemoRadius.xxl), child: NavigationBar(
-          backgroundColor: context.colors.surface, surfaceTintColor: Colors.transparent,
-          height: 72, labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          selectedIndex: tab, indicatorColor: context.colors.brand100,
-          onDestinationSelected: _selectTab, destinations: const [
+        child: NavigationBar(
+          height: 64, labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          selectedIndex: tab, onDestinationSelected: _selectTab, destinations: const [
             NavigationDestination(icon: Icon(Icons.description_outlined), selectedIcon: Icon(Icons.description_rounded), label: '备忘录'),
             NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month_rounded), label: '日历'),
             NavigationDestination(icon: Icon(Icons.mic_none_rounded), selectedIcon: Icon(Icons.mic_rounded), label: '语音'),
             NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings_rounded), label: '设置'),
-          ])),
-      ))),
+          ])))),
   );
   Widget header(String title, String subtitle, {Widget? trailing}) =>
     MemoPageHeader(title: title, subtitle: subtitle, trailing: trailing);
@@ -582,9 +645,16 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
           IconButton(icon: const Icon(Icons.search_rounded), tooltip: '搜索提醒', onPressed: _openSearch),
           IconButton(icon: const Icon(Icons.inventory_2_outlined), tooltip: '历史任务', onPressed: taskLibrary),
         ])),
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: Text(
-          '${now.month}月${now.day}日  周${weekdays[now.weekday - 1]}', style: context.text.label)),
-        const SizedBox(height: 16),
+        // The kicker line. It used to be a lone label with nothing on the
+        // right; the count gives it a second edge, which is what makes the
+        // header read as a masthead rather than a stray date.
+        Padding(padding: const EdgeInsets.fromLTRB(24, 0, 24, 16), child: Row(children: [
+          Text('${now.month}月${now.day}日 · 周${weekdays[now.weekday - 1]}',
+            style: context.text.caption.copyWith(letterSpacing: .4)),
+          const Spacer(),
+          if (active.isNotEmpty) Text('${active.length} 条待办',
+            style: context.text.caption.copyWith(color: context.colors.muted)),
+        ])),
         if (active.isNotEmpty && !_selecting) _reveal(0, heroCard(active.first, now)),
         if (store.status['notifications'] != true || store.status['exact'] != true) permissionBanner(),
         if (active.isEmpty) MemoEmptyState(art: const MemoEmptyArt(), icon: Icons.edit_note_rounded,
@@ -610,12 +680,15 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       ])))),
       if (paused.isNotEmpty) SliverToBoxAdapter(child: section('未启用', '${paused.length} 条')),
       SliverList.builder(itemCount: paused.length, itemBuilder: (_, i) => _reveal(i + 1, reminderCard(paused[i]))),
-      const SliverToBoxAdapter(child: SizedBox(height: 90)),
+      // 120, not 90: the composer button now sits lower (the tab bar lost its
+      // floating pill and 8px of height), and the last row has to be able to
+      // clear it at the end of the scroll.
+      const SliverToBoxAdapter(child: SizedBox(height: 120)),
     ]));
   }
   /// The one gradient in the app. Its palette depends on the hour, so opening
   /// the app at 23:00 does not look identical to opening it at 09:00.
-  Widget heroCard(Reminder r, DateTime now) => Padding(padding: const EdgeInsets.symmetric(horizontal: 20),
+  Widget heroCard(Reminder r, DateTime now) => Padding(padding: const EdgeInsets.symmetric(horizontal: 24),
     child: Container(decoration: BoxDecoration(
       borderRadius: BorderRadius.circular(MemoRadius.xxl),
       boxShadow: MemoShadow.heroFor(context.colors.brand600)),
@@ -624,7 +697,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
           gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
             colors: context.colors.heroGradientFor(now.hour)),
           borderRadius: const BorderRadius.all(Radius.circular(MemoRadius.xxl))),
-        child: InkWell(onTap: () => _selecting ? _togglePick(r) : viewReminder(r),
+        child: InkWell(onTap: () => _selecting ? _togglePick(r) : _openDetail(r),
           borderRadius: BorderRadius.circular(MemoRadius.xxl),
           child: Stack(children: [
             Positioned.fill(child: IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(
@@ -642,7 +715,10 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
                 const Spacer(),
                  Icon(Icons.arrow_forward_rounded, color: context.colors.onBrand, size: 20)]),
               const SizedBox(height: MemoSpace.md),
-              Text(r.displayTime, style: context.text.heroTime),
+              // The clock is the one piece of text that changes when the next
+              // reminder does. Swapping it instead of replacing it makes the
+              // hero read as "the top moved on" rather than "the page blinked".
+              MemoNumberSwap(r.displayTime, style: context.text.heroTime),
               const SizedBox(height: 9),
               Text(r.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: context.text.heroTitle),
               const SizedBox(height: 13),
@@ -656,71 +732,97 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   Widget permissionBanner() => Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
     child: MemoBanner(icon: Icons.info_outline_rounded,
       text: '请在设置中开启通知与精确定时权限', onTap: () => _selectTab(3)));
+  /// One row, not one card.
+  ///
+  /// The list used to be a stack of rounded boxes with a 3px status bar on each
+  /// — eight reminders read as eight separate objects competing for attention,
+  /// which is why the page felt heavy no matter how the type was tuned. A row
+  /// over a hairline reads as one schedule: the clock column forms a single
+  /// vertical line, the titles form another, and only the hero card is still a
+  /// container. That single container is what gives the page a top.
   Widget reminderCard(Reminder r) {
-    // One status chip, everything else folds into a single meta line. The card
-    // used to carry up to three pills; three pills is noise, and noise is what
-    // made the list read as a wall instead of a sequence.
-    final status = r.completed || r.archived ? '已结束'
+    final dim = r.completed || r.archived;
+    // One status chip, everything else folds into a single meta line.
+    final status = dim ? '已结束'
       : !r.enabled ? '未启用'
       : r.unread ? '未读 ${r.attempts}/${r.totalCount}' : null;
-    final meta = StringBuffer(dateLabel(r.displayDate));
-    if (!r.completed && !r.archived && r.repeat != 'none') meta.write(' · ${r.repeatLabel}');
+    final meta = StringBuffer();
+    if (!dim && r.repeat != 'none') meta.write(r.repeatLabel);
     if (r.speechState != 'off') {
-      meta.write(' · ${r.speechState == 'ready' ? '语音就绪' : r.speechState == 'preparing' ? '语音准备中' : '语音待准备'}');
+      if (meta.isNotEmpty) meta.write(' · ');
+      meta.write(r.speechState == 'ready' ? '语音就绪' : r.speechState == 'preparing' ? '语音准备中' : '语音待准备');
     }
     final picked = _picked.contains(r.id);
-    final card = Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 10), child: MemoCard(
-      selected: picked,
-      padding: const EdgeInsets.fromLTRB(14, 13, 6, 13),
-      onTap: _selecting ? () => _togglePick(r) : () => viewReminder(r),
-      onLongPress: () => _togglePick(r),
-      child: Row(children: [
-        if (_selecting) Padding(padding: const EdgeInsets.only(right: 10),
-          child: Icon(picked ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-            color: picked ? context.colors.brand600 : context.colors.outline, size: 22))
-        // 40px: tall enough to bracket the clock and the title, short enough
-        // that it stops reading as a full-height rule once the clock dropped to
-        // 21px. 3px wide reads as a mark, not a border.
-        else Container(width: 3, height: 40, decoration: BoxDecoration(
-          color: r.completed ? context.colors.lineStrong : r.unread ? context.colors.amber : context.colors.brand500,
-          borderRadius: BorderRadius.circular(MemoRadius.pill))),
-        const SizedBox(width: MemoSpace.md),
-        Text(r.displayTime, style: r.completed ? context.text.cardTime.copyWith(color: context.colors.muted) : context.text.cardTime),
-        const SizedBox(width: MemoSpace.md), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(r.text, maxLines: 2, overflow: TextOverflow.ellipsis,
-            style: r.completed ? context.text.cardTitle.copyWith(color: context.colors.muted) : context.text.cardTitle),
-          const SizedBox(height: 5), Row(children: [
-            if (status != null) ...[MemoTag(status, emphasized: r.unread), const SizedBox(width: 6)],
-            Flexible(child: Text(meta.toString(), maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: context.text.caption)),
+    // Unread keeps the amber, but on the clock only. A tinted word is enough
+    // signal at this size and costs no extra chip; `amberInk` on light, because
+    // the brighter amber only clears 3.1:1 against the page.
+    final clockTint = dim ? context.colors.muted
+      : r.unread ? (Theme.of(context).brightness == Brightness.dark ? context.colors.amber : context.colors.amberInk)
+      : context.colors.ink;
+    final row = Material(
+      color: picked ? context.colors.brand50 : Colors.transparent,
+      child: InkWell(
+        onTap: _selecting ? () => _togglePick(r) : () => _openDetail(r),
+        onLongPress: () => _togglePick(r),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(_selecting ? 16 : 24, 15, 8, 15),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (_selecting) Padding(padding: const EdgeInsets.only(right: 12, top: 3),
+              child: Icon(picked ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                color: picked ? context.colors.brand600 : context.colors.outline, size: 22)),
+            // Fixed 56dp rail: the clocks line up down the page even when one
+            // of them is "9:05" and the next is "23:45".
+            SizedBox(width: 60, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(r.displayTime, maxLines: 1, style: context.text.cardTime.copyWith(
+                height: 1.1, color: clockTint)),
+              const SizedBox(height: 3),
+              Text(railDay(r.displayDate), maxLines: 1, style: context.text.caption.copyWith(
+                fontSize: 12, height: 1.2, letterSpacing: .2)),
+            ])),
+            const SizedBox(width: 16),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(r.text, maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: context.text.cardTitle.copyWith(color: dim ? context.colors.muted : context.colors.ink)),
+              if (status != null || meta.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Row(children: [
+                  if (status != null) ...[MemoTag(status, emphasized: r.unread), const SizedBox(width: 8)],
+                  Flexible(child: Text(meta.toString(), maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: context.text.caption)),
+                ]),
+              ],
+            ])),
+            if (_selecting) const SizedBox(width: 10)
+            else SizedBox(width: 34, height: 40, child: PopupMenuButton<String>(tooltip: '更多操作',
+              padding: EdgeInsets.zero, iconSize: 18, onSelected: (v) async {
+              if (v == 'edit') { await edit(r); }
+              else if (v == 'archive') { await finishTask(r); }
+              else { await remove(r); }
+            }, itemBuilder: (_) => [PopupMenuItem(value: 'edit', child: Text(r.archived || r.completed ? '编辑并复用' : '编辑')),
+              if (!r.archived && !r.completed) const PopupMenuItem(value: 'archive', child: Text('结束并保留')),
+              const PopupMenuItem(value: 'delete', child: Text('删除'))])),
           ]),
-        ])),
-        if (_selecting) const SizedBox(width: 10)
-        else PopupMenuButton<String>(tooltip: '更多操作', onSelected: (v) async {
-          if (v == 'edit') { await edit(r); }
-          else if (v == 'archive') { await finishTask(r); }
-          else { await remove(r); }
-        }, itemBuilder: (_) => [PopupMenuItem(value: 'edit', child: Text(r.archived || r.completed ? '编辑并复用' : '编辑')),
-          if (!r.archived && !r.completed) const PopupMenuItem(value: 'archive', child: Text('结束并保留')),
-          const PopupMenuItem(value: 'delete', child: Text('删除'))]),
-      ])));
+        )));
+    final lined = DecoratedBox(
+      // `line` is tuned for a card border on white (1.09:1) and disappears at
+      // full width; `lineStrong` is the weight a divider needs.
+      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: context.colors.lineStrong, width: .7))),
+      child: row);
     // Swipe is disabled while picking: a horizontal drag would otherwise fight
-    // the selection gesture and dismiss cards the user meant to tick.
-    if (r.archived || r.completed || _selecting) return card;
+    // the selection gesture and dismiss rows the user meant to tick.
+    if (r.archived || r.completed || _selecting) return lined;
     return Dismissible(key: ValueKey('task-${r.id}-${r.activeOccurrence}-${r.attempts}'), direction: DismissDirection.endToStart,
       background: const SizedBox.shrink(),
-      secondaryBackground: Container(margin: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-        padding: const EdgeInsets.symmetric(horizontal: MemoSpace.xl), alignment: Alignment.centerRight,
-        decoration: BoxDecoration(color: context.colors.brand100, borderRadius: BorderRadius.circular(MemoRadius.xl)),
-        child:  Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.archive_outlined, color: context.colors.brand700, size: 20), SizedBox(width: 6),
-          Text('保留 / 删除', style: TextStyle(color: context.colors.brand700, fontWeight: FontWeight.w600,
-            fontSize: 14)),
+      secondaryBackground: Container(alignment: Alignment.centerRight,
+        padding: const EdgeInsets.symmetric(horizontal: 24), color: context.colors.brand100,
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.archive_outlined, color: context.colors.brand700, size: 20), const SizedBox(width: 6),
+          Text('保留 / 删除', style: context.text.label.copyWith(color: context.colors.brand700)),
         ])),
       confirmDismiss: (_) async {
         await finishTask(r);
         return false;
-      }, child: card);
+      }, child: lined);
   }
   // Marks for the visible month, computed once per (data, month) pair instead of
   // scanning every reminder inside all 42 grid cells on every rebuild.
@@ -801,7 +903,10 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       SliverList.builder(itemCount: active.length, itemBuilder: (_, i) => reminderCard(active[i])),
       if (history.isNotEmpty) SliverToBoxAdapter(child: section('当天历史任务', '按保留的计划日期整理')),
       SliverList.builder(itemCount: history.length, itemBuilder: (_, i) => reminderCard(history[i])),
-      const SliverToBoxAdapter(child: SizedBox(height: 90)),
+      // 120, not 90: the composer button now sits lower (the tab bar lost its
+      // floating pill and 8px of height), and the last row has to be able to
+      // clear it at the end of the scroll.
+      const SliverToBoxAdapter(child: SizedBox(height: 120)),
     ]);
   }
   Widget settingsPage() => SettingsPage(onOpen: _openSettingsSection, currentValue: _settingValue,
@@ -1192,6 +1297,19 @@ String eventTime(dynamic stamp) {
   return '${d.month}月${d.day}日 ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}:${d.second.toString().padLeft(2, '0')}';
 }
 String dateLabel(DateTime d) => '${d.month}月${d.day}日';
+
+/// The compact date under a row's clock. The rail is 56dp wide, so "10月31日"
+/// would either wrap or shrink; "今天 / 明天 / 11/2" always fits on one line and
+/// is what people actually read at that size.
+String railDay(DateTime d, [DateTime? now]) {
+  final ref = now ?? DateTime.now();
+  final day = DateTime(d.year, d.month, d.day);
+  final diff = day.difference(DateTime(ref.year, ref.month, ref.day)).inDays;
+  if (diff == 0) return '今天';
+  if (diff == 1) return '明天';
+  if (diff == -1) return '昨天';
+  return '${d.month}/${d.day}';
+}
 bool sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
 bool occursOn(Reminder r, DateTime d) {
   final day = DateTime(d.year, d.month, d.day);
@@ -1462,7 +1580,7 @@ class _GroupHeader extends SliverPersistentHeaderDelegate {
   final int count;
   const _GroupHeader(this.label, this.count);
 
-  static const _height = 40.0;
+  static const _height = 46.0;
 
   @override double get minExtent => _height;
   @override double get maxExtent => _height;
@@ -1470,7 +1588,7 @@ class _GroupHeader extends SliverPersistentHeaderDelegate {
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => Container(
     height: _height, color: context.colors.canvas,
-    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+    padding: const EdgeInsets.fromLTRB(24, 18, 24, 0),
     alignment: Alignment.bottomLeft,
     child: Row(children: [
       Container(width: 14, height: 2, decoration: BoxDecoration(
@@ -1479,11 +1597,12 @@ class _GroupHeader extends SliverPersistentHeaderDelegate {
       const SizedBox(width: 8),
       Text(label, style: context.text.groupLabel),
       const SizedBox(width: 8),
-      Text('$count', style: context.text.groupLabel.copyWith(fontFeatures: MemoText.tabular)),
+      Text('$count', style: context.text.groupLabel.copyWith(
+        fontFeatures: MemoText.tabular, color: context.colors.muted.withValues(alpha: .72))),
       const SizedBox(width: 12),
       // The rule continues the label instead of leaving the rest of the strip
       // empty; at 1px it separates without drawing a second border.
-      Expanded(child: Container(height: 1, color: context.colors.line)),
+      Expanded(child: Container(height: 1, color: context.colors.lineStrong)),
     ]));
 
   @override bool shouldRebuild(_GroupHeader old) => old.label != label || old.count != count;

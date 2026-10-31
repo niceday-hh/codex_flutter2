@@ -1,7 +1,7 @@
 name: timed_memo
 description: Private, offline voice reminders for Android.
 publish_to: none
-version: 0.9.13+24
+version: 0.9.14+25
 environment:
   sdk: '>=3.9.0 <4.0.0'
 dependencies:
@@ -21,3 +21,9 @@ flutter:
     - assets/vad/
     - assets/tts/
     - native/app/src/main/assets/voice_catalog.json
+  # One face, subset to GB2312 + ASCII (2.3MB). Used only for titles at 19px
+  # and above — see MemoType.display for why it stops there.
+  fonts:
+    - family: MemoSerif
+      fonts:
+        - asset: assets/fonts/MemoSerif-Regular.otf

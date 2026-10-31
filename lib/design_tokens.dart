@@ -260,7 +260,7 @@ abstract final class MemoShadow {
   /// out. Takes the colour from the active ramp: a violet shadow under a teal
   /// card looked like a bruise.
   static List<BoxShadow> heroFor(Color brand600) =>
-    [BoxShadow(color: brand600.withValues(alpha: .24), blurRadius: 26, offset: const Offset(0, 12))];
+    [BoxShadow(color: brand600.withValues(alpha: .15), blurRadius: 22, offset: const Offset(0, 10))];
 
 
   /// Pressed card: the shadow tightens as the card dips, so the finger gets a
@@ -278,17 +278,32 @@ abstract final class MemoMotion {
   static const base = Duration(milliseconds: 200);
   static const curve = Curves.easeOutCubic;
 
-  /// Finger-down scale on a tappable surface. Short enough to feel like
-  /// pressure rather than a transition.
-  static const press = Duration(milliseconds: 110);
-  static const pressScale = 0.978;
+  /// A touch longer than the old 110ms, with a deeper 2.8% dip. The scale is
+  /// implicit, so it settles the moment the finger lifts; the extra 10ms is
+  /// what makes it read as "the surface gave way" instead of a flicker.
+  static const press = Duration(milliseconds: 120);
+  static const pressScale = 0.972;
 
-  /// First-paint entrance. Every item resolves to "done" inside ~520ms.
-  static const enter = Duration(milliseconds: 520);
-  static const enterStep = 0.085; // stagger per item, in controller units
+  /// First-paint entrance. 320ms was measured against the iOS feel: long
+  /// enough to see the drift, short enough that nobody waits for the list.
+  /// Stagger is 36ms per item — the old 85ms made the sixth card land at
+  /// 425ms, which is exactly the pause that felt like lag.
+  static const enter = Duration(milliseconds: 320);
+  static const enterStep = 0.1125; // 36ms of 320ms, in controller units
   static const enterSpan = 0.55; // how much of the timeline one item takes
-  static const enterShift = 10.0; // px an item travels while fading in
+  static const enterShift = 12.0; // px an item travels while fading in
+  static const enterScale = 0.992; // grows the last 0.8% as it lands
   static const enterMaxItems = 6; // past this, items appear without delay
+
+  /// Bottom sheets: ~260ms up, 200ms down. The default 300/250 with
+  /// `easeInOut` reads as a drawer; the shorter asymmetric pair reads as a
+  /// surface the finger threw.
+  static const sheet = Duration(milliseconds: 260);
+  static const sheetOut = Duration(milliseconds: 200);
+
+  /// A number swapping places (the hero clock when the next reminder changes,
+  /// the countdown in voice capture). Short enough that it never blocks a tap.
+  static const number = Duration(milliseconds: 180);
 }
 
 /// Semantic colours, split from the raw palette so a widget never reads a
@@ -394,8 +409,24 @@ class MemoType {
   final MemoPalette c;
   const MemoType(this.c);
 
-  TextStyle get display => TextStyle(fontSize: 30, height: 1.24, fontWeight: FontWeight.w600, color: c.ink);
-  TextStyle get title => TextStyle(fontSize: 21, height: 1.3, fontWeight: FontWeight.w600, color: c.ink);
+  /// The one serif in the app, and the reason the page reads as a masthead
+  /// rather than a settings screen. A Song face at 34px carries its hierarchy
+  /// through stroke contrast, so it can stay at w400 — a bold serif at this
+  /// size would read as a shout.
+  ///
+  /// It is deliberately NOT used below 16px: at 13–15px the thin horizontals
+  /// in a Song face drop under one physical pixel on a phone and the label
+  /// turns to grey mush. Body, rows, buttons and settings stay on the system
+  /// sans.
+  static const serif = 'MemoSerif';
+
+  TextStyle get display => TextStyle(fontFamily: serif, fontSize: 34, height: 1.2,
+    fontWeight: FontWeight.w400, color: c.ink);
+  /// 21px is where the serif starts carrying body-length text: a reminder's
+  /// own note reads like a printed paragraph instead of a form field. Line
+  /// height goes to 1.5 because serif ascenders need the room.
+  TextStyle get title => TextStyle(fontFamily: serif, fontSize: 21, height: 1.5,
+    fontWeight: FontWeight.w400, color: c.ink);
   TextStyle get headline => TextStyle(fontSize: 17, height: 1.45, fontWeight: FontWeight.w500, color: c.ink);
   TextStyle get subtitle => TextStyle(fontSize: 15, height: 1.5, fontWeight: FontWeight.w500, color: c.ink);
   TextStyle get body => TextStyle(fontSize: 14, height: 1.62, color: c.ink);
@@ -417,7 +448,10 @@ class MemoType {
   /// White on the hero gradient in both themes: the card is dark either way.
   TextStyle get heroTime => const TextStyle(fontSize: 34, height: 1.08, letterSpacing: -.6,
     fontWeight: FontWeight.w600, color: Color(0xFFFFFFFF), fontFeatures: MemoText.tabular);
-  TextStyle get heroTitle => const TextStyle(fontSize: 17, height: 1.45, fontWeight: FontWeight.w500, color: Color(0xFFFFFFFF));
+  /// 19px serif is the smallest size where the face still reads as type and
+  /// not as a texture, which is why the rows below it stay sans.
+  TextStyle get heroTitle => const TextStyle(fontFamily: MemoType.serif, fontSize: 19, height: 1.45,
+    fontWeight: FontWeight.w400, color: Color(0xFFFFFFFF));
 }
 
 /// Theme extension so a future dark theme can swap the whole palette without

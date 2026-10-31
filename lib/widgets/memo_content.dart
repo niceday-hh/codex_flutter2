@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../design_tokens.dart';
 
-/// Page-level title block: 30px display + one line of muted context.
+/// Page-level title block: 34px display + one line of muted context.
+///
+/// The gap under the title is deliberately small (8) and the block under it is
+/// tight (12): an editorial header groups the title, the kicker and the first
+/// piece of content into one mass, instead of leaving them floating apart.
 class MemoPageHeader extends StatelessWidget {
   final String title;
   final String subtitle;
@@ -11,14 +15,14 @@ class MemoPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(MemoSpace.xxl, MemoSpace.xxl, MemoSpace.xxl, MemoSpace.xl),
-    child: Row(children: [
+    padding: const EdgeInsets.fromLTRB(MemoSpace.xxl, 28, MemoSpace.xxl, 12),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(title, style: context.text.display),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Text(subtitle, style: context.text.body.copyWith(color: context.colors.muted)),
       ])),
-      if (trailing != null) trailing!,
+      if (trailing != null) Padding(padding: const EdgeInsets.only(bottom: 2), child: trailing!),
     ]),
   );
 }
