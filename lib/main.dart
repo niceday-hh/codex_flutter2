@@ -163,8 +163,10 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   DateTime calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
   /// Ids picked in batch mode. Non-empty means the list is in selection
   /// mode: taps toggle instead of opening, and the app bar swaps to actions.
-  final Set<int> _picked = {};
-  bool get _selecting => _picked.isNotEmpty;
+  /// A notifier, not a bare set: the history route shares this row builder and
+  /// needs to repaint its own checkboxes without rebuilding the home page.
+  final MemoSelection _selection = MemoSelection();
+  bool get _selecting => _selection.active;
 
   // Motion. One controller for the whole app: the first screen resolves in
   // half a second, then nothing ticks. Tab switches deliberately have no
@@ -216,6 +218,10 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       ..addStatusListener((s) { if (s == AnimationStatus.completed && mounted) setState(() {}); });
     asr.setForeground(true);
     voice.addListener(_voiceChanged);
+    // The page-level chrome (action bar, FAB, hero slot) depends on whether a
+    // selection exists, so a single listener keeps them in step. The rows read
+    // the set through `_selection` and do not need a second subscription.
+    _selection.addListener(_selectionChanged);
     native.setMethodCallHandler((call) async {
       if (call.method == 'openReminder') {
         _suppressVoiceEntry = true; _entryPending = false; _entryEpoch++;
@@ -278,7 +284,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     _entryPending = false; _entryEpoch++; speech.stopPreview();
     final stopped = voice.active || voice.pending != null ? voice.pause(keepDraft: false) : Future<void>.value();
     _fabShown.value = true;
-    setState(() { tab = i; _picked.clear(); });
+    _selection.clear();
+    setState(() { tab = i; });
     unawaited(stopped.then((_) async {
       if (!mounted || !_foreground || tab != i || voice.active) return;
       if (i == 2) _warmManualTab();
@@ -301,6 +308,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     _revealCache.clear();
     _enter.dispose();
     _fabTimer?.cancel(); _fabShown.dispose();
+    _selection.removeListener(_selectionChanged); _selection.dispose();
     WidgetsBinding.instance.removeObserver(this); native.setMethodCallHandler(null); super.dispose();
   }
   @override void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -368,12 +376,12 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       clipBehavior: Clip.antiAlias,
       child: Padding(padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
         child: Row(children: [
-          Text('已选 ${_picked.length} 条', style: context.text.label.copyWith(color: context.colors.brand800)),
+          Text('已选 ${_selection.length} 条', style: context.text.label.copyWith(color: context.colors.brand800)),
           const Spacer(),
           TextButton(onPressed: _completePicked, child: const Text('完成本次')),
           TextButton(onPressed: _deletePicked,
             child:  Text('删除', style: TextStyle(color: context.colors.danger))),
-          IconButton(tooltip: '取消选择', onPressed: () => setState(_picked.clear),
+          IconButton(tooltip: '取消选择', onPressed: _selection.clear,
             icon: const Icon(Icons.close_rounded, size: 20)),
         ]))));
   void toast(String s, {bool error = false}) {
@@ -388,15 +396,16 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     _entryPending = false; _entryEpoch++; speech.stopPreview();
     unawaited(voice.pause(keepDraft: false).catchError((Object e) { toast(niceError(e), error: true); }));
   }
+  void _selectionChanged() { if (mounted) setState(() {}); }
   void _togglePick(Reminder r) {
     HapticFeedback.selectionClick();
-    setState(() { if (!_picked.remove(r.id)) _picked.add(r.id); });
+    _selection.toggle(r.id);
   }
   Future<void> _completePicked() async {
-    final rows = store.reminders.where((r) => _picked.contains(r.id) && r.unread).toList();
+    final rows = store.reminders.where((r) => _selection.contains(r.id) && r.unread).toList();
     if (rows.isEmpty) { toast('所选提醒尚未触发，无需完成本次'); return; }
     final ids = rows.map((r) => r.id).toSet();
-    setState(() => _picked.removeAll(ids));
+    _selection.removeAll(ids);
     try {
       for (final r in rows) { await store.ack(r); }
       await reload();
@@ -404,7 +413,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     } catch (e) { await reload(); toast(niceError(e), error: true); }
   }
   Future<void> _deletePicked() async {
-    final ids = [..._picked];
+    final ids = [..._selection.ids];
     if (ids.isEmpty) return;
     final yes = await showDialog<bool>(context: context, builder: (c) => AlertDialog(
       title: Text('删除 ${ids.length} 条提醒？'), content: const Text('删除后，这些提醒及剩余重提醒都会取消。'),
@@ -412,7 +421,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
         TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('删除'))]));
     if (yes != true) return;
     HapticFeedback.mediumImpact();
-    setState(_picked.clear);
+    _selection.clear();
     try { await store.deleteAll(ids); await reload(); toast('已删除 ${ids.length} 条'); }
     catch (e) { toast(niceError(e), error: true); }
   }
@@ -531,7 +540,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     unawaited(voice.pause(keepDraft: false).catchError((Object e) { toast(niceError(e), error: true); }));
     try {
       await Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => TaskLibraryPage(
-        store: store, card: reminderCard)));
+        store: store, card: (r, selection) => reminderCard(r, selection: selection))));
     } finally { _taskLibraryOpen = false; }
     if (mounted) await reload();
   }
@@ -632,8 +641,13 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     // 21px in the row below it — spent the most valuable part of the first
     // screen repeating the list instead of summarising it. The card now owns
     // the single item; the rows own everything after it.
-    final hero = active.isEmpty ? null : active.first;
-    final rest = active.isEmpty ? active : active.sublist(1);
+    //
+    // Selection mode deliberately drops the card: the card has no checkbox,
+    // and on a day with a single reminder hiding it left *nothing* to tick.
+    // Rows are the only shape that can be selected, so while picking, every
+    // active reminder is a row.
+    final hero = active.isEmpty || _selecting ? null : active.first;
+    final rest = hero == null ? active : active.sublist(1);
     final historyCount = store.reminders.where((r) => r.archived || r.completed).length;
     final today = DateTime(now.year, now.month, now.day);
     // Day buckets instead of one long list. The section is the unit people
@@ -670,7 +684,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
           if (active.isNotEmpty) Text('${active.length} 条待办',
             style: context.text.caption.copyWith(color: context.colors.muted)),
         ])),
-        if (hero != null && !_selecting) _reveal(0, heroCard(hero, now, todayLeft)),
+        if (hero != null) _reveal(0, heroCard(hero, now, todayLeft)),
         if (store.status['notifications'] != true || store.status['exact'] != true) permissionBanner(),
         if (active.isEmpty) MemoEmptyState(art: const MemoEmptyArt(), icon: Icons.edit_note_rounded,
           title: '留一点空间，给重要的事', subtitle: '点击下方按钮，或用语音创建第一条提醒',
@@ -713,6 +727,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
             colors: context.colors.heroGradientFor(now.hour)),
           borderRadius: const BorderRadius.all(Radius.circular(MemoRadius.xxl))),
         child: InkWell(onTap: () => _selecting ? _togglePick(r) : _openDetail(r),
+          onLongPress: () => _togglePick(r),
           borderRadius: BorderRadius.circular(MemoRadius.xxl),
           child: Stack(children: [
             Positioned.fill(child: IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(
@@ -728,7 +743,22 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
                 Text(r.unread ? '待确认提醒' : '下一条提醒',
                   style: context.text.label.copyWith(color: context.colors.onBrand)),
                 const Spacer(),
-                 Icon(Icons.arrow_forward_rounded, color: context.colors.onBrand, size: 20)]),
+                // The card is the only reminder on a one-item day, so it needs
+                // the same exits a row has. The arrow promised "tap to open"
+                // and delivered nothing else: no archive, no delete.
+                SizedBox(width: 40, height: 40, child: PopupMenuButton<String>(
+                  tooltip: '更多操作', padding: EdgeInsets.zero, iconSize: 20,
+                  icon: Icon(Icons.more_horiz_rounded, color: context.colors.onBrand),
+                  onSelected: (v) async {
+                    if (v == 'edit') { await edit(r); }
+                    else if (v == 'archive') { await finishTask(r); }
+                    else { await remove(r); }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'edit', child: Text('编辑')),
+                    PopupMenuItem(value: 'archive', child: Text('结束并保留')),
+                    PopupMenuItem(value: 'delete', child: Text('删除')),
+                  ]))]),
               const SizedBox(height: MemoSpace.md),
               // The clock is the one piece of text that changes when the next
               // reminder does. Swapping it instead of replacing it makes the
@@ -755,6 +785,41 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   Widget permissionBanner() => Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
     child: MemoBanner(icon: Icons.info_outline_rounded,
       text: '请在设置中开启通知与精确定时权限', onTap: () => _selectTab(3)));
+  /// The facts that used to be one grey run-on sentence, now one chip each.
+  ///
+  /// Colour separates *kinds* of fact at a glance: brand means it repeats,
+  /// amber means something is in flight, green means the audio is ready, red
+  /// means a render failed, grey means paused or gone. A missing chip is also
+  /// information — speech is off, so there is nothing to say about it.
+  List<Widget> _statusChips(Reminder r, bool dim) {
+    final chips = <Widget>[];
+    // No "已结束" chip: this builder only meets an ended row inside the history
+    // page, where every row is ended — a label repeated down the whole list is
+    // noise, not information.
+    if (!dim) {
+      if (!r.enabled) {
+        chips.add(const MemoTag('未启用', tone: MemoTagTone.neutral));
+      } else if (r.unread) {
+        chips.add(MemoTag('待确认 ${r.attempts}/${r.totalCount}', emphasized: true));
+      }
+    }
+    if (!dim && r.repeat != 'none') {
+      chips.add(MemoTag(r.repeatLabel, tone: MemoTagTone.brand, icon: Icons.repeat_rounded));
+    }
+    if (!dim) {
+      switch (r.speechState) {
+        case 'ready':
+          chips.add(const MemoTag('语音就绪', tone: MemoTagTone.success, icon: Icons.check_rounded));
+        case 'preparing':
+          chips.add(const MemoTag('语音准备中', tone: MemoTagTone.warning, icon: Icons.graphic_eq_rounded));
+        case 'error':
+          chips.add(const MemoTag('语音失败', tone: MemoTagTone.danger, icon: Icons.error_outline_rounded));
+        case 'missing':
+          chips.add(const MemoTag('待生成语音', tone: MemoTagTone.neutral, icon: Icons.mic_none_rounded));
+      }
+    }
+    return chips;
+  }
   /// One row, not one card.
   ///
   /// The list used to be a stack of rounded boxes with a 3px status bar on each
@@ -763,19 +828,16 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   /// over a hairline reads as one schedule: the clock column forms a single
   /// vertical line, the titles form another, and only the hero card is still a
   /// container. That single container is what gives the page a top.
-  Widget reminderCard(Reminder r) {
+  ///
+  /// [selection] exists because the history route reuses this builder: the
+  /// method's own `context` belongs to the home page, so the set cannot be
+  /// discovered from the calling page's context. Passing it in keeps one row
+  /// implementation for both screens with no shared mutable state.
+  Widget reminderCard(Reminder r, {MemoSelection? selection}) {
     final dim = r.completed || r.archived;
-    // One status chip, everything else folds into a single meta line.
-    final status = dim ? '已结束'
-      : !r.enabled ? '未启用'
-      : r.unread ? '未读 ${r.attempts}/${r.totalCount}' : null;
-    final meta = StringBuffer();
-    if (!dim && r.repeat != 'none') meta.write(r.repeatLabel);
-    if (r.speechState != 'off') {
-      if (meta.isNotEmpty) meta.write(' · ');
-      meta.write(r.speechState == 'ready' ? '语音就绪' : r.speechState == 'preparing' ? '语音准备中' : '语音待准备');
-    }
-    final picked = _picked.contains(r.id);
+    final pick = selection ?? _selection;
+    final selecting = pick.active;
+    final picked = pick.contains(r.id);
     // Unread keeps the amber, but on the clock only. A tinted word is enough
     // signal at this size and costs no extra chip; `amberInk` on light, because
     // the brighter amber only clears 3.1:1 against the page.
@@ -785,46 +847,42 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     final row = Material(
       color: picked ? context.colors.brand50 : Colors.transparent,
       child: InkWell(
-        onTap: _selecting ? () => _togglePick(r) : () => _openDetail(r),
-        onLongPress: () => _togglePick(r),
+        onTap: selecting ? () { HapticFeedback.selectionClick(); pick.toggle(r.id); } : () => _openDetail(r),
+        onLongPress: () { HapticFeedback.selectionClick(); pick.toggle(r.id); },
         child: Padding(
-          padding: EdgeInsets.fromLTRB(_selecting ? 16 : 24, 15, 8, 15),
+          padding: EdgeInsets.fromLTRB(selecting ? 16 : 24, 15, 8, 15),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (_selecting) Padding(padding: const EdgeInsets.only(right: 12, top: 3),
+            if (selecting) Padding(padding: const EdgeInsets.only(right: 12, top: 3),
               child: Icon(picked ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
                 color: picked ? context.colors.brand600 : context.colors.outline, size: 22)),
             // Fixed 56dp rail: the clocks line up down the page even when one
             // of them is "9:05" and the next is "23:45".
             SizedBox(width: 60, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(r.displayTime, maxLines: 1, style: context.text.cardTime.copyWith(
+              // An ended row shows the time it was *scheduled* for. Reading
+              // `displayDate` here printed "今天 17:16" next to a header dated
+              // two days ago: nextTrigger is already 0, so it fell through to
+              // the draft date.
+              Text(dim ? r.time : r.displayTime, maxLines: 1, style: context.text.cardTime.copyWith(
                 height: 1.1, color: clockTint)),
               const SizedBox(height: 3),
-              Text(railDay(r.displayDate), maxLines: 1, style: context.text.caption.copyWith(
+              Text(railDay(dim ? r.date : r.displayDate), maxLines: 1,
+                style: context.text.caption.copyWith(
                 fontSize: 12, height: 1.2, letterSpacing: .2)),
             ])),
             const SizedBox(width: 16),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(r.text, maxLines: 2, overflow: TextOverflow.ellipsis,
                 style: context.text.cardTitle.copyWith(color: dim ? context.colors.muted : context.colors.ink)),
-              if (status != null || meta.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Row(children: [
-                  if (status != null) ...[MemoTag(status, emphasized: r.unread), const SizedBox(width: 8)],
-                  // A repeat rule and the day rail both print as a 12px grey
-                  // word, so "每天" and "明天" used to look like the same kind
-                  // of fact. The glyph separates them without a second chip.
-                  Flexible(child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    if (!dim && r.repeat != 'none') ...[
-                      Icon(Icons.repeat_rounded, size: 12, color: context.colors.muted),
-                      const SizedBox(width: 3),
-                    ],
-                    Flexible(child: Text(meta.toString(), maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: context.text.caption)),
-                  ])),
-                ]),
+              if (_statusChips(r, dim) case final chips when chips.isNotEmpty) ...[
+                const SizedBox(height: 7),
+                // Wrap, not Row: at 320dp three chips ("待确认 1/3" + "每天" +
+                // "语音准备中") measure wider than the title column, and a Row
+                // would clip the last one instead of putting it on a second
+                // line. Chips are the point here — losing one defeats it.
+                Wrap(spacing: 6, runSpacing: 5, children: chips),
               ],
             ])),
-            if (_selecting) const SizedBox(width: 10)
+            if (selecting) const SizedBox(width: 10)
             else SizedBox(width: 34, height: 40, child: PopupMenuButton<String>(tooltip: '更多操作',
               padding: EdgeInsets.zero, iconSize: 18, onSelected: (v) async {
               if (v == 'edit') { await edit(r); }
@@ -842,7 +900,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       child: row);
     // Swipe is disabled while picking: a horizontal drag would otherwise fight
     // the selection gesture and dismiss rows the user meant to tick.
-    if (r.archived || r.completed || _selecting) return lined;
+    if (r.archived || r.completed || selecting) return lined;
     return Dismissible(key: ValueKey('task-${r.id}-${r.activeOccurrence}-${r.attempts}'), direction: DismissDirection.endToStart,
       background: const SizedBox.shrink(),
       secondaryBackground: Container(alignment: Alignment.centerRight,

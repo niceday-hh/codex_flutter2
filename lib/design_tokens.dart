@@ -335,7 +335,7 @@ class MemoPalette {
   final Color ink, inkSoft, muted, line, lineStrong, outline;
   final Color brand50, brand100, brand200, brand400, brand500, brand600, brand700, brand800;
   final Color onBrand, onBrandSoft, amber, amberSurface, amberInk, amberDeep;
-  final Color danger, dangerSurface, success, warning, warningSurface;
+  final Color danger, dangerSurface, success, successSurface, warning, warningSurface;
 
   /// The ramp this palette was built from. Kept as one object so the hero card
   /// can pick its gradient stops from the same hue as the accent.
@@ -356,7 +356,8 @@ class MemoPalette {
     required this.brand500, required this.brand600, required this.brand700, required this.brand800,
     required this.onBrand, required this.onBrandSoft, required this.amber, required this.amberSurface,
     required this.amberInk, required this.amberDeep, required this.danger, required this.dangerSurface,
-    required this.success, required this.warning, required this.warningSurface,
+    required this.success, required this.successSurface,
+    required this.warning, required this.warningSurface,
     this.surfaceAlt = MemoColor.surfaceAlt,
     this.brand = brandVioletLight, this.cardBrand = brandVioletLight,
     this.accent = MemoAccent.violet,
@@ -380,7 +381,8 @@ class MemoPalette {
       brand500: b.c500, brand600: b.c600, brand700: b.c700, brand800: b.c800,
       onBrand: onBrand, onBrandSoft: onBrandSoft, amber: amber, amberSurface: amberSurface,
       amberInk: amberInk, amberDeep: amberDeep, danger: danger, dangerSurface: dangerSurface,
-      success: success, warning: warning, warningSurface: warningSurface,
+      success: success, successSurface: successSurface,
+      warning: warning, warningSurface: warningSurface,
       brand: b, cardBrand: brandFor(accent, Brightness.light), accent: accent);
   }
 
@@ -401,7 +403,8 @@ class MemoPalette {
     onBrand: MemoColor.onBrand, onBrandSoft: MemoColor.onBrandSoft,
     amber: MemoColor.amber, amberSurface: MemoColor.amberSurface, amberInk: MemoColor.amberInk,
     amberDeep: MemoColor.amberDeep, danger: MemoColor.danger, dangerSurface: MemoColor.dangerSurface,
-    success: MemoColor.success, warning: MemoColor.warning, warningSurface: MemoColor.warningSurface,
+    success: MemoColor.success, successSurface: MemoColor.successSurface,
+    warning: MemoColor.warning, warningSurface: MemoColor.warningSurface,
   );
 
   /// Not an inverted light theme: three near-black surfaces with a violet cast
@@ -422,7 +425,8 @@ class MemoPalette {
     onBrand: Color(0xEBFFFFFF), onBrandSoft: Color(0xB8FFFFFF),
     amber: Color(0xFFF0A34F), amberSurface: Color(0xFF35240F), amberInk: Color(0xFFFFD9AC),
     amberDeep: Color(0xFFC9761D), danger: Color(0xFFFF8B80), dangerSurface: Color(0xFF3A1D1B),
-    success: Color(0xFF5FD39B), warning: Color(0xFFF0B062), warningSurface: Color(0xFF35240F),
+    success: Color(0xFF5FD39B), successSurface: Color(0xFF163024),
+    warning: Color(0xFFF0B062), warningSurface: Color(0xFF35240F),
     brand: brandVioletDark,
   );
 

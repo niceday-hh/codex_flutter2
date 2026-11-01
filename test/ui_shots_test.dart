@@ -68,10 +68,16 @@ void main() {
 
     final rows = [
       Reminder(id: 1, text: '交物业费', date: at(0, 15, 0)).toJson(),
-      Reminder(id: 2, text: '预约儿科挂号', date: at(0, 18, 30)).toJson(),
-      Reminder(id: 3, text: '给妈妈打个电话', date: at(0, 21, 0), repeat: 'daily').toJson(),
-      Reminder(id: 4, text: '妈妈复查血压，记得带上上次的化验单', date: at(1, 0, 51), repeat: 'daily').toJson(),
-      Reminder(id: 5, text: '交房租', date: at(1, 3, 51)).toJson(),
+      // Four different states in one screen, so the shot proves the chips read
+      // apart from each other instead of four grey words in a row. All four sit
+      // on today so the last row clears the composer button in a still shot.
+      Reminder(id: 2, text: '预约儿科挂号', date: at(0, 18, 30), repeat: 'daily').toJson()
+        ..['speechState'] = 'preparing',
+      Reminder(id: 3, text: '给妈妈打个电话', date: at(0, 21, 0),
+        repeat: 'weekly', days: [1, 5]).toJson()..['speechState'] = 'ready',
+      Reminder(id: 4, text: '妈妈复查血压，记得带上上次的化验单', date: at(0, 22, 10),
+        repeat: 'daily').toJson()..['speechState'] = 'missing',
+      Reminder(id: 5, text: '交房租', date: at(0, 23, 30)).toJson()..['speechState'] = 'error',
     ];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       native,
@@ -79,7 +85,7 @@ void main() {
         ? jsonEncode({
             'reminders': rows,
             'defaults': {},
-            'status': {'version': '0.9.15', 'notifications': true, 'exact': true},
+            'status': {'version': '0.9.16', 'notifications': true, 'exact': true},
           })
         : null,
     );
@@ -97,6 +103,14 @@ void main() {
     await tester.pumpAndSettle();
     await capture(tester, 'home-dark-teal');
 
+    // Batch mode on the home page: the card steps aside, every reminder turns
+    // into a tickable row, and the bar names the count.
+    await tester.longPress(find.text('预约儿科挂号'));
+    await tester.pumpAndSettle();
+    await capture(tester, 'home-select-teal');
+    await tester.tap(find.byTooltip('取消选择'));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('妈妈复查血压，记得带上上次的化验单').last);
     await tester.pumpAndSettle();
     await capture(tester, 'detail-dark-teal');
@@ -111,6 +125,47 @@ void main() {
     await tester.tap(find.text('妈妈复查血压，记得带上上次的化验单').last);
     await tester.pumpAndSettle();
     await capture(tester, 'detail-light-violet');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  }, skip: !previewsEnabled);
+
+  testWidgets('shoot the history batch bar', (tester) async {
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(786, 1704);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(() => appearance.value = Appearance.defaults);
+
+    final ago = DateTime.now().millisecondsSinceEpoch - 2 * 86400000;
+    final rows = [
+      Reminder(id: 1, text: '交物业费', date: at(0, 15, 0)).toJson(),
+      Reminder(id: 2, text: '修阳台灯', date: at(-2, 20, 10), enabled: false, completed: true).toJson()
+        ..['completed'] = true ..['archived'] = true ..['archivedAt'] = ago,
+      Reminder(id: 3, text: '换季衣服收纳', date: at(-2, 9, 30), enabled: false, completed: true).toJson()
+        ..['completed'] = true ..['archived'] = true ..['archivedAt'] = ago - 3600000,
+    ];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      native,
+      (call) async => call.method == 'getState'
+        ? jsonEncode({
+            'reminders': rows,
+            'defaults': {},
+            'status': {'version': '0.9.16', 'notifications': true, 'exact': true},
+          })
+        : null,
+    );
+
+    appearance.value = const Appearance(mode: ThemeMode.dark, accent: MemoAccent.teal);
+    await tester.pumpWidget(const RepaintBoundary(key: previewKey, child: MemoApp()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('历史任务'));
+    await tester.pumpAndSettle();
+    await tester.longPress(find.text('修阳台灯'));
+    await tester.pumpAndSettle();
+    await capture(tester, 'history-select-teal');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump();

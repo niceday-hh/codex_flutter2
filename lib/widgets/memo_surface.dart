@@ -82,12 +82,33 @@ class _MemoCardState extends State<MemoCard> {
   }
 }
 
-/// Inline status chip. One shape, two tints: brand for routine state, amber for
-/// "unread", so the chip and the card's left bar speak the same colour language.
+/// What a state chip is allowed to mean.
+///
+/// The list used to fold every fact into one grey sentence — "每天 · 语音就绪"
+/// read exactly like "明天", even though one is a rule and the other is a time.
+/// Colour is the cheapest way to separate kinds of fact without adding rows:
+/// five tones, each mapped to a palette pair that clears 4.5:1 on its own tint.
+enum MemoTagTone {
+  /// A rule that will fire again: repeat schedules, counts.
+  brand,
+  /// Something is moving and the user may want to wait for it.
+  warning,
+  /// A finished, healthy state — audio ready, and nothing else.
+  success,
+  /// Something needs attention: a failed render.
+  danger,
+  /// Structural state with no urgency: paused, ended, missing audio.
+  neutral,
+}
+
+/// Inline status chip. One shape, five tints.
 class MemoTag extends StatelessWidget {
   final String text;
   final bool emphasized;
-  const MemoTag(this.text, {super.key, this.emphasized = false});
+  final MemoTagTone tone;
+  final IconData? icon;
+  const MemoTag(this.text, {super.key, this.emphasized = false,
+    this.tone = MemoTagTone.brand, this.icon});
 
   @override
   Widget build(BuildContext context) {
@@ -95,16 +116,33 @@ class MemoTag extends StatelessWidget {
     // deep amber does not carry white text any more (#C9761D caps at 3.0:1),
     // so the fill lightens and the label flips to the page colour — 8.7:1.
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final (background, foreground) = switch (tone) {
+      MemoTagTone.brand => (context.colors.brand100, context.colors.brand700),
+      MemoTagTone.warning => (context.colors.warningSurface, context.colors.warning),
+      MemoTagTone.success => (context.colors.successSurface, context.colors.success),
+      MemoTagTone.danger => (context.colors.dangerSurface, context.colors.danger),
+      MemoTagTone.neutral => (context.colors.line, context.colors.muted),
+    };
+    final fill = emphasized
+      ? (dark ? context.colors.amber : context.colors.amberDeep) : background;
+    final ink = emphasized
+      ? (dark ? context.colors.canvas : Colors.white) : foreground;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: MemoSpace.sm, vertical: 3),
       decoration: BoxDecoration(
-        color: emphasized ? (dark ? context.colors.amber : context.colors.amberDeep)
-          : context.colors.brand100,
+        color: fill,
         borderRadius: BorderRadius.circular(MemoRadius.sm),
       ),
-      child: Text(text, style: context.text.overline.copyWith(
-        color: emphasized ? (dark ? context.colors.canvas : Colors.white)
-          : context.colors.brand700, height: 1.35)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        if (icon != null) ...[
+          Icon(icon, size: 12, color: ink),
+          const SizedBox(width: 3),
+        ],
+        // Flexible so a long label truncates instead of overflowing the row;
+        // the chip row itself wraps, this is the last line of defence.
+        Flexible(child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: context.text.overline.copyWith(color: ink, height: 1.35))),
+      ]),
     );
   }
 }

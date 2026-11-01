@@ -69,7 +69,7 @@ void main() {
       Reminder(id: 1, text: '自动完成记录', enabled: false, completed: true),
       Reminder(id: 2, text: '主动保留记录', enabled: false, completed: true, archived: true),
     ];
-    await tester.pumpWidget(MaterialApp(home: TaskLibraryPage(store: store, card: (r) => Text(r.text))));
+    await tester.pumpWidget(MaterialApp(home: TaskLibraryPage(store: store, card: (r, _) => Text(r.text))));
     await tester.pumpAndSettle();
     expect(find.text('自动完成记录'), findsOneWidget); expect(find.text('主动保留记录'), findsOneWidget);
     expect(find.byType(ChoiceChip), findsNothing);
