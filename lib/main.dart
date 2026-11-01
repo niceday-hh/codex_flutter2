@@ -98,6 +98,19 @@ class MemoApp extends StatelessWidget {
         foregroundColor: c.brand700, side: BorderSide(color: c.brand200),
         minimumSize: const Size(0, 48),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MemoRadius.md)))),
+      // Overflow menus are part of the page, not a system panel: same lifted
+      // surface, same hairline, same radius as a sheet. The default Material
+      // menu is a near-black slab with a hard 4px corner, which on the hero
+      // card looked like a context menu from another app.
+      popupMenuTheme: PopupMenuThemeData(
+        // No elevation: Material paints a black shadow that, on a dark page,
+        // reads as a heavy black rim around the menu. A hairline does the same
+        // job here and matches every other surface in the app.
+        color: c.surfaceAlt, surfaceTintColor: Colors.transparent,
+        elevation: 0, shadowColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MemoRadius.md),
+          side: BorderSide(color: c.line)),
+        labelTextStyle: WidgetStatePropertyAll(base.labelLarge?.merge(t.label))),
       snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating, elevation: 0),
       dialogTheme: DialogThemeData(backgroundColor: c.surfaceAlt, elevation: 0),
       bottomSheetTheme: BottomSheetThemeData(backgroundColor: c.surfaceAlt, surfaceTintColor: Colors.transparent),

@@ -130,6 +130,39 @@ void main() {
     await tester.pump();
   }, skip: !previewsEnabled);
 
+  testWidgets('shoot the single-reminder menu', (tester) async {
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(786, 1704);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(() => appearance.value = Appearance.defaults);
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      native,
+      (call) async => call.method == 'getState'
+        ? jsonEncode({
+            'reminders': [Reminder(id: 1, text: '交物业费', date: at(0, 15, 0)).toJson()],
+            'defaults': {},
+            'status': {'version': '0.9.16', 'notifications': true, 'exact': true},
+          })
+        : null,
+    );
+
+    appearance.value = const Appearance(mode: ThemeMode.dark, accent: MemoAccent.teal);
+    await tester.pumpWidget(const RepaintBoundary(key: previewKey, child: MemoApp()));
+    await tester.pumpAndSettle();
+    // The whole point of the release: a day with one reminder still has an
+    // archive and a delete, and they live on the card.
+    await tester.tap(find.byTooltip('更多操作'));
+    await tester.pumpAndSettle();
+    await capture(tester, 'single-menu-dark');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  }, skip: !previewsEnabled);
+
   testWidgets('shoot the history batch bar', (tester) async {
     tester.view.devicePixelRatio = 2;
     tester.view.physicalSize = const Size(786, 1704);
