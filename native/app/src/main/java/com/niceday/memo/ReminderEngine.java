@@ -322,6 +322,56 @@ public final class ReminderEngine {
         trace("muted", id, token, "本次静音");
         syncGuardian();
     }
+    /**
+     * "完成本次" before the alarm rings.
+     *
+     * A repeat advances past the occurrence it was about to fire, so the
+     * reminder the user wanted to skip is gone and the rule is intact. A
+     * one-shot has nothing to advance to, so it is retired into history —
+     * completing a task early is still completing it. If the alarm starts
+     * ringing between the tap and this call, the intent is the same as
+     * confirming it, so it is folded into acknowledge().
+     *
+     * No token is taken: the UI can only mean the occurrence currently
+     * scheduled, and the engine is the one that knows which that is.
+     */
+    public void skip(int id) throws JSONException {
+        JSONArray rows = read();
+        JSONObject r = find(rows, id);
+        if (r == null || r.optBoolean("archived") || r.optBoolean("completed")) return;
+        long ringing = r.optLong("activeOccurrence");
+        if (ringing > 0 && !r.optBoolean("acknowledged")) {
+            acknowledge(id, ringing, "完成本次（已触发）");
+            return;
+        }
+        if (!r.optBoolean("enabled", true)) return;
+        long at = r.optLong("nextTrigger");
+        // max(at, now), not at: a task whose alarm was missed can carry a
+        // nextTrigger in the past, and skipping from there would arm another
+        // past timestamp. From now, the result is the next real occurrence.
+        long following = at > 0 ? next(r, Math.max(at, System.currentTimeMillis())) : 0;
+        if (following > 0) {
+            r.put("nextTrigger", following).put("activeOccurrence", 0).put("attempts", 0)
+                .put("retryAt", 0).put("acknowledged", false).put("muted", false);
+            write(rows);
+            cancel(id, BASE); cancel(id, RETRY);
+            notifications.cancel(id); notifications.cancel(-id);
+            SpeechPlaybackService.cancel(id);
+            scheduleBase(r);
+            trace("skipped", id, following, "跳过 " + at);
+            syncGuardian();
+            return;
+        }
+        long now = System.currentTimeMillis();
+        r.put("enabled", false).put("completed", true).put("acknowledged", true)
+            .put("activeOccurrence", 0).put("nextTrigger", 0).put("retryAt", 0)
+            .put("attempts", 0).put("muted", false).put("lastAck", now);
+        write(rows);
+        cancel(id, BASE); cancel(id, RETRY);
+        notifications.cancel(id); notifications.cancel(-id);
+        SpeechPlaybackService.cancel(id); SpeechCache.prune(context); syncGuardian();
+        trace("completed_early", id, now, "提前完成");
+    }
     public void acknowledge(int id, long token) throws JSONException {
         acknowledge(id, token, "应用内确认");
     }

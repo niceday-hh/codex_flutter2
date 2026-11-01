@@ -162,6 +162,17 @@ class MemoStore extends ChangeNotifier {
     await native.invokeMethod('ack', {'id': r.id, 'token': r.activeOccurrence});
     await load();
   }
+  /// "完成本次" for a task that has not rung yet.
+  ///
+  /// Native advances a repeating task past the occurrence it was about to
+  /// fire, and retires a one-shot early; if the alarm starts ringing between
+  /// the tap and this call, the same intent is recorded as a confirmation. No
+  /// token is passed on purpose — the row on screen is the intent, and the
+  /// current occurrence is whatever the engine holds.
+  Future<void> skip(Reminder r) async {
+    await native.invokeMethod('skip', r.id);
+    await load();
+  }
   Future<void> delete(int id) async {
     await native.invokeMethod('delete', id);
     await load();

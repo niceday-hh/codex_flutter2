@@ -3,6 +3,7 @@ library;
 
 export 'memo_art.dart';
 export 'memo_content.dart';
+export 'memo_countdown.dart';
 export 'memo_motion.dart';
 export 'memo_selection.dart';
 export 'memo_segment.dart';

@@ -58,6 +58,48 @@ class MemoIconButton extends StatelessWidget {
   }
 }
 
+/// A small action pill that lives at the end of a list row.
+///
+/// Not a `TextButton`: a text button keeps Material's 48dp minimum tap target
+/// and 16dp side padding, which at 320dp eats the title column. This one is
+/// 40dp tall — the iOS minimum — and sized to its two words. Ends are fully
+/// round because every other pill on the page (chips, segments, the tab bar)
+/// already is.
+class MemoMiniButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final VoidCallback? onTap;
+
+  /// Brand tint for the forward action (reopen); a plain surface for edit, so
+  /// a column of history rows does not read as a column of buttons.
+  final bool emphasized;
+
+  const MemoMiniButton({super.key, required this.icon, required this.label,
+    required this.tooltip, this.onTap, this.emphasized = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final foreground = emphasized ? c.brand700 : c.inkSoft;
+    final shape = StadiumBorder(side: BorderSide(
+      color: emphasized ? c.brand200 : c.line, width: .7));
+    return Tooltip(message: tooltip, child: Material(
+      color: emphasized ? c.brand50 : c.surfaceAlt,
+      shape: shape, clipBehavior: Clip.antiAlias,
+      child: InkWell(onTap: onTap, customBorder: shape,
+        child: SizedBox(height: 40, child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 15, color: foreground),
+            const SizedBox(width: 4),
+            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: context.text.caption.copyWith(fontSize: 12, height: 1.1,
+                fontWeight: FontWeight.w600, letterSpacing: .1, color: foreground)),
+          ]))))));
+  }
+}
+
 /// Section label with an optional count on the right.
 class MemoSectionHeader extends StatelessWidget {
   final String title;

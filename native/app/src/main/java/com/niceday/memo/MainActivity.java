@@ -211,6 +211,7 @@ public final class MainActivity extends FlutterActivity {
                     case "save" -> { store.save((String) call.arguments); result.success(null); }
                     case "saveDefaults" -> { store.defaults((String) call.arguments); result.success(null); }
                     case "delete" -> { store.delete((Integer) call.arguments); result.success(null); }
+                    case "skip" -> { store.skip((Integer) call.arguments); result.success(null); }
                     case "archive" -> { store.archive((Integer) call.arguments); result.success(null); }
                     case "cleanupPrompts" -> { store.cleanupPrompts((Boolean)call.arguments); result.success(null); }
                     case "ack" -> {

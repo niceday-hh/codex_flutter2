@@ -68,17 +68,20 @@ void main() {
     addTearDown(() => appearance.value = Appearance.defaults);
 
     final rows = [
-      Reminder(id: 1, text: '交物业费', date: at(0, 15, 0)).toJson(),
+      // Tomorrow morning, not a fixed hour today: the hero now prints the
+      // distance to the next reminder, and a fixture pinned to 15:00 turns
+      // that pill into "已过 8 小时" whenever the shots are taken in the
+      // evening. A clean future span is the thing being documented.
+      Reminder(id: 1, text: '交物业费', date: at(1, 9, 0)).toJson(),
       // Four different states in one screen, so the shot proves the chips read
-      // apart from each other instead of four grey words in a row. All four sit
-      // on today so the last row clears the composer button in a still shot.
-      Reminder(id: 2, text: '预约儿科挂号', date: at(0, 18, 30), repeat: 'daily').toJson()
+      // apart from each other instead of four grey words in a row.
+      Reminder(id: 2, text: '预约儿科挂号', date: at(1, 11, 30), repeat: 'daily').toJson()
         ..['speechState'] = 'preparing',
-      Reminder(id: 3, text: '给妈妈打个电话', date: at(0, 21, 0),
+      Reminder(id: 3, text: '给妈妈打个电话', date: at(1, 14, 0),
         repeat: 'weekly', days: [1, 5]).toJson()..['speechState'] = 'ready',
-      Reminder(id: 4, text: '妈妈复查血压，记得带上上次的化验单', date: at(0, 22, 10),
+      Reminder(id: 4, text: '妈妈复查血压，记得带上上次的化验单', date: at(1, 18, 30),
         repeat: 'daily').toJson()..['speechState'] = 'missing',
-      Reminder(id: 5, text: '交房租', date: at(0, 23, 30)).toJson()..['speechState'] = 'error',
+      Reminder(id: 5, text: '交房租', date: at(1, 21, 30)).toJson()..['speechState'] = 'error',
     ];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       native,
@@ -86,7 +89,7 @@ void main() {
         ? jsonEncode({
             'reminders': rows,
             'defaults': {},
-            'status': {'version': '0.9.16', 'notifications': true, 'exact': true},
+            'status': {'version': '0.9.18', 'notifications': true, 'exact': true},
           })
         : null,
     );
@@ -144,9 +147,9 @@ void main() {
       native,
       (call) async => call.method == 'getState'
         ? jsonEncode({
-            'reminders': [Reminder(id: 1, text: '交物业费', date: at(0, 15, 0)).toJson()],
+            'reminders': [Reminder(id: 1, text: '交物业费', date: at(1, 9, 0)).toJson()],
             'defaults': {},
-            'status': {'version': '0.9.16', 'notifications': true, 'exact': true},
+            'status': {'version': '0.9.18', 'notifications': true, 'exact': true},
           })
         : null,
     );
@@ -156,7 +159,9 @@ void main() {
     await tester.pumpAndSettle();
     // The whole point of the release: a day with one reminder still has an
     // archive and a delete, and they live on the card.
-    await tester.tap(find.byTooltip('更多操作'));
+    // The same task now has two exits — the card's ⋯ and its row's; open the
+    // card's, which is the one this shot is about.
+    await tester.tap(find.byTooltip('更多操作').first);
     await tester.pumpAndSettle();
     await capture(tester, 'single-menu-dark');
 
@@ -187,7 +192,7 @@ void main() {
         ? jsonEncode({
             'reminders': rows,
             'defaults': {},
-            'status': {'version': '0.9.16', 'notifications': true, 'exact': true},
+            'status': {'version': '0.9.18', 'notifications': true, 'exact': true},
           })
         : null,
     );
@@ -223,12 +228,16 @@ void main() {
         ..['speechState'] = 'ready',
       Reminder(id: 4, text: '修阳台灯', date: at(-1, 20, 10), enabled: false, completed: true).toJson()
         ..['completed'] = true ..['archived'] = true ..['archivedAt'] = ago,
+      // A repeat in history shows the other verb: 开启 re-arms the rule,
+      // while the one-shot above can only be edited.
+      Reminder(id: 5, text: '晨跑', date: at(-1, 7, 0), repeat: 'daily', enabled: false, completed: true).toJson()
+        ..['completed'] = true ..['archived'] = true ..['archivedAt'] = ago - 7200000,
     ];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       native,
       (call) async => call.method == 'getState'
         ? jsonEncode({'reminders': rows, 'defaults': {},
-            'status': {'version': '0.9.17', 'notifications': true, 'exact': true}})
+            'status': {'version': '0.9.18', 'notifications': true, 'exact': true}})
         : null,
     );
 

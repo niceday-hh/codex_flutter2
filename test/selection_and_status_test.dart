@@ -21,8 +21,7 @@ void main() {
       if (call.method == 'getState') {
         return jsonEncode({'reminders': rows, 'status': {'notifications': true, 'exact': true}});
       }
-      if (call.method == 'archive') onCall?.call(call);
-      if (call.method == 'delete') onCall?.call(call);
+      onCall?.call(call);
       return null;
     });
   }
@@ -35,10 +34,10 @@ void main() {
     await tester.pumpWidget(const MemoApp());
     await tester.pumpAndSettle();
 
-    // One reminder means no rows at all: the card is the only surface left, so
-    // it has to carry the same menu a row does.
-    expect(find.byType(Dismissible), findsNothing);
-    await tester.tap(find.byTooltip('更多操作'));
+    // The card summarises the one reminder and the list still lists it, so
+    // the task has both exits: the card's ⋯ and the row's own.
+    expect(find.byType(Dismissible), findsOneWidget);
+    await tester.tap(find.byTooltip('更多操作').first);
     await tester.pumpAndSettle();
     expect(find.text('结束并保留'), findsOneWidget);
     expect(find.text('删除'), findsOneWidget);
@@ -58,7 +57,7 @@ void main() {
     await tester.pumpWidget(const MemoApp());
     await tester.pumpAndSettle();
 
-    await tester.longPress(find.text('交房租'));
+    await tester.longPress(find.text('交房租').first);
     await tester.pumpAndSettle();
     // The card gives up its slot while picking, so the reminder comes back as
     // a tickable row instead of disappearing behind the selection bar.
@@ -141,5 +140,84 @@ void main() {
     expect(selection.ids, {7, 8});
     selection.clear();
     expect(selection.active, isFalse);
+  });
+
+  testWidgets('完成本次 skips a future repeat instead of refusing it', (tester) async {
+    final calls = <String>[];
+    mock([Reminder(id: 1, text: '每天喝水', date: later(hours: 3), repeat: 'daily').toJson()],
+      onCall: (call) { calls.add(call.method); });
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    await tester.pumpWidget(const MemoApp());
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('每天喝水').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('完成本次'));
+    await tester.pumpAndSettle();
+
+    // Not `ack`: nothing rang. The engine advances the repeat past the
+    // occurrence it was about to fire, which is "skip today's reminder".
+    expect(calls, contains('skip'));
+    expect(calls, isNot(contains('ack')));
+    expect(find.text('1 条循环任务已跳到下一次'), findsOneWidget);
+    expect(find.text('无需完成本次'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  });
+
+  testWidgets('an ended repeat reopens from its row in one tap', (tester) async {
+    Map<String, dynamic>? saved;
+    mock([
+      Reminder(id: 1, text: '每天拉伸', enabled: false, completed: true, repeat: 'daily',
+        date: DateTime.now().subtract(const Duration(days: 2))).toJson()
+        ..['completed'] = true ..['lastAck'] = 1000,
+    ], onCall: (call) {
+      if (call.method == 'save') saved = jsonDecode(call.arguments as String) as Map<String, dynamic>;
+    });
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    await tester.pumpWidget(const MemoApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('历史任务'));
+    await tester.pumpAndSettle();
+
+    // A repeat still has a rule to run, so its pill is the verb (开启); a
+    // one-shot would show 编辑 because there is no date left to re-arm.
+    expect(find.text('开启'), findsOneWidget);
+    await tester.tap(find.text('开启'));
+    await tester.pumpAndSettle();
+    expect(saved, isNotNull);
+    expect(saved!['archived'], isFalse);
+    expect(saved!['enabled'], isTrue);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  });
+
+  testWidgets('a history row deletes only after the dialog confirms', (tester) async {
+    var deletes = 0;
+    mock([
+      Reminder(id: 2, text: '一次性任务', enabled: false, completed: true).toJson()
+        ..['completed'] = true ..['lastAck'] = 1000,
+    ], onCall: (call) { if (call.method == 'delete') deletes++; });
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    await tester.pumpWidget(const MemoApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('历史任务'));
+    await tester.pumpAndSettle();
+
+    final row = find.byKey(const ValueKey('history-2'));
+    await tester.drag(row, const Offset(-400, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('删除这条历史任务？'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, '取消'));
+    await tester.pumpAndSettle();
+    expect(deletes, 0);
+
+    await tester.drag(row, const Offset(-400, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, '删除'));
+    await tester.pumpAndSettle();
+    expect(deletes, 1);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
 }

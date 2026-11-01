@@ -179,6 +179,9 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   /// A notifier, not a bare set: the history route shares this row builder and
   /// needs to repaint its own checkboxes without rebuilding the home page.
   final MemoSelection _selection = MemoSelection();
+  /// Ids currently being re-armed, so a double tap on 开启 does not bump the
+  /// generation twice and schedule two alarms.
+  final Set<int> _reviving = <int>{};
   bool get _selecting => _selection.active;
 
   // Motion. One controller for the first screen, one for the tab switch. Both
@@ -409,14 +412,30 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     _selection.toggle(r.id);
   }
   Future<void> _completePicked() async {
-    final rows = store.reminders.where((r) => _selection.contains(r.id) && r.unread).toList();
-    if (rows.isEmpty) { toast('所选提醒尚未触发，无需完成本次'); return; }
+    // Every live task can be completed once, not only the ones that already
+    // rang: for a repeat, "完成本次" is "skip this occurrence", and for a
+    // one-shot it is "I am done before the alarm". A paused task has no
+    // occurrence to complete, so it stays out of the batch instead of
+    // producing a "无需完成" toast for the whole selection.
+    final rows = store.reminders.where((r) => _selection.contains(r.id)
+      && !r.archived && !r.completed && (r.unread || r.enabled)).toList();
+    if (rows.isEmpty) { toast('所选任务未启用提醒，无法完成本次'); return; }
     final ids = rows.map((r) => r.id).toSet();
     _selection.removeAll(ids);
+    var done = 0, skipped = 0;
     try {
-      for (final r in rows) { await store.ack(r); }
+      for (final r in rows) {
+        if (r.unread) { await store.ack(r); done++; }
+        else {
+          await store.skip(r);
+          // A one-shot has nothing to advance to, so native retires it: that
+          // is a completion, not a skip, and the toast should not lie.
+          if (r.repeat == 'none') { done++; } else { skipped++; }
+        }
+      }
       await reload();
-      toast('已完成本次 ${rows.length} 条，循环提醒将继续；未触发项保持不变');
+      toast([if (done > 0) '已完成 $done 条',
+        if (skipped > 0) '$skipped 条循环任务已跳到下一次'].join('；'));
     } catch (e) { await reload(); toast(niceError(e), error: true); }
   }
   Future<void> _deletePicked() async {
@@ -510,6 +529,11 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
           await store.ack(current);
           if (sheetContext.mounted) Navigator.pop(sheetContext);
           await reload();
+        }, onSkip: () async {
+          HapticFeedback.lightImpact();
+          await store.skip(current);
+          if (sheetContext.mounted) Navigator.pop(sheetContext);
+          await reload();
         }, onEdit: () { Navigator.pop(sheetContext); edit(current); })));
     } finally { _detailOpen = false; _detailSelection = null; selection.dispose(); }
   }
@@ -539,6 +563,56 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       else { await store.delete(r.id); toast('任务已删除'); }
       await reload();
     } catch (e) { toast(niceError(e), error: true); }
+  }
+  /// Reopen an ended task from its row, without the editor.
+  ///
+  /// Only for tasks that still have a rule: a repeat derives its next
+  /// occurrence from its own date fields, so `save` re-arms it. A one-shot
+  /// cannot — its date is in the past — which is why its pill says 编辑 and
+  /// this path is never taken for one.
+  Future<void> revive(Reminder r) async {
+    if (!_reviving.add(r.id)) return;
+    try {
+      await native.invokeMethod('requestNotifications');
+      final draft = Reminder.fromJson({...r.toJson()})
+        ..enabled = true ..archived = false ..completed = false;
+      await store.save(draft);
+      HapticFeedback.lightImpact();
+      await reload();
+      Reminder? next;
+      for (final x in store.reminders) { if (x.id == r.id) { next = x; break; } }
+      toast(next == null ? '已重新开启'
+        : '已重新开启 · 下次提醒 ${dateLabel(next.displayDate)} ${next.displayTime}');
+    } catch (e) {
+      toast(niceError(e), error: true);
+    } finally { _reviving.remove(r.id); }
+  }
+  /// Swipe-delete for an ended row. The Dismissible always snaps back and the
+  /// row disappears because the store rebuilt without it — the same shape the
+  /// live rows use for their archive sheet.
+  Future<void> _deleteHistory(Reminder r) async {
+    final yes = await showDialog<bool>(context: context, builder: (c) => AlertDialog(
+      title: const Text('删除这条历史任务？'),
+      content: Text('「${r.text}」会从历史记录中移除，操作不可撤销。'),
+      actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+        TextButton(onPressed: () => Navigator.pop(c, true),
+          child: Text('删除', style: TextStyle(color: context.colors.danger)))]));
+    if (yes != true) return;
+    HapticFeedback.mediumImpact();
+    try { await store.delete(r.id); await reload(); toast('已删除这条历史任务'); }
+    catch (e) { toast(niceError(e), error: true); }
+  }
+  /// The one-tap exit on an ended row. Equal width on both branches keeps the
+  /// right edge of the list straight, which is the only reason the pills are
+  /// not icon-only.
+  Widget _historyAction(Reminder r) {
+    final reopen = r.repeat == 'daily' || (r.repeat == 'weekly' && r.days.isNotEmpty);
+    return MemoMiniButton(
+      icon: reopen ? Icons.replay_rounded : Icons.edit_outlined,
+      label: reopen ? '开启' : '编辑',
+      tooltip: reopen ? '按原规则重新开启' : '编辑并复用',
+      emphasized: reopen,
+      onTap: () => reopen ? revive(r) : edit(r));
   }
   Future<void> taskLibrary() async {
     if (!mounted || _taskLibraryOpen) return;
@@ -602,18 +676,17 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     final active = list.where((r) => !r.completed && (r.enabled || r.unread)).toList();
     final paused = list.where((r) => !r.enabled && !r.completed && !r.unread).toList();
     final now = DateTime.now();
-    // The hero card *is* the first row, so the list starts one past it. Showing
-    // the same reminder twice — once at 34px inside a 190px card and once at
-    // 21px in the row below it — spent the most valuable part of the first
-    // screen repeating the list instead of summarising it. The card now owns
-    // the single item; the rows own everything after it.
+    // The card summarises the next reminder; the list is the ledger and holds
+    // every one of them, including that first task. v0.9.15 dropped the first
+    // row to stop the card repeating the list, but that left the rows one
+    // short of the count in the page header — on a three-item day you could
+    // count two. The two shapes answer different questions ("what is next" vs
+    // "how much is there"), and the count is the one people check.
     //
-    // Selection mode deliberately drops the card: the card has no checkbox,
-    // and on a day with a single reminder hiding it left *nothing* to tick.
-    // Rows are the only shape that can be selected, so while picking, every
-    // active reminder is a row.
+    // Selection mode still drops the card: the card has no checkbox, and on a
+    // day with a single reminder hiding it left *nothing* to tick.
     final hero = active.isEmpty || _selecting ? null : active.first;
-    final rest = hero == null ? active : active.sublist(1);
+    final rest = active;
     final historyCount = store.reminders.where((r) => r.archived || r.completed).length;
     final today = DateTime(now.year, now.month, now.day);
     // Day buckets instead of one long list. The section is the unit people
@@ -628,10 +701,11 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     }
     final groups = <String, List<Reminder>>{};
     for (final r in rest) { (groups[bucketOf(r.displayDate)] ??= []).add(r); }
-    // Only counts what is still ahead today, excluding the card's own item;
-    // when the next reminder is already tomorrow this stays 0 and the card
-    // shows nothing, which is the honest answer.
-    final todayLeft = rest.where((r) => bucketOf(r.displayDate) == '今天').length;
+    // "今天还有 N 条" means *behind the card*, so it skips the hero even though
+    // the list below now repeats it. When the next reminder is already
+    // tomorrow this stays 0 and the card shows nothing, which is honest.
+    final todayLeft = rest.skip(hero == null ? 0 : 1)
+      .where((r) => bucketOf(r.displayDate) == '今天').length;
 
     return RefreshIndicator(onRefresh: reload, child: CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(), slivers: [
@@ -644,12 +718,16 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
         // The kicker line. It used to be a lone label with nothing on the
         // right; the count gives it a second edge, which is what makes the
         // header read as a masthead rather than a stray date.
+        // Expanded on the date, not Spacer: at 320dp and 1.6× type the two
+        // ends measure wider than the line, and the date is the half that can
+        // give. The count never truncates — it is the number people read.
         Padding(padding: const EdgeInsets.fromLTRB(24, 0, 24, 16), child: Row(children: [
-          Text('${now.month}月${now.day}日 · 周${weekdays[now.weekday - 1]}',
-            style: context.text.caption.copyWith(letterSpacing: .4)),
-          const Spacer(),
-          if (active.isNotEmpty) Text('${active.length} 条待办',
-            style: context.text.caption.copyWith(color: context.colors.muted)),
+          Expanded(child: Text('${now.month}月${now.day}日 · 周${weekdays[now.weekday - 1]}',
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: context.text.caption.copyWith(letterSpacing: .4))),
+          if (active.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 10),
+            child: Text('${active.length} 条待办',
+              style: context.text.caption.copyWith(color: context.colors.muted))),
         ])),
         if (hero != null) _reveal(0, heroCard(hero, now, todayLeft)),
         if (store.status['notifications'] != true || store.status['exact'] != true) permissionBanner(),
@@ -743,7 +821,29 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
               // The clock is the one piece of text that changes when the next
               // reminder does. Swapping it instead of replacing it makes the
               // hero read as "the top moved on" rather than "the page blinked".
-              MemoNumberSwap(r.displayTime, style: context.text.heroTime),
+              //
+              // The countdown sits on the clock's line, where the card had
+              // nothing: "19:30" answers *when*, and the pill answers *how
+              // long*. It is a child widget with its own minute timer, so the
+              // gradient, the title and the menu are not rebuilt to move it.
+              // Wrap, not Row: at 1.6× system type the clock and the pill are
+              // wider than the card, and an ellipsised countdown is the one
+              // thing on this card that must not be cut. The pill drops to its
+              // own line instead, still left-aligned under the time.
+              Wrap(crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 10, runSpacing: 6, children: [
+                MemoNumberSwap(r.displayTime, style: context.text.heroTime),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: .15),
+                    borderRadius: BorderRadius.circular(MemoRadius.pill)),
+                  child: MemoCountdown(target: r.displayDate,
+                    pastPrefix: r.unread ? '已提醒 ' : '已过 ',
+                    style: context.text.caption.copyWith(color: context.colors.onBrand,
+                      fontSize: 12, height: 1.15, fontWeight: FontWeight.w500,
+                      letterSpacing: .1))),
+              ]),
               const SizedBox(height: 9),
               Text(r.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: context.text.heroTitle),
               const SizedBox(height: 13),
@@ -863,6 +963,11 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
               ],
             ])),
             if (selecting) const SizedBox(width: 10)
+            // An ended row trades the ⋯ for a verb. It has exactly one useful
+            // next step, and a menu that hides it behind two taps is the
+            // reason "reuse an old task" felt like a search problem.
+            else if (dim) Padding(padding: const EdgeInsets.only(top: 3, right: 2),
+              child: _historyAction(r))
             else SizedBox(width: 34, height: 40, child: PopupMenuButton<String>(tooltip: '更多操作',
               padding: EdgeInsets.zero, iconSize: 18, onSelected: (v) async {
               if (v == 'edit') { await edit(r); }
@@ -880,7 +985,23 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       child: row);
     // Swipe is disabled while picking: a horizontal drag would otherwise fight
     // the selection gesture and dismiss rows the user meant to tick.
-    if (r.archived || r.completed || selecting) return lined;
+    if (selecting) return lined;
+    // Ended rows swipe to a plain delete, not the archive sheet: they are
+    // already archived or done, so the only destructive verb left is removal.
+    if (dim) {
+      return Dismissible(key: ValueKey('history-${r.id}'),
+        direction: DismissDirection.endToStart,
+        background: const SizedBox.shrink(),
+        secondaryBackground: Container(alignment: Alignment.centerRight,
+          padding: const EdgeInsets.symmetric(horizontal: 24), color: context.colors.dangerSurface,
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.delete_outline_rounded, color: context.colors.danger, size: 20),
+            const SizedBox(width: 6),
+            Text('删除', style: context.text.label.copyWith(color: context.colors.danger)),
+          ])),
+        confirmDismiss: (_) async { await _deleteHistory(r); return false; },
+        child: lined);
+    }
     return Dismissible(key: ValueKey('task-${r.id}-${r.activeOccurrence}-${r.attempts}'), direction: DismissDirection.endToStart,
       background: const SizedBox.shrink(),
       secondaryBackground: Container(alignment: Alignment.centerRight,
@@ -1454,8 +1575,13 @@ Future<int?> numberDialog(BuildContext context, String title, int current, int m
 class ReminderDetail extends StatefulWidget {
   final Reminder reminder;
   final Future<void> Function() onAck;
+
+  /// "完成本次" for a task that has not rung yet: skip a repeat's next
+  /// occurrence, or retire a one-shot early.
+  final Future<void> Function() onSkip;
   final VoidCallback onEdit;
-  const ReminderDetail({super.key, required this.reminder, required this.onAck, required this.onEdit});
+  const ReminderDetail({super.key, required this.reminder, required this.onAck,
+    required this.onSkip, required this.onEdit});
   @override State<ReminderDetail> createState() => _ReminderDetailState();
 }
 class _ReminderDetailState extends State<ReminderDetail> {
@@ -1464,6 +1590,16 @@ class _ReminderDetailState extends State<ReminderDetail> {
     if (busy) return;
     setState(() => busy = true);
     try { await widget.onAck(); } catch (e) {
+      if (mounted) {
+        setState(() => busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(memoSnackBar(niceError(e), error: true));
+      }
+    }
+  }
+  Future<void> _skip() async {
+    if (busy) return;
+    setState(() => busy = true);
+    try { await widget.onSkip(); } catch (e) {
       if (mounted) {
         setState(() => busy = false);
         ScaffoldMessenger.of(context).showSnackBar(memoSnackBar(niceError(e), error: true));
@@ -1496,12 +1632,28 @@ class _ReminderDetailState extends State<ReminderDetail> {
           ),
         ] else
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.fromLTRB(14, 4, 4, 4),
             decoration: BoxDecoration(color: context.colors.brand50, borderRadius: BorderRadius.circular(MemoRadius.md)),
             child: Row(children: [
                Icon(Icons.notifications_none_rounded, size: 18, color: context.colors.brand700),
               const SizedBox(width: MemoSpace.sm),
-              Expanded(child: Text('到时会通过系统通知提醒你', style: context.text.label)),
+              Expanded(child: Text(
+                r.archived || r.completed ? '已结束 · 可编辑后重新开启'
+                  : !r.enabled ? '已暂停 · 可编辑后重新启用'
+                  : '到时会通过系统通知提醒你',
+                style: context.text.label)),
+              // A future task has a "this one, not the next" exit too. It used
+              // to exist only for the occurrence already ringing, which meant
+              // the one action a repeating task needs most — skip today —
+              // showed up as a toast saying there was nothing to do.
+              if (!r.archived && !r.completed && r.enabled) TextButton(
+                onPressed: busy ? null : _skip,
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(0, 36),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  foregroundColor: context.colors.brand700),
+                child: const Text('完成本次')),
             ]),
           ),
         const SizedBox(height: MemoSpace.xl),

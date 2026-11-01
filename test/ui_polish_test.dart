@@ -36,8 +36,8 @@ void main() {
   });
 
   testWidgets('reminder cards keep an ink surface above an opaque material', (tester) async {
-    // Two rows: the first is promoted into the hero card, so it is no longer a
-    // list row. The Dismissible assertion below is about a *row*, not the card.
+    // Two live tasks, so the list holds two rows: the first also appears in
+    // the hero card, but the card is not a Dismissible — both of these are.
     final row = Reminder(id: 7, text: '测试卡片', date: DateTime.now().add(const Duration(hours: 2))).toJson();
     final next = Reminder(id: 8, text: '第二条提醒', date: DateTime.now().add(const Duration(hours: 5))).toJson();
     mockState([row, next]);
@@ -49,7 +49,7 @@ void main() {
     final ink = find.ancestor(of: cardText, matching: find.byType(InkWell));
     expect(ink, findsWidgets);
     expect(find.ancestor(of: ink.first, matching: find.byType(Material)), findsWidgets);
-    expect(find.byType(Dismissible), findsOneWidget);
+    expect(find.byType(Dismissible), findsNWidgets(2));
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
   });
