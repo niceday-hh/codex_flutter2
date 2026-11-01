@@ -139,7 +139,9 @@ public final class ReminderPopupService extends Service {
         kicker.setTypeface(Typeface.DEFAULT_BOLD);
         head.addView(kicker);
         head.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
-        countdown = text("", 12, muted);
+        // Seeded with the full duration so the first 250ms does not reserve an
+        // empty line and then push the clock down when the text appears.
+        countdown = text("10 秒后收起", 12, muted);
         head.addView(countdown);
         sheet.addView(head);
 
