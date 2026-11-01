@@ -36,8 +36,11 @@ void main() {
   });
 
   testWidgets('reminder cards keep an ink surface above an opaque material', (tester) async {
+    // Two rows: the first is promoted into the hero card, so it is no longer a
+    // list row. The Dismissible assertion below is about a *row*, not the card.
     final row = Reminder(id: 7, text: '测试卡片', date: DateTime.now().add(const Duration(hours: 2))).toJson();
-    mockState([row]);
+    final next = Reminder(id: 8, text: '第二条提醒', date: DateTime.now().add(const Duration(hours: 5))).toJson();
+    mockState([row, next]);
     await tester.binding.setSurfaceSize(const Size(393, 852));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(const MemoApp());

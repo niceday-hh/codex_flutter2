@@ -132,7 +132,7 @@ const brandIndigoLight = MemoBrand(
 const brandTealLight = MemoBrand(
   c50: Color(0xFFEDFAF6), c100: Color(0xFFDCF5EE), c200: Color(0xFFB7E7DA), c400: Color(0xFF3FA890),
   c500: Color(0xFF1A8168), c600: Color(0xFF146D59), c700: Color(0xFF105B4A), c800: Color(0xFF0A4033),
-  dawn: Color(0xFFC2603F), nightTop: Color(0xFF1B3A36), nightBottom: Color(0xFF0F2220));
+  dawn: Color(0xFFA94B2E), nightTop: Color(0xFF1B3A36), nightBottom: Color(0xFF0F2220));
 
 const brandEmberLight = MemoBrand(
   c50: Color(0xFFFFF7EF), c100: Color(0xFFFFEEDD), c200: Color(0xFFFFD6B2), c400: Color(0xFFD08340),
@@ -154,7 +154,7 @@ const brandIndigoDark = MemoBrand(
 const brandTealDark = MemoBrand(
   c50: Color(0xFF14241F), c100: Color(0xFF1B2E28), c200: Color(0xFF274740), c400: Color(0xFF5FCBB2),
   c500: Color(0xFF4FBFA5), c600: Color(0xFF6BD0B8), c700: Color(0xFF9BE0CF), c800: Color(0xFFC8F0E4),
-  dawn: Color(0xFFC2603F), nightTop: Color(0xFF1B3A36), nightBottom: Color(0xFF0F2220));
+  dawn: Color(0xFFA94B2E), nightTop: Color(0xFF1B3A36), nightBottom: Color(0xFF0F2220));
 
 const brandEmberDark = MemoBrand(
   c50: Color(0xFF2A1E14), c100: Color(0xFF33261A), c200: Color(0xFF4A3722), c400: Color(0xFFE09A57),
@@ -306,6 +306,22 @@ abstract final class MemoMotion {
   static const number = Duration(milliseconds: 180);
 }
 
+/// Rotates a neutral surface onto the accent's hue without touching its
+/// lightness or saturation.
+///
+/// The three surfaces used to be fixed, so picking 青碧 left a violet cast in
+/// the page and a violet `surfaceAlt` sheet under a green hero card — two hues
+/// fighting on one screen. Re-hueing keeps the *weight* of the surface where it
+/// was (ratio(surface, canvas) is unchanged, which is what the guard in
+/// `ui_system_test` checks) and only moves the cast. White cards stay white
+/// because their saturation is zero, which is the behaviour we want in light
+/// mode: tinted page, clean card.
+Color _rehue(Color base, Color accent) {
+  final hsl = HSLColor.fromColor(base);
+  if (hsl.saturation < .04) return base;
+  return hsl.withHue(HSLColor.fromColor(accent).hue).toColor();
+}
+
 /// Semantic colours, split from the raw palette so a widget never reads a
 /// hex value directly. [light] and [dark] are the only two instances the app
 /// ships; anything else is a one-off that will drift.
@@ -324,6 +340,13 @@ class MemoPalette {
   /// The ramp this palette was built from. Kept as one object so the hero card
   /// can pick its gradient stops from the same hue as the accent.
   final MemoBrand brand;
+
+  /// The ramp the hero *card* is painted with. Same accent, always the deep
+  /// stops — the card carries white type in both themes, so borrowing the dark
+  /// theme's pastel 500/600 (which exist to be read *on* a dark page) turned
+  /// the card into a pale mint slab with a white 34px clock on it.
+  final MemoBrand cardBrand;
+
   final MemoAccent accent;
 
   const MemoPalette({
@@ -335,29 +358,37 @@ class MemoPalette {
     required this.amberInk, required this.amberDeep, required this.danger, required this.dangerSurface,
     required this.success, required this.warning, required this.warningSurface,
     this.surfaceAlt = MemoColor.surfaceAlt,
-    this.brand = brandVioletLight, this.accent = MemoAccent.violet,
+    this.brand = brandVioletLight, this.cardBrand = brandVioletLight,
+    this.accent = MemoAccent.violet,
   });
 
   /// Same neutrals and semantics, different accent. Used by the appearance
   /// setting; the two const instances below stay the defaults so existing test
   /// assertions keep meaning.
+  ///
+  /// The three surfaces follow the accent's hue, not just the brand ramp: a
+  /// green hero card over a violet page was the one place the four accents
+  /// still looked like a reskin rather than a theme.
   MemoPalette withBrand(MemoAccent accent, Brightness brightness) {
     final b = brandFor(accent, brightness);
+    final hue = b.c500;
     return MemoPalette(
-      surface: surface, surfaceAlt: surfaceAlt, canvas: canvas, ink: ink, inkSoft: inkSoft,
+      surface: _rehue(surface, hue), surfaceAlt: _rehue(surfaceAlt, hue),
+      canvas: _rehue(canvas, hue), ink: ink, inkSoft: inkSoft,
       muted: muted, line: line, lineStrong: lineStrong, outline: outline,
       brand50: b.c50, brand100: b.c100, brand200: b.c200, brand400: b.c400,
       brand500: b.c500, brand600: b.c600, brand700: b.c700, brand800: b.c800,
       onBrand: onBrand, onBrandSoft: onBrandSoft, amber: amber, amberSurface: amberSurface,
       amberInk: amberInk, amberDeep: amberDeep, danger: danger, dangerSurface: dangerSurface,
       success: success, warning: warning, warningSurface: warningSurface,
-      brand: b, accent: accent);
+      brand: b, cardBrand: brandFor(accent, Brightness.light), accent: accent);
   }
 
   /// 05–10 dawn, 10–17 day, otherwise night. Same three-band idea as before, but
-  /// the stops now come from the active ramp.
+  /// the stops now come from [cardBrand], not [brand]: the card is a dark
+  /// surface in both themes and every label on it is white.
   List<Color> heroGradientFor(int hour) => hour >= 5 && hour < 10
-    ? brand.gradientDawn : hour >= 10 && hour < 17 ? brand.gradientDay : brand.gradientNight;
+    ? cardBrand.gradientDawn : hour >= 10 && hour < 17 ? cardBrand.gradientDay : cardBrand.gradientNight;
 
   static const light = MemoPalette(
     surface: MemoColor.surface, surfaceAlt: MemoColor.surfaceAlt, canvas: MemoColor.canvas,
@@ -438,12 +469,16 @@ class MemoType {
     fontWeight: FontWeight.w600, color: c.ink, fontFeatures: MemoText.tabular);
   TextStyle get cardTitle => TextStyle(fontSize: 15.5, height: 1.5, fontWeight: FontWeight.w500, color: c.ink);
 
-  /// Day-bucket label above a run of cards. It names a range, it is not a
-  /// heading: at caption size in [MemoPalette.muted] it reads as a rule on the
-  /// page, where ink-weight text used to make the pinned band the brightest
-  /// thing on a dark screen.
+  /// Day-bucket label above a run of rows.
+  ///
+  /// The previous version pushed this all the way down to a decorative rule
+  /// (caption + muted) to stop the pinned strip glowing on a dark screen. That
+  /// was right while every row was a card and the cards carried the structure;
+  /// now that rows are hairlines, the group header is the *only* thing saying
+  /// where a day begins, so it comes back one step — to [inkSoft], not to ink.
+  /// Weight stays at 500: a 12px Han glyph at w600 turns into a smudge.
   TextStyle get groupLabel => TextStyle(fontSize: 12, height: 1.2,
-    fontWeight: FontWeight.w500, color: c.muted);
+    fontWeight: FontWeight.w500, color: c.inkSoft);
 
   /// White on the hero gradient in both themes: the card is dark either way.
   TextStyle get heroTime => const TextStyle(fontSize: 34, height: 1.08, letterSpacing: -.6,
@@ -452,6 +487,17 @@ class MemoType {
   /// not as a texture, which is why the rows below it stay sans.
   TextStyle get heroTitle => const TextStyle(fontFamily: MemoType.serif, fontSize: 19, height: 1.45,
     fontWeight: FontWeight.w400, color: Color(0xFFFFFFFF));
+
+  /// The detail sheet's clock. 34px in brand colour made the *time* the
+  /// headline and pushed the reminder itself down to a subtitle; the time is an
+  /// attribute of the thing, not the thing. It keeps tabular figures and the
+  /// 600 weight (so it still scans as a clock) but drops to 24px and [muted].
+  TextStyle get detailTime => TextStyle(fontSize: 24, height: 1.15, letterSpacing: -.3, fontWeight: FontWeight.w600, color: c.muted, fontFeatures: MemoText.tabular);
+
+  /// What the reminder actually says, at 28px serif — one step above the list's
+  /// 15.5px and clearly above [detailTime], which is the order the eye needs.
+  TextStyle get detailTitle => TextStyle(fontFamily: MemoType.serif, fontSize: 28, height: 1.4,
+    fontWeight: FontWeight.w400, color: c.ink);
 }
 
 /// Theme extension so a future dark theme can swap the whole palette without

@@ -155,11 +155,37 @@ void main() {
 
   test('the hero gradient follows the accent instead of the default violet', () {
     final teal = MemoPalette.forAccent(MemoAccent.teal, Brightness.light);
-    expect(teal.heroGradientFor(12), teal.brand.gradientDay);
+    expect(teal.heroGradientFor(12), teal.cardBrand.gradientDay);
     expect(teal.heroGradientFor(7), teal.brand.gradientDawn);
     expect(teal.heroGradientFor(22), teal.brand.gradientNight);
     // A switched accent must not leave a violet card behind.
     expect(teal.heroGradientFor(12).first, isNot(MemoPalette.light.heroGradientFor(12).first));
+  });
+
+  test('the hero card stays dark enough for white type in every theme', () {
+    double lum(Color c) {
+      double channel(double v) => v <= .03928 ? v / 12.92 : math.pow((v + .055) / 1.055, 2.4).toDouble();
+      return .2126 * channel(c.r) + .7152 * channel(c.g) + .0722 * channel(c.b);
+    }
+    double ratio(Color a, Color b) {
+      final l1 = lum(a), l2 = lum(b);
+      return (math.max(l1, l2) + .05) / (math.min(l1, l2) + .05);
+    }
+    // The card carries a 34px white clock and a 12px white date, so every stop
+    // of every band has to hold 4.5:1. The dark ramp's 500/600 are pastel by
+    // design (they are read *on* a dark page) — using them as the card fill put
+    // white type on pale mint at about 2:1.
+    for (final accent in MemoAccent.values) {
+      for (final brightness in Brightness.values) {
+        final c = MemoPalette.forAccent(accent, brightness);
+        for (final hour in [7, 12, 22]) {
+          for (final stop in c.heroGradientFor(hour)) {
+            expect(ratio(Colors.white, stop), greaterThanOrEqualTo(4.5),
+              reason: '${accent.name}/${brightness.name} @$hour — $stop');
+          }
+        }
+      }
+    }
   });
 
   test('appearance parsing tolerates unknown or missing values', () {
@@ -219,12 +245,45 @@ void main() {
     expect(t.cardTime.fontWeight, FontWeight.w600);
   });
 
-  test('day headers read as a rule, not a heading', () {
+  test('day headers mark the group without shouting', () {
     final t = MemoType(MemoPalette.dark);
+    // 500, not 600: a 12px Han glyph at semibold turns into a smudge, which is
+    // the exact thing the v0.9.13 weight cut was fixing.
     expect(t.groupLabel.fontWeight, FontWeight.w500);
-    expect(t.groupLabel.color, MemoPalette.dark.muted, reason: 'ink made the pinned strip glow');
+    // inkSoft, not muted. The row list has no cards left, so this header is the
+    // only thing that says where a day starts; muted made it a decorative rule.
+    expect(t.groupLabel.color, MemoPalette.dark.inkSoft);
     expect(t.groupLabel.letterSpacing, isNull);
     expect(t.groupLabel.fontSize, lessThanOrEqualTo(t.caption.fontSize!));
+    expect(t.groupLabel.color, isNot(MemoPalette.dark.ink), reason: 'ink made the pinned strip glow');
+  });
+
+  test('the detail sheet leads with the reminder, not the clock', () {
+    final t = MemoType(MemoPalette.dark);
+    expect(t.detailTitle.fontSize!, greaterThan(t.detailTime.fontSize!),
+      reason: 'the sentence outranks the time it happens at');
+    expect(t.detailTitle.fontFamily, MemoType.serif);
+    expect(t.detailTime.color, MemoPalette.dark.muted, reason: 'the clock is an attribute');
+    expect(t.detailTime.fontWeight, FontWeight.w600, reason: 'still scans as a clock');
+    expect(t.detailTime.fontFeatures, contains(const FontFeature.tabularFigures()));
+  });
+
+  test('a switched accent repaints the page, not just the card', () {
+    final violet = MemoPalette.forAccent(MemoAccent.violet, Brightness.dark);
+    final teal = MemoPalette.forAccent(MemoAccent.teal, Brightness.dark);
+    expect(teal.canvas, isNot(violet.canvas), reason: 'a green card over a violet page reads as a reskin');
+    expect(teal.surfaceAlt, isNot(violet.surfaceAlt), reason: 'the sheet carries the accent cast too');
+    // Only the cast moves: the three-surface ladder has to survive a hue
+    // change. Absolute luminance does shift a little (green carries 0.7152 of
+    // it and violet barely any), so the guard is the *ratios* between the
+    // surfaces, which is what the eye actually reads as depth.
+    double ratio(Color a, Color b) {
+      final l1 = a.computeLuminance(), l2 = b.computeLuminance();
+      return (math.max(l1, l2) + .05) / (math.min(l1, l2) + .05);
+    }
+    expect(ratio(teal.surface, teal.canvas), greaterThan(1.05));
+    expect(ratio(teal.surfaceAlt, teal.surface), greaterThan(1.05));
+    expect(ratio(teal.surfaceAlt, teal.surface), lessThan(1.5));
   });
 
   test('the dark theme stacks three surfaces without glare', () {

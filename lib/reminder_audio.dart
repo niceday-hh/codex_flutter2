@@ -103,7 +103,11 @@ class _ReminderAudioPanelState extends State<ReminderAudioPanel> {
       final failure = own && preview.error != null;
       final message = failure ? preview.error! : playing ? _playingMessage : _message;
       return Container(width: double.infinity, padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: context.colors.brand100, borderRadius: BorderRadius.circular(20)),
+        // A hairline, because the sheet behind it is now tinted with the same
+        // brand hue: brand100 on surfaceAlt was two near-identical greens.
+        decoration: BoxDecoration(color: context.colors.brand100,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: context.colors.brand200, width: 1)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('提醒音频', style: context.text.subtitle),
           const SizedBox(height: 8),
@@ -112,17 +116,28 @@ class _ReminderAudioPanelState extends State<ReminderAudioPanel> {
           if (widget.reminder.speechState == 'off')  Padding(padding: EdgeInsets.only(top: 8), child: Text(
             '到点语音播报当前关闭；试听和保存不会开启它。', style: TextStyle(color: context.colors.muted, fontSize: 12))),
           const SizedBox(height: 14),
-          Wrap(spacing: 10, runSpacing: 10, children: [
-            OutlinedButton.icon(key: const ValueKey('preview-reminder-audio'),
-              onPressed: _busy != null && _busy != 'play' ? null : playing || _busy == 'play' ? _stop : () => _listen(),
-              icon: Icon(playing || _busy == 'play' ? Icons.stop_rounded : Icons.play_arrow_rounded),
-              label: Text(playing ? '停止试听' : _busy == 'play' ? '取消试听' : '试听提醒')),
-            OutlinedButton.icon(key: const ValueKey('new-reminder-audio'),
+          // One primary, two secondaries. Three equal outlined buttons wrapped
+          // into 2 + 1 on a 400dp screen, leaving 保存音频 alone on its own
+          // line — the shape of a layout that never decided which action
+          // matters. Auditioning is the reason this panel exists.
+          SizedBox(width: double.infinity, child: FilledButton.icon(
+            key: const ValueKey('preview-reminder-audio'),
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(46)),
+            onPressed: _busy != null && _busy != 'play' ? null : playing || _busy == 'play' ? _stop : () => _listen(),
+            icon: Icon(playing || _busy == 'play' ? Icons.stop_rounded : Icons.play_arrow_rounded),
+            label: Text(playing ? '停止试听' : _busy == 'play' ? '取消试听' : '试听提醒'))),
+          // Wrap, not Row: at 320dp with a 1.6x text scale the two labels
+          // measure wider than the card, and a Row would simply clip the
+          // second one instead of stacking it.
+          Wrap(alignment: WrapAlignment.center, spacing: 4, runSpacing: 2, children: [
+            TextButton.icon(key: const ValueKey('new-reminder-audio'),
               onPressed: _busy == 'variant' ? _stop : _busy == null && _candidate == null ? _newVariant : null,
-              icon: const Icon(Icons.refresh_rounded), label: Text(_busy == 'variant' ? '取消准备' : '换一版')),
-            OutlinedButton.icon(key: const ValueKey('save-reminder-audio'), onPressed: _busy == null && _candidate == null ? _save : null,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: Text(_busy == 'variant' ? '取消准备' : '换一版')),
+            TextButton.icon(key: const ValueKey('save-reminder-audio'),
+              onPressed: _busy == null && _candidate == null ? _save : null,
               icon: _busy == 'save' ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.download_rounded), label: const Text('保存音频')),
+                : const Icon(Icons.download_rounded, size: 18), label: const Text('保存音频')),
           ]),
           if (_candidate != null) ...[
             const SizedBox(height: 16), const Divider(), const SizedBox(height: 10),

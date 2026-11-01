@@ -104,12 +104,12 @@ void main() {
     });
     await mount(tester, session); await tester.tap(find.text('换一版')); await tester.pumpAndSettle();
     expect(find.text('使用此版本'), findsOneWidget); expect(selections, 0); expect(released, 0);
-    expect(tester.widget<OutlinedButton>(find.byKey(const ValueKey('save-reminder-audio'))).onPressed, isNull);
+    expect(tester.widget<TextButton>(find.byKey(const ValueKey('save-reminder-audio'))).onPressed, isNull);
     await tester.tap(find.text('试听新版本')); await tester.pumpAndSettle(); expect(previews, 1); expect(selections, 0);
     await tester.tap(find.text('停止试听')); await tester.pumpAndSettle();
     await tester.tap(find.text('使用此版本')); await tester.pumpAndSettle();
     expect(selections, 1); expect(released, 1); expect(find.textContaining('已使用此版本'), findsOneWidget);
-    expect(tester.widget<OutlinedButton>(find.byKey(const ValueKey('save-reminder-audio'))).onPressed, isNotNull);
+    expect(tester.widget<TextButton>(find.byKey(const ValueKey('save-reminder-audio'))).onPressed, isNotNull);
     await tester.pumpWidget(const SizedBox()); await tester.pump(); session.status.dispose(); session.previewState.dispose();
   });
   for (final close in [false, true]) {

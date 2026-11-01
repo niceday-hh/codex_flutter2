@@ -16,13 +16,16 @@ class MemoPageHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(MemoSpace.xxl, 28, MemoSpace.xxl, 12),
-    child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+    // Start, not end. Aligning the trailing icons to the bottom of the block
+    // hung them off the subtitle's baseline, so they read as floating beside
+    // the header instead of sitting on the title's optical line.
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(title, style: context.text.display),
         const SizedBox(height: 8),
         Text(subtitle, style: context.text.body.copyWith(color: context.colors.muted)),
       ])),
-      if (trailing != null) Padding(padding: const EdgeInsets.only(bottom: 2), child: trailing!),
+      if (trailing != null) trailing!,
     ]),
   );
 }

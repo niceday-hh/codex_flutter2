@@ -10,7 +10,10 @@ void main() {
   testWidgets('a thousand completed tasks are collapsed and searchable without building their cards', (tester) async {
     final records = List.generate(1000, (i) => Reminder(id: i + 2, text: '收纳记录 $i', enabled: false).toJson()
       ..['completed'] = true ..['lastAck'] = i + 1000);
-    records.insert(0, Reminder(id: 1, text: '下一条待办').toJson());
+    // Two live rows: the earliest is promoted into the hero card and stops
+    // being a list row, so a single-row fixture would leave no Dismissible.
+    records.insert(0, Reminder(id: 1, text: '下一条待办', date: DateTime.now().add(const Duration(hours: 2))).toJson());
+    records.insert(1, Reminder(id: 1002, text: '再下一条', date: DateTime.now().add(const Duration(hours: 3))).toJson());
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async =>
       call.method == 'getState' ? jsonEncode({'reminders': records, 'status': {'notifications': true, 'exact': true}}) : null);
     await tester.binding.setSurfaceSize(const Size(393, 852));
@@ -25,10 +28,13 @@ void main() {
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
   testWidgets('swiping asks before deletion or archive and archived task can be reused', (tester) async {
-    var record = Reminder(id: 1, text: '可复用的任务').toJson();
+    var record = Reminder(id: 1, text: '可复用的任务', date: DateTime.now().add(const Duration(hours: 2))).toJson();
+    // A filler that is earlier than the row under test, so the row stays a row
+    // instead of being promoted into the hero card.
+    final filler = Reminder(id: 2, text: '占位待办', date: DateTime.now().add(const Duration(hours: 1))).toJson();
     var archives = 0, deletes = 0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
-      if (call.method == 'getState') return jsonEncode({'reminders': [record], 'status': {'notifications': true, 'exact': true}});
+      if (call.method == 'getState') return jsonEncode({'reminders': [filler, record], 'status': {'notifications': true, 'exact': true}});
       if (call.method == 'archive') { archives++; record = {...record, 'archived': true, 'archivedAt': 10000, 'enabled': false, 'completed': true}; }
       if (call.method == 'delete') deletes++;
       if (call.method == 'requestNotifications') return true;
