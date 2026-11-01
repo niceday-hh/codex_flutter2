@@ -18,6 +18,7 @@ import 'package:timed_memo/appearance.dart';
 import 'package:timed_memo/design_tokens.dart';
 import 'package:timed_memo/main.dart';
 import 'package:timed_memo/reminder.dart';
+import 'package:timed_memo/widgets/memo_tab_bar.dart';
 
 const previewKey = ValueKey('ui-preview');
 final previewsEnabled = Platform.environment['MEMO_UI_PREVIEWS'] == '1';
@@ -199,6 +200,56 @@ void main() {
     await tester.longPress(find.text('修阳台灯'));
     await tester.pumpAndSettle();
     await capture(tester, 'history-select-teal');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  }, skip: !previewsEnabled);
+
+  testWidgets('shoot the tab bar, calendar, settings and history filters', (tester) async {
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(786, 1704);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(() => appearance.value = Appearance.defaults);
+
+    final ago = DateTime.now().millisecondsSinceEpoch - 86400000;
+    final rows = [
+      Reminder(id: 1, text: '交物业费', date: at(0, 15, 0)).toJson(),
+      Reminder(id: 2, text: '预约儿科挂号', date: at(0, 18, 30), repeat: 'daily').toJson()
+        ..['speechState'] = 'preparing',
+      Reminder(id: 3, text: '给妈妈打个电话', date: at(0, 21, 0), repeat: 'weekly', days: [1, 5]).toJson()
+        ..['speechState'] = 'ready',
+      Reminder(id: 4, text: '修阳台灯', date: at(-1, 20, 10), enabled: false, completed: true).toJson()
+        ..['completed'] = true ..['archived'] = true ..['archivedAt'] = ago,
+    ];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      native,
+      (call) async => call.method == 'getState'
+        ? jsonEncode({'reminders': rows, 'defaults': {},
+            'status': {'version': '0.9.17', 'notifications': true, 'exact': true}})
+        : null,
+    );
+
+    appearance.value = const Appearance(mode: ThemeMode.light, accent: MemoAccent.violet);
+    await tester.pumpWidget(const RepaintBoundary(key: previewKey, child: MemoApp()));
+    await tester.pumpAndSettle();
+    await capture(tester, 'tabs-home-light');
+
+    await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('日历')));
+    await tester.pumpAndSettle();
+    await capture(tester, 'tabs-calendar-light');
+
+    await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('设置')));
+    await tester.pumpAndSettle();
+    await capture(tester, 'tabs-settings-light');
+
+    await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('备忘录')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('历史任务'));
+    await tester.pumpAndSettle();
+    await capture(tester, 'history-filter-light');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump();

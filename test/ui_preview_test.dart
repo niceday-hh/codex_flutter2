@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:timed_memo/widgets/memo_tab_bar.dart';
 import 'package:timed_memo/design_tokens.dart';
 import 'package:timed_memo/main.dart';
 import 'package:timed_memo/settings_page.dart';
@@ -52,7 +53,7 @@ void main() {
       const MethodChannel('memo/native'), (call) async => call.method == 'getState'
         ? jsonEncode({'reminders': [], 'defaults': {'handsFree': true}, 'status': {'version': '0.9.3', 'notifications': true, 'exact': true}}) : null);
     await tester.pumpWidget(const RepaintBoundary(key: previewKey, child: MemoApp())); await tester.pumpAndSettle();
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置'))); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('设置'))); await tester.pumpAndSettle();
     await capture(tester, 'settings-overview');
     await tester.tap(find.text('语音录入')); await tester.pumpAndSettle();
     await capture(tester, 'settings-voice-input');
@@ -70,7 +71,7 @@ void main() {
         return null;
       });
     await tester.pumpWidget(const RepaintBoundary(key: previewKey, child: MemoApp())); await tester.pumpAndSettle();
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置'))); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('设置'))); await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('settings-search')), '15秒'); await tester.pumpAndSettle();
     await capture(tester, 'settings-search-results');
     await tester.tap(find.byKey(const ValueKey('settings-result-test'))); await tester.pumpAndSettle();
@@ -119,7 +120,7 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async => call.method == 'getState'
       ? jsonEncode({'reminders': [], 'defaults': {}, 'status': {'version': '0.9.6', 'notifications': true, 'exact': true}}) : null);
     await tester.pumpWidget(const RepaintBoundary(key: previewKey, child: MemoApp())); await tester.pumpAndSettle();
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置'))); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('设置'))); await tester.pumpAndSettle();
     await tester.tap(find.text('语音播报')); await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('高级语音设置')); await tester.pumpAndSettle();
     await tester.tap(find.text('高级语音设置')); await tester.pumpAndSettle();

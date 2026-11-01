@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:timed_memo/widgets/memo_tab_bar.dart';
 import 'package:timed_memo/appearance.dart';
 import 'package:timed_memo/design_tokens.dart';
 import 'package:timed_memo/main.dart';
@@ -41,7 +42,7 @@ void main() {
     await tester.pumpWidget(const MemoApp()); await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('留一点空间，给重要的事'), findsOneWidget);
     for (final label in ['日历', '语音', '设置', '备忘录']) {
-      await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text(label)).last);
+      await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text(label)).last);
       await tester.pump(); await tester.pump(const Duration(milliseconds: 400));
       expect(tester.takeException(), isNull);
     }
@@ -102,7 +103,7 @@ void main() {
       });
     await tester.binding.setSurfaceSize(const Size(393, 852));
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置'))); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('设置'))); await tester.pumpAndSettle();
     await tester.tap(find.text('提醒与通知')); await tester.pumpAndSettle();
     final settingsScroll = find.byType(Scrollable).last;
     await revealByDragging(tester, find.text('默认展示方式'), settingsScroll);
@@ -113,7 +114,7 @@ void main() {
     await tester.tap(find.text('不在锁屏显示').last); await tester.pumpAndSettle();
     expect(defaults['presentation'], 'drawer'); expect(defaults['lockscreen'], 'hidden');
     await tester.tap(find.byTooltip('关闭设置分类')); await tester.pumpAndSettle();
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('备忘录'))); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('备忘录'))); await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('新建提醒')); await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '验证默认展示设置');
     await tester.tap(find.text('保存')); await tester.pumpAndSettle();
@@ -161,7 +162,7 @@ void main() {
       });
     await tester.binding.setSurfaceSize(const Size(393, 852));
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置'))); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('设置'))); await tester.pumpAndSettle();
     await openCategory(tester, '帮助与诊断');
     final settingsScroll = find.byType(Scrollable).last;
     await revealByDragging(tester, find.text('检查系统通知与锁屏设置'), settingsScroll);
@@ -210,7 +211,7 @@ void main() {
     });
     await tester.binding.setSurfaceSize(const Size(393, 852));
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置'))); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('设置'))); await tester.pumpAndSettle();
     await openCategory(tester, '后台与权限');
     final scroll = find.byType(Scrollable).last;
     await revealByDragging(tester, find.text('可靠提醒模式'), scroll);
@@ -255,7 +256,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(393, 852));
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
     for (final label in ['日历', '语音', '设置']) {
-      await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text(label)));
+      await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text(label)));
       await tester.pumpAndSettle();
       final before = checks; allowed = true;
       for (final state in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused,
@@ -264,7 +265,7 @@ void main() {
       }
       await tester.pumpAndSettle();
       expect(checks, greaterThan(before));
-      expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 0);
+      expect(tester.widget<MemoTabBar>(find.byType(MemoTabBar)).index, 0);
       expect(tester.takeException(), isNull);
       allowed = false;
     }
@@ -283,9 +284,9 @@ void main() {
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle(); expect(checks, 1);
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('语音')));
+    await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('语音')));
     await tester.pumpAndSettle(); readiness.complete(true); await tester.pumpAndSettle();
-    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 2);
+    expect(tester.widget<MemoTabBar>(find.byType(MemoTabBar)).index, 2);
     expect(microphones, 0); expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
@@ -316,11 +317,11 @@ void main() {
       return null;
     });
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('日历'))); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('日历'))); await tester.pumpAndSettle();
     final before = checks;
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('备忘录'))); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('备忘录'))); await tester.pumpAndSettle();
     expect(checks, before);
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('备忘录'))); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('备忘录'))); await tester.pumpAndSettle();
     expect(checks, before);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
@@ -336,7 +337,7 @@ void main() {
     });
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
     expect(preparations, 0);
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('语音'))); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('语音'))); await tester.pumpAndSettle();
     expect(preparations, 1); expect(microphones, 0); expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
@@ -368,7 +369,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(393, 852));
     await tester.pumpWidget(const MemoApp()); await tester.pump(const Duration(milliseconds: 600));
     for (final label in ['日历', '语音', '设置', '备忘录']) {
-      await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text(label)).last);
+      await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text(label)).last);
       await tester.pump();
       final offenders = <String>[];
       tester.element(find.byType(IndexedStack)).visitAncestorElements((ancestor) {
@@ -392,19 +393,19 @@ void main() {
     addTearDown(() => appearance.value = Appearance.defaults);
     await tester.binding.setSurfaceSize(const Size(393, 852));
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置')));
+    await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('设置')));
     await tester.pumpAndSettle();
     await openCategory(tester, '外观与主题');
     expect(find.text('主题模式'), findsOneWidget);
     expect(find.text('强调色'), findsOneWidget);
 
     await tester.tap(find.text('深色')); await tester.pumpAndSettle();
-    var context = tester.element(find.byType(NavigationBar));
+    var context = tester.element(find.byType(MemoTabBar));
     expect(Theme.of(context).brightness, Brightness.dark,
       reason: 'the whole app follows the chosen mode, not just the sheet');
 
     await tester.tap(find.byKey(const ValueKey('accent-teal'))); await tester.pumpAndSettle();
-    context = tester.element(find.byType(NavigationBar));
+    context = tester.element(find.byType(MemoTabBar));
     expect(Theme.of(context).extension<MemoTokens>()!.colors.brand500, brandTealDark.c500,
       reason: 'the accent ramp is swapped in dark mode too');
 

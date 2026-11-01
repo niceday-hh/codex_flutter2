@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:timed_memo/widgets/widgets.dart';
 import 'package:timed_memo/main.dart';
 import 'package:timed_memo/reminder.dart';
 import 'package:timed_memo/settings_page.dart';
@@ -18,7 +19,7 @@ void main() {
     });
     await tester.binding.setSurfaceSize(const Size(393, 852));
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
-    final openHistory = tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.inventory_2_outlined)).onPressed!;
+    final openHistory = tester.widget<MemoIconButton>(find.widgetWithIcon(MemoIconButton, Icons.inventory_2_outlined)).onTap!;
     await tester.tap(find.byTooltip('历史任务'));
     openHistory(); openHistory();
     await tester.pumpAndSettle();
@@ -26,7 +27,7 @@ void main() {
     expect(cancellations, 1);
     await tester.tap(find.byType(BackButton)); await tester.pumpAndSettle();
     expect(find.byType(TaskLibraryPage), findsNothing);
-    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byType(MemoTabBar), findsOneWidget);
     stopped.complete(); await tester.pump();
     await tester.pumpWidget(const SizedBox()); await tester.pump();
     expect(tester.takeException(), isNull);
@@ -64,7 +65,7 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(393, 852));
       await tester.pumpWidget(const MemoApp()); await tester.pump(const Duration(milliseconds: 300));
       final callback = openEditor
-        ? tester.widget<FloatingActionButton>(find.byType(FloatingActionButton)).onPressed!
+        ? tester.widget<MemoTabBar>(find.byType(MemoTabBar)).onCreate!
         : tester.widget<InkWell>(find.ancestor(of: find.text('尚在准备的提醒').first, matching: find.byType(InkWell)).first).onTap!;
       callback(); callback(); callback();
       await tester.pumpAndSettle();
@@ -85,7 +86,7 @@ void main() {
     });
     await tester.binding.setSurfaceSize(const Size(393, 852));
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
-    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('设置'))); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('设置'))); await tester.pumpAndSettle();
     for (final section in settingsSections) { expect(find.text(section.title), findsOneWidget); }
     expect(find.text('自动停录等待'), findsNothing);
     await tester.enterText(find.byKey(const ValueKey('settings-search')), '自动停录'); await tester.pumpAndSettle();

@@ -181,33 +181,22 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   final MemoSelection _selection = MemoSelection();
   bool get _selecting => _selection.active;
 
-  // Motion. One controller for the whole app: the first screen resolves in
-  // half a second, then nothing ticks. Tab switches deliberately have no
-  // content transition — see the note in build().
+  // Motion. One controller for the first screen, one for the tab switch. Both
+  // are one-shot: the entrance resolves in half a second, the switch in 200ms,
+  // and then nothing ticks.
   late final AnimationController _enter;
+  late final AnimationController _tabMove;
   final Map<int, Animation<double>> _revealCache = {};
   bool _entered = false;
 
-  /// The composer button retreats while the list scrolls down and comes back
-  /// when the finger stops. It is the only control that floats over content,
-  /// so it was the only one that could cover a row; hiding it during the
-  /// gesture that moves content under it removes the problem without shrinking
-  /// the tap target. Only the button listens, so the list never rebuilds.
-  final ValueNotifier<bool> _fabShown = ValueNotifier(true);
-  Timer? _fabTimer;
-  bool _onScroll(ScrollNotification n) {
-    if (n is ScrollUpdateNotification) {
-      final delta = n.scrollDelta ?? 0;
-      if (delta > 1) { _fabTimer?.cancel(); _fabShown.value = false; }
-      else if (delta < -1) { _fabTimer?.cancel(); _fabShown.value = true; }
-    } else if (n is ScrollEndNotification) {
-      _fabTimer?.cancel();
-      _fabTimer = Timer(const Duration(milliseconds: 650), () {
-        if (mounted) _fabShown.value = true;
-      });
-    }
-    return false;
-  }
+  /// A 1.6% lift on the incoming page, played once per switch.
+  ///
+  /// It is a `SlideTransition` over an `IndexedStack` whose four children are
+  /// already wrapped in `RepaintBoundary`. Moving a layer only repaints the
+  /// composite, not the list inside it — which is why this is allowed while a
+  /// cross-fade (an `Opacity` over a scrolling page) is not.
+  late final Animation<Offset> _tabShift = Tween<Offset>(begin: const Offset(0, .016), end: Offset.zero)
+    .animate(CurvedAnimation(parent: _tabMove, curve: MemoMotion.curve));
 
   Animation<double> _revealAt(int i) => _revealCache.putIfAbsent(i, () {
     final begin = (i.clamp(0, MemoMotion.enterMaxItems) * MemoMotion.enterStep)
@@ -229,6 +218,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     super.initState(); WidgetsBinding.instance.addObserver(this);
     _enter = AnimationController(vsync: this, duration: MemoMotion.enter)
       ..addStatusListener((s) { if (s == AnimationStatus.completed && mounted) setState(() {}); });
+    _tabMove = AnimationController(vsync: this, duration: const Duration(milliseconds: 200), value: 1);
     asr.setForeground(true);
     voice.addListener(_voiceChanged);
     // The page-level chrome (action bar, FAB, hero slot) depends on whether a
@@ -296,9 +286,9 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     HapticFeedback.selectionClick();
     _entryPending = false; _entryEpoch++; speech.stopPreview();
     final stopped = voice.active || voice.pending != null ? voice.pause(keepDraft: false) : Future<void>.value();
-    _fabShown.value = true;
     _selection.clear();
     setState(() { tab = i; });
+    _tabMove.forward(from: 0);
     unawaited(stopped.then((_) async {
       if (!mounted || !_foreground || tab != i || voice.active) return;
       if (i == 2) _warmManualTab();
@@ -320,7 +310,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     for (final a in _revealCache.values) { if (a is CurvedAnimation) a.dispose(); }
     _revealCache.clear();
     _enter.dispose();
-    _fabTimer?.cancel(); _fabShown.dispose();
+    _tabMove.dispose();
     _selection.removeListener(_selectionChanged); _selection.dispose();
     WidgetsBinding.instance.removeObserver(this); native.setMethodCallHandler(null); super.dispose();
   }
@@ -562,8 +552,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     if (mounted) await reload();
   }
   @override Widget build(BuildContext context) => Scaffold(
-    body: NotificationListener<ScrollNotification>(onNotification: _onScroll,
-      child: MemoGlow(child: SafeArea(child: Column(children: [
+    body: MemoGlow(child: SafeArea(child: Column(children: [
       if (_selecting) _selectionBar(),
       if (voice.active && voice.pending == null && tab != 2) Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
@@ -581,67 +570,27 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       Expanded(child: loading ? const Center(child: CircularProgressIndicator())
       : error != null ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
         Text(error!), TextButton(onPressed: reload, child: const Text('重新加载'))]))
-      // No fade or slide between tabs. Any `Opacity` below 1 makes Flutter
-      // rasterise the entire page into an offscreen buffer every frame, and a
-      // moving `Transform` repaints that whole subtree with it — 200ms of that
-      // on a scrolling list is exactly the stutter this was supposed to avoid.
-      // The switch signal is the navigation bar's indicator (Material 3 already
-      // animates it) plus the selection tick; both cost nothing to paint.
+      // A 16px lift on the incoming page, not a cross-fade. An `Opacity` below
+      // 1 rasterises the whole page into an offscreen buffer every frame; a
+      // transform over children that are already `RepaintBoundary` only
+      // recomposites their layers. The switch therefore costs one layer move
+      // (200ms) and repaints nothing inside the lists.
       //
-      // Each tab gets its own layer instead: a banner or a snackbar appearing
-      // over the list no longer repaints the calendar sitting behind it.
-      : IndexedStack(index: tab, children: [
+      // Each tab keeps its own layer too: a banner or a snackbar appearing over
+      // the list no longer repaints the calendar sitting behind it.
+      : SlideTransition(position: _tabShift, child: IndexedStack(index: tab, children: [
         RepaintBoundary(child: homePage()),
         RepaintBoundary(child: calendarPage()),
         TickerMode(enabled: tab == 2, child: RepaintBoundary(child: VoicePage(flow: voice))),
         RepaintBoundary(child: settingsPage()),
-      ])),
-    ])))),
+      ]))),
+    ]))),
 
-    floatingActionButton: !loading && error == null && !_selecting && (tab == 0 || tab == 1)
-      ? ValueListenableBuilder<bool>(valueListenable: _fabShown,
-          builder: (_, shown, child) => IgnorePointer(ignoring: !shown,
-            child: AnimatedScale(scale: shown ? 1 : 0, duration: MemoMotion.press,
-              curve: MemoMotion.curve, child: child)),
-          child: FloatingActionButton(onPressed: () => edit(), backgroundColor: context.colors.brand500,
-            foregroundColor: Colors.white, tooltip: '新建提醒', elevation: 0, highlightElevation: 0,
-            // The default FAB shadow is black and reads as a smudge on the
-            // light canvas; a brand-tinted one matches the hero card above it.
-            shape: const CircleBorder(),
-            child: DecoratedBox(decoration: BoxDecoration(shape: BoxShape.circle,
-              boxShadow: MemoShadow.heroFor(context.colors.brand600)),
-              // 52, not 56: the disc used to reach into the row's 34px overflow
-              // slot on the right edge, so the ⋯ of whichever row it landed on
-              // was unclickable while the list was still.
-              child: const SizedBox(width: 52, height: 52,
-                child: Icon(Icons.add_rounded, size: 26)))))
-      : null,
-    floatingActionButtonLocation: const _NestedFabLocation(),
-    // A flush tab bar, not a floating pill. The pill was drawing a second card
-    // at the bottom of a page whose whole point is that only one card exists;
-    // a hairline plus a tinted icon is the iOS shape and gets out of the way of
-    // the list scrolling underneath it.
-    bottomNavigationBar: DecoratedBox(
-      decoration: BoxDecoration(color: context.colors.surface,
-        border: Border(top: BorderSide(color: context.colors.line, width: .6))),
-      child: SafeArea(top: false, child: NavigationBarTheme(
-        data: NavigationBarThemeData(
-          backgroundColor: Colors.transparent, surfaceTintColor: Colors.transparent, elevation: 0,
-          indicatorColor: Colors.transparent,
-          labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
-            fontSize: 12, height: 1.35, fontWeight: FontWeight.w500,
-            color: states.contains(WidgetState.selected) ? context.colors.brand600 : context.colors.muted)),
-          iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
-            size: 24, color: states.contains(WidgetState.selected) ? context.colors.brand600 : context.colors.muted)),
-        ),
-        child: NavigationBar(
-          height: 64, labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          selectedIndex: tab, onDestinationSelected: _selectTab, destinations: const [
-            NavigationDestination(icon: Icon(Icons.description_outlined), selectedIcon: Icon(Icons.description_rounded), label: '备忘录'),
-            NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month_rounded), label: '日历'),
-            NavigationDestination(icon: Icon(Icons.mic_none_rounded), selectedIcon: Icon(Icons.mic_rounded), label: '语音'),
-            NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings_rounded), label: '设置'),
-          ])))),
+    // The bar is not built while batch mode is on: the selection actions live
+    // in the app bar, and a create disc under a screen where every tap toggles
+    // a checkbox is a trap. One layout change, once per selection.
+    bottomNavigationBar: _selecting ? null : SafeArea(top: false,
+      child: MemoTabBar(index: tab, onSelect: _selectTab, onCreate: () => edit())),
   );
   Widget header(String title, String subtitle, {Widget? trailing}) =>
     MemoPageHeader(title: title, subtitle: subtitle, trailing: trailing);
@@ -688,8 +637,9 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       physics: const AlwaysScrollableScrollPhysics(), slivers: [
       SliverList.list(children: [
         header('备忘录', '把重要的事，交给提醒', trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-          IconButton(icon: const Icon(Icons.search_rounded), tooltip: '搜索提醒', onPressed: _openSearch),
-          IconButton(icon: const Icon(Icons.inventory_2_outlined), tooltip: '历史任务', onPressed: taskLibrary),
+          MemoIconButton(icon: Icons.search_rounded, tooltip: '搜索提醒', onTap: _openSearch),
+          const SizedBox(width: MemoSpace.sm),
+          MemoIconButton(icon: Icons.inventory_2_outlined, tooltip: '历史任务', onTap: taskLibrary),
         ])),
         // The kicker line. It used to be a lone label with nothing on the
         // right; the count gives it a second edge, which is what makes the
@@ -727,9 +677,10 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       ])))),
       if (paused.isNotEmpty) SliverToBoxAdapter(child: section('未启用', '${paused.length} 条')),
       SliverList.builder(itemCount: paused.length, itemBuilder: (_, i) => _reveal(i + 1, reminderCard(paused[i]))),
-      // Re-measured against the 52px disc sitting 6px lower: its top edge is
-      // 62px above the tab bar, so 96 clears it with room to spare.
-      const SliverToBoxAdapter(child: SizedBox(height: 96)),
+      // The bar lives in the Scaffold's bottom slot, so the list ends above it
+      // already. 56 clears the 10dp the create disc pokes above the capsule,
+      // plus the usual breathing room.
+      const SliverToBoxAdapter(child: SizedBox(height: 56)),
     ]));
   }
   /// The one gradient in the app. Its palette depends on the hour, so opening
@@ -743,12 +694,24 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
           gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
             colors: context.colors.heroGradientFor(now.hour)),
           borderRadius: const BorderRadius.all(Radius.circular(MemoRadius.xxl))),
-        child: InkWell(onTap: () => _selecting ? _togglePick(r) : _openDetail(r),
+        // The two arcs are clipped by the card, not by their own box: a
+        // 240dp disc parked off the top-right corner draws one crescent of
+        // 6% white, which is what stops the gradient reading as a flat fill.
+        // Same shape language as the logo-less hero in the reference: light
+        // enters from the corner, the type sits in the dark half.
+        child: ClipRRect(borderRadius: BorderRadius.circular(MemoRadius.xxl),
+          child: InkWell(onTap: () => _selecting ? _togglePick(r) : _openDetail(r),
           onLongPress: () => _togglePick(r),
           borderRadius: BorderRadius.circular(MemoRadius.xxl),
           child: Stack(children: [
+            // Light enters from outside the top-right corner. A radial wash
+            // has no edge to follow, which is the point: two hard discs (the
+            // first version) read as a watermark, not as light.
             Positioned.fill(child: IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(MemoRadius.xxl)),
+              gradient: RadialGradient(center: const Alignment(1.25, -1.55), radius: 1.45,
+                colors: [Colors.white.withValues(alpha: .12), Colors.white.withValues(alpha: 0)],
+                stops: [0, .96]))))),
+            Positioned.fill(child: IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(
               gradient: LinearGradient(begin: Alignment.topCenter, end: const Alignment(0, .68),
                 colors: [MemoColor.heroSheen, MemoColor.heroSheenEnd]))))),
             Padding(padding: const EdgeInsets.fromLTRB(22, 20, 22, 21),
@@ -795,7 +758,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
                     color: context.colors.onBrand, letterSpacing: .2))),
               ]),
             ])),
-          ]))))));
+          ])))))));
   Key? settingKey(String title) => title == _settingsTargetTitle ? _settingsTargetKey : null;
   Widget section(String title, String subtitle) =>
     KeyedSubtree(key: settingKey(title), child: MemoSectionHeader(title, trailing: subtitle));
@@ -976,7 +939,10 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
             final selected = sameDay(date, selectedDate);
             final today = sameDay(date, DateTime.now());
             final has = marks.contains(d);
-            final radius = BorderRadius.circular(MemoRadius.md);
+            // The selected day is a disc, not a rounded square: at 44dp a
+            // 14dp radius still reads as a tile, and a tile inside a 28dp card
+            // is a second corner language on the same screen.
+            final radius = BorderRadius.circular(selected ? MemoRadius.pill : MemoRadius.md);
             return Ink(
               decoration: BoxDecoration(
                 color: selected ? context.colors.brand500 : Colors.transparent,
@@ -1010,9 +976,10 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       SliverList.builder(itemCount: active.length, itemBuilder: (_, i) => reminderCard(active[i])),
       if (history.isNotEmpty) SliverToBoxAdapter(child: section('当天历史任务', '按保留的计划日期整理')),
       SliverList.builder(itemCount: history.length, itemBuilder: (_, i) => reminderCard(history[i])),
-      // Re-measured against the 52px disc sitting 6px lower: its top edge is
-      // 62px above the tab bar, so 96 clears it with room to spare.
-      const SliverToBoxAdapter(child: SizedBox(height: 96)),
+      // The bar lives in the Scaffold's bottom slot, so the list ends above it
+      // already. 56 clears the 10dp the create disc pokes above the capsule,
+      // plus the usual breathing room.
+      const SliverToBoxAdapter(child: SizedBox(height: 56)),
     ]);
   }
   Widget settingsPage() => SettingsPage(onOpen: _openSettingsSection, currentValue: _settingValue,
@@ -1739,18 +1706,4 @@ class _GroupHeader extends SliverPersistentHeaderDelegate {
 
   @override bool shouldRebuild(_GroupHeader old) => old.label != label || old.count != count ||
     old.brightness != brightness || old.accent != accent;
-}
-
-/// End-float, nudged 6px down.
-///
-/// The stock slot leaves a 16px gap above the tab bar and the 56px disc then
-/// lands on the right edge of a row — exactly where that row's ⋯ button sits.
-/// Six pixels down closes most of the gap without touching the bar, and the
-/// smaller disc (52) does the rest, so a still list is fully operable.
-class _NestedFabLocation extends FloatingActionButtonLocation {
-  const _NestedFabLocation();
-
-  @override
-  Offset getOffset(ScaffoldPrelayoutGeometry geometry) =>
-    FloatingActionButtonLocation.endFloat.getOffset(geometry).translate(0, 6);
 }

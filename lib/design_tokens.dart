@@ -30,10 +30,14 @@ abstract final class MemoColor {
   static const line = Color(0xFFECE8F3); // hairline between cards; decorative
   static const lineStrong = Color(0xFFDDD8E8); // grips, drag handles
   static const outline = Color(0xFF8B8499); // 3.6:1 — borders of real inputs (WCAG 1.4.11)
-  static const canvas = Color(0xFFF8F6FC);
+  /// Cool paper, not lavender paper. The old #F8F6FC carried enough magenta
+  /// that a white card looked warm beside it; this one is a single step toward
+  /// blue-grey, which is what makes the cards read as *lifted* rather than
+  /// merely lighter.
+  static const canvas = Color(0xFFF4F5FA);
   /// The dark canvas. Also the label colour for pastel fills in dark mode,
   /// where white would only reach 3.5:1.
-  static const night = Color(0xFF0E0D13);
+  static const night = Color(0xFF0B0C14);
   static const surface = Color(0xFFFFFFFF);
   static const surfaceAlt = Color(0xFFFBFAFE);
 
@@ -68,9 +72,10 @@ abstract final class MemoColor {
   static const heroDay = <Color>[heroTop, heroBottom];
   static const heroNight = <Color>[Color(0xFF332F7A), Color(0xFF1A1F52)];
 
-  /// 05:00–10:00 dawn, 10:00–17:00 day, the rest night.
+  /// 05:00–10:00 dawn, 10:00–19:00 day, the rest night. The day band runs to
+  /// 19:00 because 18:00 under a night gradient read as midnight on the phone.
   static List<Color> heroGradientFor(int hour) =>
-    hour >= 5 && hour < 10 ? heroDawn : hour >= 10 && hour < 17 ? heroDay : heroNight;
+    hour >= 5 && hour < 10 ? heroDawn : hour >= 10 && hour < 19 ? heroDay : heroNight;
 
   /// A single low-opacity brand wash behind the first screen. Painted once into
   /// its own layer, so it costs one fill — not one per scrolling frame.
@@ -114,15 +119,19 @@ class MemoBrand {
     required this.dawn, required this.nightTop, required this.nightBottom,
   });
 
-  List<Color> get gradientDay => [c600, c800];
-  List<Color> get gradientDawn => [c600, dawn];
+  /// 500 → 700, not 600 → 800. The deeper pair made the card read as a slab
+  /// on the cooler canvas; 500 is still ≥4.5:1 against white (asserted in
+  /// `ui_system_test`), so the card can carry the accent at full strength
+  /// instead of at 70% of it.
+  List<Color> get gradientDay => [c500, c700];
+  List<Color> get gradientDawn => [c500, dawn];
   List<Color> get gradientNight => [nightTop, nightBottom];
 }
 
 const brandVioletLight = MemoBrand(
   c50: Color(0xFFF7F4FF), c100: Color(0xFFF0ECFF), c200: Color(0xFFDDD2FF), c400: Color(0xFF8E6BF5),
   c500: Color(0xFF7252F6), c600: Color(0xFF5B3FD9), c700: Color(0xFF5334CC), c800: Color(0xFF3E2699),
-  dawn: Color(0xFFC2456F), nightTop: Color(0xFF332F7A), nightBottom: Color(0xFF1A1F52));
+  dawn: Color(0xFFC2456F), nightTop: Color(0xFF4A3AA8), nightBottom: Color(0xFF241A63));
 
 const brandIndigoLight = MemoBrand(
   c50: Color(0xFFF1F4FF), c100: Color(0xFFE5EAFF), c200: Color(0xFFC9D4FE), c400: Color(0xFF6B87F5),
@@ -144,7 +153,7 @@ const brandEmberLight = MemoBrand(
 const brandVioletDark = MemoBrand(
   c50: Color(0xFF1F1A2E), c100: Color(0xFF2A2340), c200: Color(0xFF3B3160), c400: Color(0xFF9B82FF),
   c500: Color(0xFF8C74FF), c600: Color(0xFFA18CFF), c700: Color(0xFFC3B6FF), c800: Color(0xFFDFD7FF),
-  dawn: Color(0xFFC2456F), nightTop: Color(0xFF332F7A), nightBottom: Color(0xFF1A1F52));
+  dawn: Color(0xFFC2456F), nightTop: Color(0xFF4A3AA8), nightBottom: Color(0xFF241A63));
 
 const brandIndigoDark = MemoBrand(
   c50: Color(0xFF1A1F33), c100: Color(0xFF232B45), c200: Color(0xFF333F6B), c400: Color(0xFF8BA0FF),
@@ -231,7 +240,10 @@ abstract final class MemoRadius {
   static const md = 14.0;
   static const lg = 18.0;
   static const xl = 22.0;
-  static const xxl = 26.0;
+  /// 28, not 26. At 26 a full-width card on a 393dp screen still reads as a
+  /// rounded rectangle; 28 is the point where the corner stops being a corner
+  /// and becomes a curve — the shape the whole card language is borrowing.
+  static const xxl = 28.0;
   static const pill = 999.0;
 }
 
@@ -251,16 +263,34 @@ abstract final class MemoSpace {
 }
 
 /// Three elevations. Shadows are tinted ink, never pure black.
+///
+/// Two shadows per level: a tight contact shadow that grounds the card and a
+/// wide, very faint one that lifts it. A single 14px blur reads as a border
+/// smudge; the pair is what the eye interprets as height.
 abstract final class MemoShadow {
-  static const card = <BoxShadow>[BoxShadow(color: Color(0x060E0824), blurRadius: 14, offset: Offset(0, 5))];
-  static const float = <BoxShadow>[BoxShadow(color: Color(0x120E0824), blurRadius: 22, offset: Offset(0, 10))];
+  static const card = <BoxShadow>[
+    BoxShadow(color: Color(0x072A2E50), blurRadius: 24, offset: Offset(0, 10)),
+    BoxShadow(color: Color(0x052A2E50), blurRadius: 6, offset: Offset(0, 2)),
+  ];
+  static const float = <BoxShadow>[
+    BoxShadow(color: Color(0x142A2E50), blurRadius: 30, offset: Offset(0, 12)),
+    BoxShadow(color: Color(0x082A2E50), blurRadius: 8, offset: Offset(0, 3)),
+  ];
   static const sheet = <BoxShadow>[BoxShadow(color: Color(0x240E0824), blurRadius: 40, offset: Offset(0, 18))];
+
+  /// A 42dp disc does not need the card's 24px halo — at that size the halo
+  /// reads as a smudge around the circle. One short contact shadow is enough
+  /// to lift it off the page.
+  static const disc = <BoxShadow>[BoxShadow(color: Color(0x0C2A2E50), blurRadius: 12, offset: Offset(0, 4))];
 
   /// Brand-tinted lift under the hero card, so it reads as lit rather than cut
   /// out. Takes the colour from the active ramp: a violet shadow under a teal
   /// card looked like a bruise.
+  ///
+  /// The alpha went up with the radius: on the cooler canvas a 22px/15% halo
+  /// disappeared, and the card is the one object that is allowed to glow.
   static List<BoxShadow> heroFor(Color brand600) =>
-    [BoxShadow(color: brand600.withValues(alpha: .15), blurRadius: 22, offset: const Offset(0, 10))];
+    [BoxShadow(color: brand600.withValues(alpha: .26), blurRadius: 30, offset: const Offset(0, 14))];
 
 
   /// Pressed card: the shadow tightens as the card dips, so the finger gets a
@@ -390,7 +420,7 @@ class MemoPalette {
   /// the stops now come from [cardBrand], not [brand]: the card is a dark
   /// surface in both themes and every label on it is white.
   List<Color> heroGradientFor(int hour) => hour >= 5 && hour < 10
-    ? cardBrand.gradientDawn : hour >= 10 && hour < 17 ? cardBrand.gradientDay : cardBrand.gradientNight;
+    ? cardBrand.gradientDawn : hour >= 10 && hour < 19 ? cardBrand.gradientDay : cardBrand.gradientNight;
 
   static const light = MemoPalette(
     surface: MemoColor.surface, surfaceAlt: MemoColor.surfaceAlt, canvas: MemoColor.canvas,
@@ -407,18 +437,18 @@ class MemoPalette {
     warning: MemoColor.warning, warningSurface: MemoColor.warningSurface,
   );
 
-  /// Not an inverted light theme: three near-black surfaces with a violet cast
-  /// (#0E0D13 page → #191622 card → #221E2D lifted) so the brand does not turn
+  /// Not an inverted light theme: three near-black surfaces with a cool cast
+  /// (#0B0C14 page → #181A28 card → #23263A lifted) so the brand does not turn
   /// grey at night, and every text colour clears 4.5:1 against its own surface:
-  /// ink 14.4:1, muted 7.1:1, outline 6.2:1 on [surface].
+  /// ink 15.0:1, muted 7.4:1, outline 6.4:1 on [surface].
   ///
   /// `ink` used to be #F3EFFA. Dropping four percent of its luminance keeps it
-  /// above AAA (14.4:1) while taking the glare off long paragraphs at 2 a.m.
+  /// above AAA (15:1) while taking the glare off long paragraphs at 2 a.m.
   static const dark = MemoPalette(
-    surface: Color(0xFF191622), surfaceAlt: Color(0xFF221E2D), canvas: MemoColor.night,
-    ink: Color(0xFFE9E4F4),
-    inkSoft: Color(0xFFD9D3E6), muted: Color(0xFFA79FB9), line: Color(0xFF383244),
-    lineStrong: Color(0xFF453D55), outline: Color(0xFF928AA6),
+    surface: Color(0xFF181A28), surfaceAlt: Color(0xFF23263A), canvas: MemoColor.night,
+    ink: Color(0xFFECEEF7),
+    inkSoft: Color(0xFFD6D9E8), muted: Color(0xFFA2A6BB), line: Color(0xFF2E3146),
+    lineStrong: Color(0xFF3B3F57), outline: Color(0xFF8F93AA),
     brand50: Color(0xFF1F1A2E), brand100: Color(0xFF2A2340), brand200: Color(0xFF3B3160),
     brand400: Color(0xFF9B82FF), brand500: Color(0xFF8C74FF), brand600: Color(0xFFA18CFF),
     brand700: Color(0xFFC3B6FF), brand800: Color(0xFFDFD7FF),

@@ -30,6 +30,34 @@ class MemoPageHeader extends StatelessWidget {
   );
 }
 
+/// Round, raised icon button for page headers.
+///
+/// A bare `IconButton` reads as a toolbar control: it has no surface, so on a
+/// page whose header is a 34px serif it looks like two glyphs floating in the
+/// margin. The disc gives the header a right edge without adding a bar — the
+/// same shape the tab bar and the cards use, one size smaller.
+class MemoIconButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+  final double size;
+
+  const MemoIconButton({super.key, required this.icon, required this.tooltip,
+    this.onTap, this.size = 42});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final shape = CircleBorder(side: BorderSide(color: c.line, width: .6));
+    return Tooltip(message: tooltip, child: DecoratedBox(
+      decoration: const BoxDecoration(shape: BoxShape.circle, boxShadow: MemoShadow.disc),
+      child: Material(color: c.surface, shape: shape, clipBehavior: Clip.antiAlias,
+        child: InkWell(onTap: onTap, customBorder: shape, child: SizedBox(width: size, height: size,
+          child: Icon(icon, size: 20, color: c.inkSoft)))),
+    ));
+  }
+}
+
 /// Section label with an optional count on the right.
 class MemoSectionHeader extends StatelessWidget {
   final String title;

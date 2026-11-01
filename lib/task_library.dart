@@ -21,6 +21,10 @@ class TaskLibraryPage extends StatefulWidget {
 
 class _TaskLibraryPageState extends State<TaskLibraryPage> {
   String query = '';
+
+  /// 0 all, 1 done, 2 archived. A view of the same list, not a new route —
+  /// which is why it is a segmented control and not a second tab bar.
+  int filter = 0;
   final MemoSelection _selection = MemoSelection();
 
   int collectedAt(Reminder r) => (r.archived ? r.archivedAt : r.lastAck) > 0
@@ -61,9 +65,13 @@ class _TaskLibraryPageState extends State<TaskLibraryPage> {
   @override Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.store,
     builder: (_, child) {
-      final rows = widget.store.reminders.where((r) =>
-        (r.archived || r.completed) && r.text.toLowerCase().contains(query.toLowerCase())).toList()
-        ..sort((a, b) => collectedAt(b).compareTo(collectedAt(a)));
+      final rows = widget.store.reminders.where((r) {
+        if (!r.archived && !r.completed) return false;
+        if (filter == 1 && r.archived) return false;
+        if (filter == 2 && !r.archived) return false;
+        return r.text.toLowerCase().contains(query.toLowerCase());
+      }).toList()..sort((a, b) => collectedAt(b).compareTo(collectedAt(a)));
+      final total = widget.store.reminders.where((r) => r.archived || r.completed).length;
       final selecting = _selection.active;
       final allPicked = rows.isNotEmpty && _selection.length == rows.length;
       return Scaffold(
@@ -83,18 +91,27 @@ class _TaskLibraryPageState extends State<TaskLibraryPage> {
               icon: Icon(Icons.delete_outline_rounded, color: context.colors.danger)),
             const SizedBox(width: 4),
           ],
-        ) : AppBar(title: const Text('历史任务')),
+        ) : AppBar(
+          backgroundColor: context.colors.canvas, surfaceTintColor: Colors.transparent,
+          scrolledUnderElevation: 0, centerTitle: false,
+          title: Text('历史任务', style: context.text.title),
+          titleSpacing: 4,
+        ),
         body: Column(children: [
           Padding(padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
             child: MemoSearchField(hint: '搜索任务内容', onChanged: (s) {
               _selection.clear();
               setState(() => query = s.trim());
             })),
+          Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: MemoSegmentBar(labels: const ['全部', '已完成', '已保留'], index: filter,
+              onChanged: (i) { _selection.clear(); setState(() => filter = i); })),
           Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
             child: Align(alignment: Alignment.centerLeft,
               child: MemoHint(selecting
                 ? '长按或点击勾选；批量删除不会影响其他记录'
-                : '${rows.length} 条 · 已停止提醒，内容保留；可编辑后复用'))),
+                : (filter == 0 ? '共 $total 条 · 已停止提醒，内容保留；可编辑后复用'
+                    : '${rows.length} / $total 条 · 已停止提醒，内容保留')))),
           Expanded(child: rows.isEmpty
             ? const Center(child: MemoEmptyState(icon: Icons.inbox_rounded, title: '还没有匹配的记录',
                 subtitle: '完成或主动保留的任务会收纳到这里'))

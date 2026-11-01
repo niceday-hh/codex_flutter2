@@ -91,24 +91,35 @@ class MemoScrollBehavior extends MaterialScrollBehavior {
   Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) => child;
 }
 
-/// Static brand wash behind a page. `RepaintBoundary` keeps it out of every
-/// scroll-driven repaint, so the whole effect costs one fill on first layout.
+/// Two static brand washes behind a page — one above the header on the right,
+/// one low on the left, so the canvas has a direction instead of a single halo
+/// pinned to the top edge.
+///
+/// Both are painted inside one [RepaintBoundary]: the pair costs one fill on
+/// first layout and nothing at all while the list scrolls. The colours come
+/// from the active ramp, so switching to 青碧 does not leave a violet cloud
+/// behind a green card.
 class MemoGlow extends StatelessWidget {
   final Widget child;
   const MemoGlow({super.key, required this.child});
 
   @override
-  Widget build(BuildContext context) => Stack(
-    children: [
-      Positioned.fill(child: IgnorePointer(child: RepaintBoundary(child: DecoratedBox(
-        decoration: const BoxDecoration(gradient: RadialGradient(
-          center: Alignment(0, -1.18),
-          radius: 1.0,
-          colors: [MemoColor.glowCore, MemoColor.glowEdge],
-          stops: [0, .78],
-        )),
-      )))),
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Stack(children: [
+      Positioned.fill(child: IgnorePointer(child: RepaintBoundary(child: Stack(
+        clipBehavior: Clip.hardEdge,
+        children: [
+          // Sits behind the header icons, not behind the title: the top-left is
+          // where the 34px serif starts and a wash there would grey it out.
+          Positioned(top: -170, right: -110, child: _blob(c.brand500.withValues(alpha: .10), 380)),
+          Positioned(top: 260, left: -150, child: _blob(c.brand400.withValues(alpha: .06), 340)),
+        ])))),
       child,
-    ],
-  );
+    ]);
+  }
+
+  Widget _blob(Color color, double size) => Container(width: size, height: size,
+    decoration: BoxDecoration(shape: BoxShape.circle,
+      gradient: RadialGradient(colors: [color, color.withValues(alpha: 0)])));
 }
