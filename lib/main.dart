@@ -380,20 +380,26 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       }
     }
   }
-  Widget _selectionBar() => Padding(
-    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-    child: Material(color: context.colors.brand100, borderRadius: BorderRadius.circular(MemoRadius.lg),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
-        child: Row(children: [
-          Text('已选 ${_selection.length} 条', style: context.text.label.copyWith(color: context.colors.brand800)),
-          const Spacer(),
-          TextButton(onPressed: _completePicked, child: const Text('完成本次')),
-          TextButton(onPressed: _deletePicked,
-            child:  Text('删除', style: TextStyle(color: context.colors.danger))),
-          IconButton(tooltip: '取消选择', onPressed: _selection.clear,
-            icon: const Icon(Icons.close_rounded, size: 20)),
-        ]))));
+  Widget _selectionBar() {
+    // A paused task has no occurrence to complete. Disabling the verb is
+    // clearer than leaving it live so it can answer with a toast; a mixed
+    // selection that contains at least one live task stays enabled.
+    final canComplete = store.reminders.any((r) => _selection.contains(r.id)
+      && !r.archived && !r.completed && (r.unread || r.enabled));
+    return Padding(padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Material(color: context.colors.brand100, borderRadius: BorderRadius.circular(MemoRadius.lg),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
+          child: Row(children: [
+            Text('已选 ${_selection.length} 条', style: context.text.label.copyWith(color: context.colors.brand800)),
+            const Spacer(),
+            TextButton(onPressed: canComplete ? _completePicked : null, child: const Text('完成本次')),
+            TextButton(onPressed: _deletePicked,
+              child:  Text('删除', style: TextStyle(color: context.colors.danger))),
+            IconButton(tooltip: '取消选择', onPressed: _selection.clear,
+              icon: const Icon(Icons.close_rounded, size: 20)),
+          ]))));
+  }
   void toast(String s, {bool error = false}) {
     if (!mounted) return;
     final local = _settingsMessenger.currentState;

@@ -62,9 +62,9 @@ class MemoIconButton extends StatelessWidget {
 ///
 /// Not a `TextButton`: a text button keeps Material's 48dp minimum tap target
 /// and 16dp side padding, which at 320dp eats the title column. This one is
-/// 40dp tall — the iOS minimum — and sized to its two words. Ends are fully
-/// round because every other pill on the page (chips, segments, the tab bar)
-/// already is.
+/// 44dp tall — the iOS minimum tap target — and sized to its two words. Ends
+/// are fully round because every other pill on the page (chips, segments, the
+/// tab bar) already is.
 class MemoMiniButton extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -88,7 +88,7 @@ class MemoMiniButton extends StatelessWidget {
       color: emphasized ? c.brand50 : c.surfaceAlt,
       shape: shape, clipBehavior: Clip.antiAlias,
       child: InkWell(onTap: onTap, customBorder: shape,
-        child: SizedBox(height: 40, child: Padding(
+        child: SizedBox(height: 44, child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(icon, size: 15, color: foreground),
