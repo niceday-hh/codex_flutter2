@@ -27,7 +27,7 @@ class MemoSegmentBar extends StatelessWidget {
         border: Border.all(color: c.line, width: .6)),
       child: Row(children: [
         for (var i = 0; i < labels.length; i++)
-          Expanded(child: Semantics(button: true, selected: i == index, label: labels[i],
+          Expanded(child: Semantics(button: true, selected: i == index, label: labels[i], excludeSemantics: true,
             child: GestureDetector(behavior: HitTestBehavior.opaque,
               onTap: () {
                 if (i == index) return;

@@ -71,7 +71,10 @@ class MemoTabBar extends StatelessWidget {
     final c = context.colors;
     final item = items[i];
     return Expanded(child: Semantics(
-      button: true, selected: on, label: item.$3,
+      // The label is read by the screen reader, so the Text inside must not
+      // be announced a second time; and at 1.6× system type a 3-character
+      // label is wider than the 53dp slot a 320dp screen gives it.
+      button: true, selected: on, label: item.$3, excludeSemantics: true,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => onSelect(i),
@@ -92,7 +95,7 @@ class MemoTabBar extends StatelessWidget {
             style: DefaultTextStyle.of(context).style.copyWith(fontSize: 12, height: 1.12,
               fontWeight: on ? FontWeight.w600 : FontWeight.w500,
               color: on ? c.brand600 : c.muted),
-            child: Text(item.$3)),
+            child: Text(item.$3, maxLines: 1, overflow: TextOverflow.ellipsis)),
         ])),
       )));
   }
