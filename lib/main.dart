@@ -358,6 +358,10 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   Future<void> reload() async {
     try {
       await store.load();
+      // A row can disappear between ticks (the native side finishes a task,
+      // a repeat is cancelled); a stale id would keep the bar counting a
+      // reminder that is no longer on the page.
+      _selection.retain(store.reminders.map((r) => r.id));
       if (mounted) {
         if (_settingsSheetOpen) { loading = false; error = null; }
         else { setState(() { loading = false; error = null; }); }
