@@ -44,7 +44,7 @@ class CharacterArtCatalog {
       final asset = row['asset'], layout = row['layout'], w = row['width'], h = row['height'];
       if (asset is! String || !RegExp(r'^assets/character_(?:banners|portraits)/[a-z0-9_-]+\.webp$').hasMatch(asset) ||
           !const ['banner', 'portrait_contain', 'wide_contain'].contains(layout) ||
-          w is! int || h is! int || w <= 0 || h <= 0 || w > 768 || h > 768) continue;
+          w is! int || h is! int || w <= 0 || h <= 0 || w > 768 || h > 768) { continue; }
       entries['$id'] = CharacterArt(asset: asset, layout: layout as String, width: w, height: h);
     }
     return CharacterArtCatalog(entries);

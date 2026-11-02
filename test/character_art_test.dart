@@ -63,8 +63,10 @@ void main() {
         final reminder = Reminder(id: 7, text: '喝水，休息一下眼睛', date: DateTime.now().add(const Duration(hours: 2)),
           speechMode: 'on', speechVoice: '$sid', speechState: 'ready');
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
-          if (call.method == 'getState') return jsonEncode({'reminders': [reminder.toJson()],
-            'defaults': {}, 'status': {'notifications': true, 'exact': true}});
+          if (call.method == 'getState') {
+            return jsonEncode({'reminders': [reminder.toJson()],
+              'defaults': {}, 'status': {'notifications': true, 'exact': true}});
+          }
           if (call.method == 'initialReminderId') return 7;
           return null;
         });
