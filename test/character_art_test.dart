@@ -67,7 +67,7 @@ void main() {
             return jsonEncode({'reminders': [reminder.toJson()],
               'defaults': {}, 'status': {'notifications': true, 'exact': true}});
           }
-          if (call.method == 'initialReminderId') return 7;
+          if (call.method == 'initialReminderId') return 0;
           return null;
         });
         addTearDown(() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, null));
@@ -75,6 +75,12 @@ void main() {
         appearance.value = Appearance(mode: mode);
         await tester.pumpWidget(const RepaintBoundary(key: boundaryKey, child: MemoApp()));
         await tester.pumpAndSettle();
+        await tester.tap(find.text(reminder.text).first);
+        await tester.pumpAndSettle();
+        // Asset futures run outside the fake clock used by widget tests.
+        await tester.runAsync(() async { await Future<void>.delayed(Duration.zero); });
+        await tester.pumpAndSettle();
+        expect(find.byType(ReminderDetail), findsOneWidget);
         final art = catalog!.entries['$sid'];
         if (art != null) {
           final image = tester.widget<Image>(find.byKey(const ValueKey('detail-character-image')));
@@ -119,6 +125,8 @@ void main() {
         date: DateTime.now().add(const Duration(hours: 2)), speechMode: 'on', speechVoice: '228'),
         onAck: () async {}, onSkip: () async {}, onPostpone: (at) async => at,
         onEdit: () => edited = true)))));
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async { await Future<void>.delayed(Duration.zero); });
     await tester.pumpAndSettle();
     final image = tester.widget<Image>(find.byKey(const ValueKey('detail-character-image')));
     await tester.runAsync(() => precacheImage(image.image, tester.element(find.byType(ReminderDetail))));
