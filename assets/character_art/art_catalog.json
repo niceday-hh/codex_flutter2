@@ -1,0 +1,1466 @@
+{
+  "0": {
+    "asset": "assets/character_banners/uma_specialweek.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "1": {
+    "asset": "assets/character_banners/uma_silencesuzuka.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "2": {
+    "asset": "assets/character_banners/uma_tokaiteio.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "3": {
+    "asset": "assets/character_banners/uma_maruzensky.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "4": {
+    "asset": "assets/character_banners/uma_fujikiseki.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "5": {
+    "asset": "assets/character_banners/uma_oguricap.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "6": {
+    "asset": "assets/character_banners/uma_goldship.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "7": {
+    "asset": "assets/character_banners/uma_vodka.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "8": {
+    "asset": "assets/character_banners/uma_daiwascarlet.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "9": {
+    "asset": "assets/character_banners/uma_taikishuttle.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "10": {
+    "asset": "assets/character_banners/uma_grasswonder.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "11": {
+    "asset": "assets/character_banners/uma_hishiamazon.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "12": {
+    "asset": "assets/character_banners/uma_mejiromcqueen.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "13": {
+    "asset": "assets/character_banners/uma_elcondorpasa.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "14": {
+    "asset": "assets/character_banners/uma_tmoperao.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "15": {
+    "asset": "assets/character_banners/uma_naritabrian.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "16": {
+    "asset": "assets/character_banners/uma_symbolirudolf.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "17": {
+    "asset": "assets/character_banners/uma_airgroove.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "18": {
+    "asset": "assets/character_banners/uma_agnesdigital.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "19": {
+    "asset": "assets/character_banners/uma_seiunsky.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "20": {
+    "asset": "assets/character_banners/uma_tamamocross.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "21": {
+    "asset": "assets/character_banners/uma_finemotion.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "22": {
+    "asset": "assets/character_banners/uma_biwahayahide.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "23": {
+    "asset": "assets/character_banners/uma_mayanotopgun.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "24": {
+    "asset": "assets/character_banners/uma_manhattancafe.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "25": {
+    "asset": "assets/character_banners/uma_mihonobourbon.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "26": {
+    "asset": "assets/character_banners/uma_mejiroryan.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "27": {
+    "asset": "assets/character_banners/uma_hishiakebono.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "28": {
+    "asset": "assets/character_banners/uma_yukinobijin.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "29": {
+    "asset": "assets/character_banners/uma_riceshower.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "30": {
+    "asset": "assets/character_banners/uma_inesfujin.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "31": {
+    "asset": "assets/character_banners/uma_agnestachyon.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "32": {
+    "asset": "assets/character_banners/uma_admirevega.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "33": {
+    "asset": "assets/character_banners/uma_inarione.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "34": {
+    "asset": "assets/character_banners/uma_winningticket.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "35": {
+    "asset": "assets/character_banners/uma_airshakur.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "36": {
+    "asset": "assets/character_banners/uma_eishinflash.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "37": {
+    "asset": "assets/character_banners/uma_currenchan.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "38": {
+    "asset": "assets/character_banners/uma_kawakamiprincess.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "39": {
+    "asset": "assets/character_banners/uma_goldcity.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "40": {
+    "asset": "assets/character_banners/uma_sakurabakushino.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "41": {
+    "asset": "assets/character_banners/uma_seekingthepearl.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "42": {
+    "asset": "assets/character_banners/uma_shinkowindy.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "43": {
+    "asset": "assets/character_banners/uma_sweeptosho.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "44": {
+    "asset": "assets/character_banners/uma_supercreek.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "45": {
+    "asset": "assets/character_banners/uma_smartfalcon.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "47": {
+    "asset": "assets/character_banners/uma_tosenjordan.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "48": {
+    "asset": "assets/character_banners/uma_nakayamafesta.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "49": {
+    "asset": "assets/character_banners/uma_naritataishin.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "50": {
+    "asset": "assets/character_banners/uma_nishinoflower.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "51": {
+    "asset": "assets/character_banners/uma_haruurara.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "52": {
+    "asset": "assets/character_banners/uma_bamboomemory.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "53": {
+    "asset": "assets/character_banners/uma_bikopegasus.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "54": {
+    "asset": "assets/character_banners/uma_marveloussunday.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "55": {
+    "asset": "assets/character_banners/uma_matikanefukukitaru.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "56": {
+    "asset": "assets/character_banners/uma_mrcb.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "57": {
+    "asset": "assets/character_banners/uma_meishodoto.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "58": {
+    "asset": "assets/character_banners/uma_mejirodober.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "59": {
+    "asset": "assets/character_banners/uma_nicenature.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "60": {
+    "asset": "assets/character_banners/uma_kinghalo.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "61": {
+    "asset": "assets/character_banners/uma_matikanetannhauser.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "62": {
+    "asset": "assets/character_banners/uma_ikunodictus.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "63": {
+    "asset": "assets/character_banners/uma_mejiropalmer.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "64": {
+    "asset": "assets/character_banners/uma_daitakuhelios.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "65": {
+    "asset": "assets/character_banners/uma_twinturbo.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "66": {
+    "asset": "assets/character_banners/uma_satonodiamond.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "67": {
+    "asset": "assets/character_banners/uma_kitasanblack.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "68": {
+    "asset": "assets/character_banners/uma_sakurachiyonoo.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "69": {
+    "asset": "assets/character_banners/uma_siriussymboli.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "70": {
+    "asset": "assets/character_banners/uma_mejiroardan.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "71": {
+    "asset": "assets/character_banners/uma_yaenomuteki.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "72": {
+    "asset": "assets/character_banners/uma_tsurumarutsuyoshi.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "73": {
+    "asset": "assets/character_banners/uma_mejirobright.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "75": {
+    "asset": "assets/character_banners/uma_yamaninzephyr.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "76": {
+    "asset": "assets/character_banners/uma_copanorickey.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "77": {
+    "asset": "assets/character_banners/uma_hokkotarumae.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "78": {
+    "asset": "assets/character_banners/uma_wonderacute.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "79": {
+    "asset": "assets/character_banners/uma_bitterglasse.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "80": {
+    "asset": "assets/character_banners/uma_littlecocon.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "81": {
+    "asset": "assets/character_banners/uma_hayakawatazuna.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "82": {
+    "asset": "assets/character_banners/uma_akikawayayoi.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "83": {
+    "asset": "assets/character_banners/uma_otonashietsuko.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "84": {
+    "asset": "assets/character_banners/uma_kiryuinaoi.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "85": {
+    "asset": "assets/character_banners/uma_anshinzawasasami.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "86": {
+    "asset": "assets/character_banners/uma_kashimotoriko.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "87": {
+    "asset": "assets/character_banners/genshin_kamisatoayaka.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "303": {
+    "asset": "assets/character_banners/genshin_kamisatoayaka.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "88": {
+    "asset": "assets/character_banners/genshin_jean.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "340": {
+    "asset": "assets/character_banners/genshin_jean.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "90": {
+    "asset": "assets/character_banners/genshin_lisa.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "332": {
+    "asset": "assets/character_banners/genshin_lisa.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "92": {
+    "asset": "assets/character_banners/genshin_barbara.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "306": {
+    "asset": "assets/character_banners/genshin_barbara.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "93": {
+    "asset": "assets/character_banners/genshin_kaeya.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "326": {
+    "asset": "assets/character_banners/genshin_kaeya.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "94": {
+    "asset": "assets/character_banners/genshin_diluc.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "314": {
+    "asset": "assets/character_banners/genshin_diluc.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "95": {
+    "asset": "assets/character_banners/genshin_razor.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "343": {
+    "asset": "assets/character_banners/genshin_razor.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "96": {
+    "asset": "assets/character_banners/genshin_amber.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "302": {
+    "asset": "assets/character_banners/genshin_amber.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "97": {
+    "asset": "assets/character_banners/genshin_venti.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "354": {
+    "asset": "assets/character_banners/genshin_venti.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "98": {
+    "asset": "assets/character_banners/genshin_xiangling.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "355": {
+    "asset": "assets/character_banners/genshin_xiangling.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "99": {
+    "asset": "assets/character_banners/genshin_beidou.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "307": {
+    "asset": "assets/character_banners/genshin_beidou.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "100": {
+    "asset": "assets/character_banners/genshin_xingqiu.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "357": {
+    "asset": "assets/character_banners/genshin_xingqiu.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "101": {
+    "asset": "assets/character_banners/genshin_xiao.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "356": {
+    "asset": "assets/character_banners/genshin_xiao.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "102": {
+    "asset": "assets/character_banners/genshin_ningguang.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "336": {
+    "asset": "assets/character_banners/genshin_ningguang.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "103": {
+    "asset": "assets/character_banners/genshin_klee.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "329": {
+    "asset": "assets/character_banners/genshin_klee.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "104": {
+    "asset": "assets/character_banners/genshin_zhongli.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "364": {
+    "asset": "assets/character_banners/genshin_zhongli.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "105": {
+    "asset": "assets/character_banners/genshin_fischl.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "318": {
+    "asset": "assets/character_banners/genshin_fischl.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "106": {
+    "asset": "assets/character_banners/genshin_bennett.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "308": {
+    "asset": "assets/character_banners/genshin_bennett.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "107": {
+    "asset": "assets/character_banners/genshin_tartaglia.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "351": {
+    "asset": "assets/character_banners/genshin_tartaglia.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "108": {
+    "asset": "assets/character_banners/genshin_noelle.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "337": {
+    "asset": "assets/character_banners/genshin_noelle.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "109": {
+    "asset": "assets/character_banners/genshin_qiqi.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "341": {
+    "asset": "assets/character_banners/genshin_qiqi.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "110": {
+    "asset": "assets/character_banners/genshin_chongyun.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "310": {
+    "asset": "assets/character_banners/genshin_chongyun.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "111": {
+    "asset": "assets/character_banners/genshin_ganyu.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "319": {
+    "asset": "assets/character_banners/genshin_ganyu.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "112": {
+    "asset": "assets/character_banners/genshin_albedo.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "300": {
+    "asset": "assets/character_banners/genshin_albedo.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "113": {
+    "asset": "assets/character_banners/genshin_diona.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "315": {
+    "asset": "assets/character_banners/genshin_diona.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "114": {
+    "asset": "assets/character_banners/genshin_mona.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "333": {
+    "asset": "assets/character_banners/genshin_mona.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "115": {
+    "asset": "assets/character_banners/genshin_keqing.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "328": {
+    "asset": "assets/character_banners/genshin_keqing.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "116": {
+    "asset": "assets/character_banners/genshin_sucrose.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "350": {
+    "asset": "assets/character_banners/genshin_sucrose.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "117": {
+    "asset": "assets/character_banners/genshin_xinyan.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "358": {
+    "asset": "assets/character_banners/genshin_xinyan.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "118": {
+    "asset": "assets/character_banners/genshin_rosaria.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "344": {
+    "asset": "assets/character_banners/genshin_rosaria.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "119": {
+    "asset": "assets/character_banners/genshin_hutao.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "324": {
+    "asset": "assets/character_banners/genshin_hutao.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "120": {
+    "asset": "assets/character_banners/genshin_kaedeharakazuha.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "327": {
+    "asset": "assets/character_banners/genshin_kaedeharakazuha.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "121": {
+    "asset": "assets/character_banners/genshin_yanfei.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "360": {
+    "asset": "assets/character_banners/genshin_yanfei.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "122": {
+    "asset": "assets/character_banners/genshin_yoimiya.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "362": {
+    "asset": "assets/character_banners/genshin_yoimiya.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "123": {
+    "asset": "assets/character_banners/genshin_thoma.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "352": {
+    "asset": "assets/character_banners/genshin_thoma.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "124": {
+    "asset": "assets/character_banners/genshin_eula.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "317": {
+    "asset": "assets/character_banners/genshin_eula.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "125": {
+    "asset": "assets/character_banners/genshin_raidenshogun.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "342": {
+    "asset": "assets/character_banners/genshin_raidenshogun.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "126": {
+    "asset": "assets/character_banners/genshin_sayu.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "345": {
+    "asset": "assets/character_banners/genshin_sayu.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "127": {
+    "asset": "assets/character_banners/genshin_sangonomiyakokomi.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "330": {
+    "asset": "assets/character_banners/genshin_sangonomiyakokomi.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "128": {
+    "asset": "assets/character_banners/genshin_gorou.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "129": {
+    "asset": "assets/character_banners/genshin_kujousara.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "331": {
+    "asset": "assets/character_banners/genshin_kujousara.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "130": {
+    "asset": "assets/character_banners/genshin_aratakiitto.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "325": {
+    "asset": "assets/character_banners/genshin_aratakiitto.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "132": {
+    "asset": "assets/character_banners/genshin_shenhe.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "347": {
+    "asset": "assets/character_banners/genshin_shenhe.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "133": {
+    "asset": "assets/character_banners/genshin_yaemiko.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "359": {
+    "asset": "assets/character_banners/genshin_yaemiko.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "134": {
+    "asset": "assets/character_banners/genshin_kamisatoayato.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "304": {
+    "asset": "assets/character_banners/genshin_kamisatoayato.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "135": {
+    "asset": "assets/character_banners/genshin_yelan.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "361": {
+    "asset": "assets/character_banners/genshin_yelan.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "136": {
+    "asset": "assets/character_banners/genshin_kukishinobu.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "348": {
+    "asset": "assets/character_banners/genshin_kukishinobu.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "138": {
+    "asset": "assets/character_banners/genshin_tighnari.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "353": {
+    "asset": "assets/character_banners/genshin_tighnari.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "139": {
+    "asset": "assets/character_banners/genshin_collei.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "311": {
+    "asset": "assets/character_banners/genshin_collei.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "140": {
+    "asset": "assets/character_banners/genshin_dori.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "316": {
+    "asset": "assets/character_banners/genshin_dori.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "141": {
+    "asset": "assets/character_banners/genshin_yunjin.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "363": {
+    "asset": "assets/character_banners/genshin_yunjin.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "142": {
+    "asset": "assets/character_banners/genshin_nahida.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "334": {
+    "asset": "assets/character_banners/genshin_nahida.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "144": {
+    "asset": "assets/character_banners/genshin_nilou.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "335": {
+    "asset": "assets/character_banners/genshin_nilou.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "145": {
+    "asset": "assets/character_banners/genshin_cyno.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "312": {
+    "asset": "assets/character_banners/genshin_cyno.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "147": {
+    "asset": "assets/character_banners/genshin_candace.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "309": {
+    "asset": "assets/character_banners/genshin_candace.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "173": {
+    "asset": "assets/character_banners/genshin_baizhu.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "305": {
+    "asset": "assets/character_banners/genshin_baizhu.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "225": {
+    "asset": "assets/character_banners/honkai_human-ego.webp",
+    "layout": "banner",
+    "width": 640,
+    "height": 320
+  },
+  "175": {
+    "asset": "assets/character_portraits/honkai_suit-129886.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 679
+  },
+  "176": {
+    "asset": "assets/character_portraits/honkai_suit-129940.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 679
+  },
+  "177": {
+    "asset": "assets/character_portraits/honkai_suit-129956.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 680
+  },
+  "178": {
+    "asset": "assets/character_portraits/honkai_suit-129959.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 622
+  },
+  "180": {
+    "asset": "assets/character_portraits/honkai_suit-129942.webp",
+    "layout": "portrait_contain",
+    "width": 364,
+    "height": 668
+  },
+  "181": {
+    "asset": "assets/character_portraits/honkai_suit-129927.webp",
+    "layout": "portrait_contain",
+    "width": 363,
+    "height": 675
+  },
+  "182": {
+    "asset": "assets/character_portraits/honkai_suit-129926.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 676
+  },
+  "183": {
+    "asset": "assets/character_portraits/honkai_suit-129921.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 678
+  },
+  "184": {
+    "asset": "assets/character_portraits/honkai_suit-129934.webp",
+    "layout": "portrait_contain",
+    "width": 368,
+    "height": 679
+  },
+  "185": {
+    "asset": "assets/character_portraits/honkai_suit-129889.webp",
+    "layout": "portrait_contain",
+    "width": 361,
+    "height": 629
+  },
+  "186": {
+    "asset": "assets/character_portraits/honkai_suit-129888.webp",
+    "layout": "portrait_contain",
+    "width": 368,
+    "height": 674
+  },
+  "187": {
+    "asset": "assets/character_portraits/honkai_suit-129953.webp",
+    "layout": "portrait_contain",
+    "width": 352,
+    "height": 632
+  },
+  "188": {
+    "asset": "assets/character_portraits/honkai_suit-129901.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 649
+  },
+  "189": {
+    "asset": "assets/character_portraits/honkai_suit-129903.webp",
+    "layout": "portrait_contain",
+    "width": 368,
+    "height": 622
+  },
+  "190": {
+    "asset": "assets/character_portraits/honkai_suit-129906.webp",
+    "layout": "portrait_contain",
+    "width": 361,
+    "height": 659
+  },
+  "191": {
+    "asset": "assets/character_portraits/honkai_suit-129954.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 643
+  },
+  "193": {
+    "asset": "assets/character_portraits/honkai_suit-129929.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 646
+  },
+  "194": {
+    "asset": "assets/character_portraits/honkai_suit-129946.webp",
+    "layout": "portrait_contain",
+    "width": 367,
+    "height": 750
+  },
+  "195": {
+    "asset": "assets/character_portraits/honkai_suit-129928.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 674
+  },
+  "196": {
+    "asset": "assets/character_portraits/honkai_suit-129947.webp",
+    "layout": "portrait_contain",
+    "width": 367,
+    "height": 671
+  },
+  "198": {
+    "asset": "assets/character_portraits/honkai_suit-129957.webp",
+    "layout": "portrait_contain",
+    "width": 364,
+    "height": 638
+  },
+  "199": {
+    "asset": "assets/character_portraits/honkai_suit-129943.webp",
+    "layout": "portrait_contain",
+    "width": 365,
+    "height": 657
+  },
+  "200": {
+    "asset": "assets/character_portraits/honkai_suit-129955.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 672
+  },
+  "201": {
+    "asset": "assets/character_portraits/honkai_suit-129936.webp",
+    "layout": "portrait_contain",
+    "width": 363,
+    "height": 679
+  },
+  "205": {
+    "asset": "assets/character_portraits/honkai_suit-129894.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 680
+  },
+  "206": {
+    "asset": "assets/character_portraits/honkai_suit-129898.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 680
+  },
+  "207": {
+    "asset": "assets/character_portraits/honkai_suit-129938.webp",
+    "layout": "portrait_contain",
+    "width": 367,
+    "height": 579
+  },
+  "208": {
+    "asset": "assets/character_portraits/honkai_suit-129931.webp",
+    "layout": "portrait_contain",
+    "width": 366,
+    "height": 680
+  },
+  "209": {
+    "asset": "assets/character_portraits/honkai_suit-129960.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 668
+  },
+  "211": {
+    "asset": "assets/character_portraits/honkai_suit-129952.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 680
+  },
+  "224": {
+    "asset": "assets/character_portraits/honkai_suit-129951.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 669
+  },
+  "226": {
+    "asset": "assets/character_portraits/honkai_suit-129950.webp",
+    "layout": "portrait_contain",
+    "width": 364,
+    "height": 657
+  },
+  "227": {
+    "asset": "assets/character_portraits/honkai_suit-129930.webp",
+    "layout": "portrait_contain",
+    "width": 359,
+    "height": 658
+  },
+  "228": {
+    "asset": "assets/character_portraits/honkai_suit-129915.webp",
+    "layout": "portrait_contain",
+    "width": 368,
+    "height": 652
+  },
+  "229": {
+    "asset": "assets/character_portraits/honkai_suit-129919.webp",
+    "layout": "portrait_contain",
+    "width": 369,
+    "height": 680
+  },
+  "230": {
+    "asset": "assets/character_portraits/honkai_suit-129949.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 679
+  },
+  "231": {
+    "asset": "assets/character_portraits/honkai_suit-129935.webp",
+    "layout": "portrait_contain",
+    "width": 365,
+    "height": 655
+  },
+  "232": {
+    "asset": "assets/character_portraits/honkai_suit-129890.webp",
+    "layout": "portrait_contain",
+    "width": 368,
+    "height": 630
+  },
+  "233": {
+    "asset": "assets/character_portraits/honkai_suit-129945.webp",
+    "layout": "portrait_contain",
+    "width": 367,
+    "height": 678
+  },
+  "235": {
+    "asset": "assets/character_portraits/honkai_suit-129961.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 679
+  },
+  "236": {
+    "asset": "assets/character_portraits/honkai_suit-129913.webp",
+    "layout": "portrait_contain",
+    "width": 368,
+    "height": 652
+  },
+  "237": {
+    "asset": "assets/character_portraits/honkai_suit-129939.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 673
+  },
+  "238": {
+    "asset": "assets/character_portraits/honkai_suit-129941.webp",
+    "layout": "portrait_contain",
+    "width": 370,
+    "height": 667
+  },
+  "239": {
+    "asset": "assets/character_portraits/honkai_suit-129958.webp",
+    "layout": "portrait_contain",
+    "width": 368,
+    "height": 644
+  },
+  "89": {
+    "asset": "assets/character_portraits/genshin_aether.webp",
+    "layout": "portrait_contain",
+    "width": 384,
+    "height": 496
+  },
+  "91": {
+    "asset": "assets/character_portraits/genshin_lumine.webp",
+    "layout": "portrait_contain",
+    "width": 384,
+    "height": 418
+  },
+  "131": {
+    "asset": "assets/character_portraits/genshin_aloy.webp",
+    "layout": "wide_contain",
+    "width": 609,
+    "height": 432
+  }
+}

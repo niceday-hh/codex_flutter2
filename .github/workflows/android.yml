@@ -17,6 +17,7 @@ env:
   CI_ASSET_TAG: ci-${{ github.run_id }}
 jobs:
   checks:
+    needs: [prepare]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -40,6 +41,18 @@ jobs:
         env:
           LD_LIBRARY_PATH: ${{ env.SHERPA_TEST_LIB }}
         run: flutter test --timeout=45s --fail-fast
+      - name: Render character detail themes
+        env:
+          MEMO_CHARACTER_PREVIEWS: '1'
+        run: flutter test test/character_art_test.dart --timeout=45s --fail-fast
+      - name: Preserve character UI previews
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          zip -qr character-ui-previews.zip character-ui-previews
+          gh release upload "$CI_ASSET_TAG" character-ui-previews.zip --clobber
       - name: Native schedule checks
         run: |
           mkdir -p tool/out

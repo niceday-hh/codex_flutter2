@@ -9,6 +9,8 @@ import 'reminder_search.dart';
 import 'voice_parser.dart';
 import 'speech.dart';
 import 'reminder_audio.dart';
+import 'character_art.dart';
+import 'speech_voices.dart';
 import 'speech_options.dart';
 import 'task_library.dart';
 import 'voice_flow.dart';
@@ -530,7 +532,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
         barrierColor: Colors.black.withValues(
           alpha: Theme.of(context).brightness == Brightness.dark ? .62 : .32),
         builder: (sheetContext) => ValueListenableBuilder<Reminder>(valueListenable: selection,
-          builder: (_, current, _) => ReminderDetail(key: ValueKey(current.id), reminder: current, onAck: () async {
+          builder: (_, current, _) => ReminderDetail(key: ValueKey(current.id), reminder: current, defaults: store.defaults, onAck: () async {
           HapticFeedback.lightImpact();
           await store.ack(current);
           if (sheetContext.mounted) Navigator.pop(sheetContext);
@@ -1588,6 +1590,7 @@ Future<int?> numberDialog(BuildContext context, String title, int current, int m
 
 class ReminderDetail extends StatefulWidget {
   final Reminder reminder;
+  final Map<String, dynamic> defaults;
   final Future<void> Function() onAck;
 
   /// "完成本次" for a task that has not rung yet: skip a repeat's next
@@ -1599,7 +1602,7 @@ class ReminderDetail extends StatefulWidget {
   final Future<DateTime?> Function(DateTime at) onPostpone;
   final VoidCallback onEdit;
   const ReminderDetail({super.key, required this.reminder, required this.onAck,
-    required this.onSkip, required this.onPostpone, required this.onEdit});
+    required this.onSkip, required this.onPostpone, required this.onEdit, this.defaults = const {}});
   @override State<ReminderDetail> createState() => _ReminderDetailState();
 }
 class _ReminderDetailState extends State<ReminderDetail> {
@@ -1652,87 +1655,74 @@ class _ReminderDetailState extends State<ReminderDetail> {
     // already exist on the notification.
     final canPostpone = !r.unread && !r.archived && !r.completed && r.enabled
         && r.displayDate.isAfter(DateTime.now());
-    return SafeArea(child: SingleChildScrollView(padding: EdgeInsets.fromLTRB(24, 0, 24, 28 + MediaQuery.of(context).viewInsets.bottom),
-      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const SizedBox(height: MemoSpace.sm),
-        // The clock is the attribute; the sentence is the thing. It used to be
-        // inverted — a 34px brand-coloured "03:51" over a 21px grey title — so
-        // every sheet opened on a number instead of on what it says.
-        Text(r.displayTime, style: context.text.detailTime),
-        const SizedBox(height: 6),
-        Text('${dateLabel(r.displayDate)} · ${r.repeatLabel}', style: context.text.body.copyWith(color: context.colors.muted)),
-        const SizedBox(height: MemoSpace.lg),
-        ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.35),
-          child: SingleChildScrollView(child: Text(r.text, style: context.text.detailTitle))),
-        const SizedBox(height: MemoSpace.xl),
-        if (r.unread) ...[
-          Text('已提醒 ${r.attempts}/${r.totalCount} 次', style: context.text.caption),
-          const SizedBox(height: MemoSpace.sm),
-          MemoSlideToConfirm(
-            label: '向右滑动，确认已读',
-            icon: Icons.done_all_rounded,
-            enabled: !busy,
-            onConfirm: _ack,
-          ),
-        ] else
-          Container(
-            padding: const EdgeInsets.fromLTRB(14, 4, 4, 4),
-            decoration: BoxDecoration(color: context.colors.brand50, borderRadius: BorderRadius.circular(MemoRadius.md)),
-            child: Row(children: [
-               Icon(Icons.notifications_none_rounded, size: 18, color: context.colors.brand700),
-              const SizedBox(width: MemoSpace.sm),
-              Expanded(child: Text(
-                r.archived || r.completed ? '已结束 · 可编辑后重新开启'
-                  : !r.enabled ? '已暂停 · 可编辑后重新启用'
-                  : '到时会通过系统通知提醒你',
-                style: context.text.label)),
-              // A future task has a "this one, not the next" exit too. It used
-              // to exist only for the occurrence already ringing, which meant
-              // the one action a repeating task needs most — skip today —
-              // showed up as a toast saying there was nothing to do.
-              if (!r.archived && !r.completed && r.enabled) TextButton(
-                onPressed: busy ? null : _skip,
-                style: TextButton.styleFrom(
-                  minimumSize: const Size(0, 36),
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  foregroundColor: context.colors.brand700),
-                child: const Text('完成本次')),
-            ]),
-          ),
-        if (canPostpone) ...[
-          const SizedBox(height: MemoSpace.lg),
-          Row(children: [
-            Expanded(child: Text('延后提醒', style: context.text.overline)),
-            TextButton(
-              onPressed: busy ? null : _changeTime,
-              style: TextButton.styleFrom(
-                minimumSize: const Size(0, 36),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                foregroundColor: context.colors.brand700),
-              child: const Text('改到指定时间')),
-          ]),
-          MemoQuickTimeChips(base: r.displayDate, enabled: !busy, onPicked: _postpone),
-        ],
-        const SizedBox(height: MemoSpace.xl),
-        ReminderAudioPanel(key: ValueKey('audio-${r.id}'), reminder: r),
-        const SizedBox(height: MemoSpace.lg),
-        // A tinted fill, not an outline. This is the sheet's only exit, and
-        // `OutlinedButton` is the vocabulary for a *secondary* action — which
-        // left the page with nothing to close on. Tinted rather than solid so
-        // it does not compete with the audition button inside the panel above.
-        FilledButton(onPressed: busy ? null : widget.onEdit,
-          style: FilledButton.styleFrom(
-            // brand200, not brand100: the sheet is tinted with the accent, so a
-            // brand100 fill sat within 1% of its own background and the button
-            // read as bare text with a hairline around it.
-            backgroundColor: context.colors.brand200,
-            foregroundColor: context.colors.brand800,
-            minimumSize: const Size.fromHeight(48),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MemoRadius.md))),
-          child: const Text('编辑提醒')),
-      ])));
+    final speaker = reminderArtSpeaker(r, widget.defaults);
+    final speakerIndex = int.tryParse(speaker ?? '');
+    final voiceName = speakerIndex == null ? null : speechVoiceNames[speakerIndex];
+    return FractionallySizedBox(heightFactor: .94, child: SafeArea(top: false,
+      child: CharacterDetailBackdrop(speaker: speaker, builder: (context, art) => Column(children: [
+        Expanded(child: SingleChildScrollView(
+          key: const ValueKey('reminder-detail-scroll'),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            ConstrainedBox(constraints: BoxConstraints(minHeight: speaker == null ? 0 : 214),
+              child: Align(alignment: Alignment.topLeft, child: FractionallySizedBox(
+                widthFactor: art == null ? 1 : .60,
+                child: Padding(padding: const EdgeInsets.fromLTRB(4, 8, 0, 20),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(r.displayTime, style: context.text.detailTime),
+                    const SizedBox(height: 6),
+                    Text('${dateLabel(r.displayDate)} · ${r.repeatLabel}',
+                      style: context.text.body.copyWith(color: context.colors.muted)),
+                    const SizedBox(height: MemoSpace.lg),
+                    ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .28),
+                      child: SingleChildScrollView(child: Text(r.text, style: context.text.detailTitle))),
+                    if (voiceName != null) ...[
+                      const SizedBox(height: 12),
+                      Row(children: [Icon(Icons.graphic_eq_rounded, size: 16, color: context.colors.brand700),
+                        const SizedBox(width: 6), Expanded(child: Text('播报音色 · $voiceName',
+                          maxLines: 2, overflow: TextOverflow.ellipsis,
+                          style: context.text.caption.copyWith(color: context.colors.brand700)))]),
+                    ],
+                  ])),
+              ))),
+            MemoCard(shadow: false, padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+              child: r.unread ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('已提醒 ${r.attempts}/${r.totalCount} 次', style: context.text.caption),
+                const SizedBox(height: MemoSpace.sm),
+                MemoSlideToConfirm(label: '向右滑动，确认已读', icon: Icons.done_all_rounded,
+                  enabled: !busy, onConfirm: _ack),
+              ]) : Row(children: [
+                Icon(Icons.notifications_none_rounded, size: 18, color: context.colors.brand700),
+                const SizedBox(width: 8),
+                Expanded(child: Text(r.archived || r.completed ? '已结束 · 可编辑后重新开启'
+                  : !r.enabled ? '已暂停 · 可编辑后重新启用' : '到时会通过系统通知提醒你',
+                  style: context.text.label)),
+                if (!r.archived && !r.completed && r.enabled) TextButton(
+                  onPressed: busy ? null : _skip, child: const Text('完成本次')),
+              ])),
+            if (canPostpone) ...[
+              const SizedBox(height: 12),
+              MemoCard(shadow: false, padding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
+                child: Column(children: [
+                  Row(children: [Icon(Icons.schedule_rounded, size: 18, color: context.colors.brand700),
+                    const SizedBox(width: 8), Expanded(child: Text('延后提醒', style: context.text.label)),
+                    TextButton(onPressed: busy ? null : _changeTime,
+                      child: const Text('改到指定时间'))]),
+                  MemoQuickTimeChips(base: r.displayDate, compact: true, enabled: !busy, onPicked: _postpone),
+                ])),
+            ],
+            const SizedBox(height: 12),
+            ReminderAudioPanel(key: ValueKey('audio-${r.id}'), reminder: r),
+          ]))),
+        // This stays outside the scroller: artwork and a long reminder cannot
+        // push the exit below the screen or intercept its hit target.
+        Padding(padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+          child: FilledButton.icon(onPressed: busy ? null : widget.onEdit,
+            style: FilledButton.styleFrom(backgroundColor: context.colors.brand200,
+              foregroundColor: context.colors.brand800, minimumSize: const Size.fromHeight(52),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MemoRadius.lg))),
+            icon: const Icon(Icons.edit_outlined, size: 20), label: const Text('编辑提醒'))),
+      ]))));
   }
 }
 

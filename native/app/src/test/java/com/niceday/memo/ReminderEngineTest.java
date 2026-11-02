@@ -48,6 +48,19 @@ public class ReminderEngineTest {
     Intent intent(String action, long occurrence) {
         return new Intent(action).putExtra("id", 1).putExtra("token", occurrence).putExtra("version", 1L);
     }
+    @Test public void detailArtUsesTheSameResolvedVoiceAsSpeechWithoutPersistingUiFields() throws Exception {
+        android.content.SharedPreferences prefs = context.getSharedPreferences("memo", Context.MODE_PRIVATE);
+        JSONObject r = new JSONArray(prefs.getString("reminders", "[]")).getJSONObject(0);
+        r.put("speechMode", "inherit").put("speechVoice", ""); persist(r);
+        prefs.edit().putString("defaults", new JSONObject().put("speechMode", "on").put("speechVoice", "115").toString()).commit();
+        assertTrue(row().getBoolean("resolvedSpeechEnabled"));
+        assertEquals("115", row().getString("resolvedSpeechVoice"));
+        assertFalse(prefs.getString("reminders", "").contains("resolvedSpeechVoice"));
+        r.put("speechRandom", true).put("speechVoice", "228"); persist(r);
+        assertEquals("228", row().getString("resolvedSpeechVoice"));
+        r.put("speechMode", "off"); persist(r);
+        assertFalse(row().getBoolean("resolvedSpeechEnabled"));
+    }
     @Test public void notificationOffersDoneSnoozeAndMute() throws Exception {
         engine.fire(intent(ReminderEngine.BASE, token));
         Notification posted = Shadows.shadowOf(context.getSystemService(NotificationManager.class)).getNotification(1);

@@ -51,15 +51,15 @@ class MemoQuickTimeChips extends StatelessWidget {
   final ValueChanged<DateTime> onPicked;
   final DateTime Function()? now;
   final List<MemoTimeShift> shifts;
-  final bool enabled;
+  final bool enabled, compact;
 
   const MemoQuickTimeChips({super.key, required this.base, required this.onPicked,
-    this.now, this.shifts = memoTimeShifts, this.enabled = true});
+    this.now, this.shifts = memoTimeShifts, this.enabled = true, this.compact = false});
 
   @override Widget build(BuildContext context) {
     final current = (now ?? DateTime.now)();
     final from = base.isAfter(current) ? base : current;
-    return Wrap(spacing: 8, runSpacing: 8, children: [
+    return Wrap(spacing: compact ? 6 : 8, runSpacing: 8, children: [
       for (final shift in shifts) TextButton(
         onPressed: enabled ? () {
           HapticFeedback.selectionClick();
@@ -74,7 +74,8 @@ class MemoQuickTimeChips extends StatelessWidget {
           foregroundColor: context.colors.brand800,
           disabledBackgroundColor: context.colors.surfaceAlt,
           minimumSize: const Size(0, 44),
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 14),
+          textStyle: compact ? context.text.caption.copyWith(fontWeight: FontWeight.w600) : null,
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           shape: const StadiumBorder(),
         ),

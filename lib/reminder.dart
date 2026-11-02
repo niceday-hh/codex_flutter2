@@ -17,6 +17,9 @@ class Reminder {
   bool enabled, sound, wakeScreen;
   String vibration, ringtone, presentation, lockscreen;
   String speechMode, speechVoice, speechState;
+  // Channel-only presentation metadata; never saved or exported.
+  String? resolvedSpeechVoice;
+  bool? resolvedSpeechEnabled;
   double speechRate, speechNoiseScale, speechNoiseScaleW;
   int speechSeed;
   bool speechHideLocked, speechRepeat, speechRandom;
@@ -35,7 +38,7 @@ class Reminder {
     this.presentation = 'banner', this.lockscreen = 'private',
     this.speechMode = 'off', this.speechVoice = '', this.speechRate = 0,
     this.speechNoiseScale = 0, this.speechNoiseScaleW = 0, this.speechSeed = 0,
-    this.speechHideLocked = true, this.speechRepeat = true, this.speechState = 'off',
+    this.speechHideLocked = true, this.speechRepeat = true, this.speechState = 'off', this.resolvedSpeechVoice, this.resolvedSpeechEnabled,
     this.speechRandom = false, this.speechRandomLanguage = 'all', this.speechRandomGender = 'all', this.speechRandomGroup = '',
     this.attempts = 0, this.activeOccurrence = 0, this.nextTrigger = 0,
     this.acknowledged = false, this.completed = false, this.archived = false,
@@ -65,6 +68,8 @@ class Reminder {
     speechHideLocked: j['speechHideLocked'] as bool? ?? true,
     speechRepeat: j['speechRepeat'] as bool? ?? true,
     speechState: j['speechState'] as String? ?? 'off',
+    resolvedSpeechVoice: j['resolvedSpeechVoice'] as String?,
+    resolvedSpeechEnabled: j['resolvedSpeechEnabled'] as bool?,
     speechRandom: j['speechRandom'] as bool? ?? false,
     speechRandomLanguage: j['speechRandomLanguage'] as String? ?? 'all',
     speechRandomGender: j['speechRandomGender'] as String? ?? 'all',

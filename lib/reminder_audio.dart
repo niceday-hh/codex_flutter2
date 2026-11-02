@@ -105,11 +105,12 @@ class _ReminderAudioPanelState extends State<ReminderAudioPanel> {
       return Container(width: double.infinity, padding: const EdgeInsets.all(16),
         // A hairline, because the sheet behind it is now tinted with the same
         // brand hue: brand100 on surfaceAlt was two near-identical greens.
-        decoration: BoxDecoration(color: context.colors.brand100,
+        decoration: BoxDecoration(color: context.colors.surface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: context.colors.brand200, width: 1)),
+          border: Border.all(color: context.colors.line, width: 1)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('提醒音频', style: context.text.subtitle),
+          Row(children: [Icon(Icons.graphic_eq_rounded, size: 20, color: context.colors.brand700),
+            const SizedBox(width: 8), Text('提醒音频', style: context.text.subtitle)]),
           const SizedBox(height: 8),
           Semantics(liveRegion: true, child: Text(message, key: const ValueKey('reminder-audio-feedback'),
             style: TextStyle(color: _failed || failure ? context.colors.danger : context.colors.muted, fontSize: 13, height: 1.5))),

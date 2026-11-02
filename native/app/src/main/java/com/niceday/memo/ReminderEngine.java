@@ -176,6 +176,8 @@ public final class ReminderEngine {
         JSONObject speechDefaults = SpeechSettings.defaults(context);
         for (int i = 0; i < rows.length(); i++) {
             JSONObject row = rows.getJSONObject(i);
+            row.put("resolvedSpeechEnabled", SpeechSettings.enabled(row, speechDefaults));
+            row.put("resolvedSpeechVoice", SpeechSettings.voice(row, speechDefaults));
             row.put("speechState", row.optBoolean("archived") || row.optBoolean("completed") ? "off" : SpeechCache.state(context, row, speechDefaults));
         }
         result.put("reminders", rows);
