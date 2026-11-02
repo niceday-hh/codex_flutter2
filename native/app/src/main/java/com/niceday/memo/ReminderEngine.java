@@ -372,6 +372,57 @@ public final class ReminderEngine {
         SpeechPlaybackService.cancel(id); SpeechCache.prune(context); syncGuardian();
         trace("completed_early", id, now, "提前完成");
     }
+    /**
+     * "延后到" for a task that has not rung yet.
+     *
+     * Only the next trigger moves; date and repeat are untouched, so a 9:00
+     * daily reminder postponed to 9:15 fires at 9:15 today and 9:00 tomorrow.
+     * A one-shot has no rule to preserve, so its date moves with it — otherwise
+     * its history row would keep claiming the old time.
+     *
+     * Returns the instant actually armed, or 0 when the task is not a candidate
+     * (already ringing, paused, or retired). Already-ringing occurrences have
+     * their own exit — snooze — and deliberately do not come through here.
+     */
+    public long postpone(int id, long at) throws JSONException {
+        JSONArray rows = read();
+        JSONObject r = find(rows, id);
+        if (r == null || r.optBoolean("archived") || r.optBoolean("completed")) return 0;
+        long ringing = r.optLong("activeOccurrence");
+        if (ringing > 0 && !r.optBoolean("acknowledged")) return 0;
+        if (!r.optBoolean("enabled", true)) return 0;
+        long now = System.currentTimeMillis();
+        long target = Math.max(at, now + 60000L);
+        // Round up to the minute: the sheet promises HH:mm, and an alarm at
+        // 21:40:37 reads as a bug when the UI said 21:40.
+        target = ((target + 59999) / 60000) * 60000;
+        r.put("nextTrigger", target)
+            .put("activeOccurrence", 0).put("attempts", 0).put("retryAt", 0)
+            .put("acknowledged", false).put("muted", false);
+        if ("none".equals(r.optString("repeat", "none"))) {
+            Calendar c = Calendar.getInstance();
+            c.setTimeInMillis(target);
+            r.put("year", c.get(Calendar.YEAR))
+                .put("month", c.get(Calendar.MONTH) + 1)
+                .put("day", c.get(Calendar.DAY_OF_MONTH))
+                .put("hour", c.get(Calendar.HOUR_OF_DAY))
+                .put("minute", c.get(Calendar.MINUTE))
+                .put("second", 0).put("millisecond", 0);
+        }
+        // A stale BASE broadcast may already be in flight; the version bump is
+        // what makes fire() reject it.
+        long version = Math.max(now, Math.max(r.optLong("version"), prefs.getLong("generation", 0)) + 1);
+        r.put("version", version);
+        prefs.edit().putLong("generation", version).commit();
+        write(rows);
+        cancel(id, BASE); cancel(id, RETRY);
+        notifications.cancel(id); notifications.cancel(-id);
+        SpeechPlaybackService.cancel(id);
+        scheduleBase(r);
+        trace("postponed", id, target, "延后到 " + target);
+        syncGuardian();
+        return target;
+    }
     public void acknowledge(int id, long token) throws JSONException {
         acknowledge(id, token, "应用内确认");
     }

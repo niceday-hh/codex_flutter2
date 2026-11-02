@@ -540,6 +540,14 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
           await store.skip(current);
           if (sheetContext.mounted) Navigator.pop(sheetContext);
           await reload();
+        }, onPostpone: (at) async {
+          final landed = await store.postpone(current, at);
+          // The sheet is bound to a snapshot; re-point it at the row the store
+          // just wrote, or the next tap would postpone from the old time.
+          for (final fresh in store.reminders) {
+            if (fresh.id == current.id) { selection.value = fresh; break; }
+          }
+          return landed;
         }, onEdit: () { Navigator.pop(sheetContext); edit(current); })));
     } finally { _detailOpen = false; _detailSelection = null; selection.dispose(); }
   }
@@ -1585,9 +1593,13 @@ class ReminderDetail extends StatefulWidget {
   /// "完成本次" for a task that has not rung yet: skip a repeat's next
   /// occurrence, or retire a one-shot early.
   final Future<void> Function() onSkip;
+
+  /// Move a not-yet-rung task later. Returns the instant the engine armed, so
+  /// the toast reports the engine's time rather than the button's arithmetic.
+  final Future<DateTime?> Function(DateTime at) onPostpone;
   final VoidCallback onEdit;
   const ReminderDetail({super.key, required this.reminder, required this.onAck,
-    required this.onSkip, required this.onEdit});
+    required this.onSkip, required this.onPostpone, required this.onEdit});
   @override State<ReminderDetail> createState() => _ReminderDetailState();
 }
 class _ReminderDetailState extends State<ReminderDetail> {
@@ -1612,8 +1624,34 @@ class _ReminderDetailState extends State<ReminderDetail> {
       }
     }
   }
+  Future<void> _postpone(DateTime at) async {
+    if (busy) return;
+    setState(() => busy = true);
+    try {
+      final landed = await widget.onPostpone(at);
+      if (!mounted) return;
+      setState(() => busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(memoSnackBar(landed == null
+        ? '这条提醒已经不需要延后'
+        : '已延后到 ${memoTimeLabel(landed)}'));
+    } catch (e) {
+      if (mounted) {
+        setState(() => busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(memoSnackBar(niceError(e), error: true));
+      }
+    }
+  }
+  Future<void> _changeTime() async {
+    final picked = await showMemoTimeSheet(context, initial: widget.reminder.displayDate);
+    if (picked != null) await _postpone(picked);
+  }
   @override Widget build(BuildContext context) {
     final r = widget.reminder;
+    // A task that has not rung yet can be pushed back without editing it. A
+    // ringing one cannot: its exit is acknowledge or snooze, both of which
+    // already exist on the notification.
+    final canPostpone = !r.unread && !r.archived && !r.completed && r.enabled
+        && r.displayDate.isAfter(DateTime.now());
     return SafeArea(child: SingleChildScrollView(padding: EdgeInsets.fromLTRB(24, 0, 24, 28 + MediaQuery.of(context).viewInsets.bottom),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         const SizedBox(height: MemoSpace.sm),
@@ -1662,6 +1700,21 @@ class _ReminderDetailState extends State<ReminderDetail> {
                 child: const Text('完成本次')),
             ]),
           ),
+        if (canPostpone) ...[
+          const SizedBox(height: MemoSpace.lg),
+          Row(children: [
+            Expanded(child: Text('延后提醒', style: context.text.overline)),
+            TextButton(
+              onPressed: busy ? null : _changeTime,
+              style: TextButton.styleFrom(
+                minimumSize: const Size(0, 36),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                foregroundColor: context.colors.brand700),
+              child: const Text('改到指定时间')),
+          ]),
+          MemoQuickTimeChips(base: r.displayDate, enabled: !busy, onPicked: _postpone),
+        ],
         const SizedBox(height: MemoSpace.xl),
         ReminderAudioPanel(key: ValueKey('audio-${r.id}'), reminder: r),
         const SizedBox(height: MemoSpace.lg),
@@ -1728,9 +1781,13 @@ class _ReminderEditorState extends State<ReminderEditor> {
     if (d != null && mounted) setState(() { r.date = DateTime(d.year, d.month, d.day, r.date.hour, r.date.minute, r.date.second, r.date.millisecond); r.dateConfirmed = true; manualTime = true; });
   }
   Future<void> pickTime() async {
-    final t = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(r.date),
-      builder: (c, child) => MediaQuery(data: MediaQuery.of(c).copyWith(alwaysUse24HourFormat: true), child: child!));
-    if (t != null && mounted) setState(() { r.date = DateTime(r.date.year, r.date.month, r.date.day, t.hour, t.minute); r.timeConfirmed = true; manualTime = true; });
+    final picked = await showMemoTimeSheet(context, initial: r.date);
+    if (picked != null && mounted) {
+      setState(() {
+        r.date = picked;
+        r.dateConfirmed = true; r.timeConfirmed = true; manualTime = true;
+      });
+    }
   }
   @override Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text(r.id == 0 ? '新建提醒' : '编辑提醒'), actions: [TextButton(onPressed: saving ? null : save, child: const Text('保存'))]),
@@ -1754,6 +1811,15 @@ class _ReminderEditorState extends State<ReminderEditor> {
         ListTile(leading:  Icon(Icons.calendar_today_outlined, color: context.colors.brand500), title: const Text('日期'),
           trailing: Text(r.dateConfirmed ? '${r.date.year}年${r.date.month}月${r.date.day}日' : '请选择有效日期'), onTap: pickDate),
         ListTile(leading:  Icon(Icons.schedule_rounded, color: context.colors.brand500), title: const Text('时间'), trailing: Text(r.timeConfirmed ? r.preciseTime : '请选择时间'), onTap: pickTime),
+        // The dial was the complaint: a needle to drag, five-minute jumps, and
+        // a gesture that kept losing to the sheet around it. These steps answer
+        // the common case (+15, +30, +1h, tomorrow) without opening anything.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: MemoQuickTimeChips(base: r.date, enabled: !saving, onPicked: (at) => setState(() {
+            r.date = at; r.dateConfirmed = true; r.timeConfirmed = true; manualTime = true;
+          })),
+        ),
       ])), const SizedBox(height: 14),
       MemoCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('重复', style: context.text.subtitle), const SizedBox(height: 14),

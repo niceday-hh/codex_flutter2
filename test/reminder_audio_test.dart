@@ -164,7 +164,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: MediaQuery(data: const MediaQueryData(size: Size(320, 568),
       textScaler: TextScaler.linear(1.6)), child: Scaffold(body: ReminderDetail(
         reminder: Reminder(id: 7, text: List.filled(20, '这是一条很长的提醒正文。').join()),
-        onAck: () async {}, onSkip: () async {}, onEdit: () {})))));
+        onAck: () async {}, onSkip: () async {}, onPostpone: (_) async => null, onEdit: () {})))));
     await tester.pump();
     await tester.ensureVisible(find.text('保存音频')); await tester.pumpAndSettle();
     expect(find.text('保存音频').hitTestable(), findsOneWidget); expect(tester.takeException(), isNull);

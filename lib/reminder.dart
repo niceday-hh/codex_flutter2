@@ -173,6 +173,18 @@ class MemoStore extends ChangeNotifier {
     await native.invokeMethod('skip', r.id);
     await load();
   }
+  /// Move only the next trigger — “延后 15 分钟” without rewriting the rule.
+  ///
+  /// Native returns the instant it actually armed (rounded to the minute), or
+  /// null when the task was no longer a candidate: already ringing, paused, or
+  /// retired. The caller shows that instant so the toast cannot claim a time
+  /// the engine did not use.
+  Future<DateTime?> postpone(Reminder r, DateTime at) async {
+    final landed = await native.invokeMethod<int>('postpone',
+      {'id': r.id, 'at': at.millisecondsSinceEpoch});
+    await load();
+    return landed == null || landed <= 0 ? null : DateTime.fromMillisecondsSinceEpoch(landed);
+  }
   Future<void> delete(int id) async {
     await native.invokeMethod('delete', id);
     await load();

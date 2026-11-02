@@ -72,6 +72,35 @@ public class ReminderEngineTest {
         assertTrue("snooze re-arms ten minutes out", next >= before + 9 * 60000 && next <= before + 11 * 60000);
         assertNull("the ringing notification is withdrawn", Shadows.shadowOf(context.getSystemService(NotificationManager.class)).getNotification(1));
     }
+    @Test public void postponeMovesOnlyTheNextTriggerOfARepeatingTask() throws Exception {
+        JSONObject r = row();
+        r.put("repeat", "daily").put("hour", 9).put("minute", 0).put("second", 0)
+            .put("nextTrigger", System.currentTimeMillis() + 3600000L);
+        persist(r);
+        long landed = engine.postpone(1, System.currentTimeMillis() + 15 * 60000L);
+        JSONObject after = row();
+        assertTrue(landed > 0);
+        assertEquals("the engine rounds to the minute", 0, landed % 60000);
+        assertEquals(landed, after.getLong("nextTrigger"));
+        assertEquals("daily template keeps its clock", 9, after.getInt("hour"));
+        assertEquals(0, after.getInt("minute"));
+        assertTrue("a stale broadcast must not win", after.getLong("version") > 1);
+    }
+    @Test public void postponeMovesTheDateOfAOneOffAndRefusesARingingOccurrence() throws Exception {
+        long landed = engine.postpone(1, System.currentTimeMillis() + 30 * 60000L);
+        JSONObject after = row();
+        Calendar at = Calendar.getInstance();
+        at.setTimeInMillis(landed);
+        assertEquals(at.get(Calendar.HOUR_OF_DAY), after.getInt("hour"));
+        assertEquals(at.get(Calendar.MINUTE), after.getInt("minute"));
+        assertEquals(0, after.getInt("second"));
+        // Mark it as ringing without waiting: fire() rejects a broadcast that
+        // arrives 30 minutes early, which is the guard working correctly.
+        after.put("activeOccurrence", landed).put("acknowledged", false);
+        persist(after);
+        assertEquals("a ringing task is not a postponement candidate", 0,
+            engine.postpone(1, landed + 60000L));
+    }
     @Test public void muteSilencesThisOccurrenceButLeavesItUnread() throws Exception {
         engine.fire(intent(ReminderEngine.BASE, token));
         engine.mute(1, token);
