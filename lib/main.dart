@@ -223,7 +223,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   @override void initState() {
     super.initState(); WidgetsBinding.instance.addObserver(this);
     _enter = AnimationController(vsync: this, duration: MemoMotion.enter)
-      ..addStatusListener((s) { if (s == AnimationStatus.completed && mounted) setState(() {}); });
+      ..addStatusListener((s) { if (s == AnimationStatus.completed && mounted) _refreshHome(); });
     _tabMove = AnimationController(vsync: this, duration: const Duration(milliseconds: 200), value: 1);
     asr.setForeground(true);
     voice.addListener(_voiceChanged);

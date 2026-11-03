@@ -24,7 +24,8 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(393, 852));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     addTearDown(() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, null));
-    await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
+    // Open while the home entrance is still running, not only after it settles.
+    await tester.pumpWidget(const MemoApp()); await tester.pump(const Duration(milliseconds: 300));
     final home = find.descendant(of: find.byType(MemoHome), matching: find.byType(Scaffold)).first;
     final before = tester.widget<Scaffold>(home);
     await tester.tap(find.text(body).first); await tester.pumpAndSettle();

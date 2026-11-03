@@ -10,7 +10,8 @@ The baseline is v0.9.21 (`6169648a01e27218f5abec541123282b1b79f163`).
   old entries. This budget describes tracked decoded pixels, not total app/GPU
   memory. Flutter may also evict entries under its normal cache policy.
 - Native task state continues loading while a detail is open. Voice, selection,
-  and task updates defer the covered home rebuild until dismissal; the modal's
+  task updates and home entrance completion defer the covered home rebuild until
+  dismissal; the modal's
   own acknowledgement, postpone and edit actions remain active. Repeated events
   coalesce into one home refresh. No microphone lifecycle changes are included.
 - The outer detail retains its original scroll view, column and paint structure.
@@ -117,3 +118,31 @@ flutter test integration_test/detail_performance_test.dart --profile -d DEVICE_I
 For the standalone emulator procedure, follow the workflow's plain-wrapper
 build, install and `tool/run_detail_benchmark.py` steps. The regular application
 build continues to use `tool/bootstrap.sh` and the production native wrapper.
+
+## Shipping-scope experiment
+
+[Run 41586064724](https://github.com/niceday-hh/codex_flutter2/actions/runs/41586064724)
+passed all 108 captures for baseline versus commit
+`359d428b8d9daa655f23f365a32b826ec35bd98c`, with original paint/layout and only
+decoded-image retention plus covered-home update coalescing. All original records
+are preserved in [final](performance/detail-sheet/final/).
+
+The results **do not establish a consistent latency or FPS improvement** on this
+software GPU. For example, repeated home/banner opening UI P90 was 8.79 ->
+11.33 ms and raster P90 262.76 -> 334.45 ms; repeated history/portrait opening UI
+P90 was 7.09 -> 5.19 ms and raster P90 194.04 -> 192.56 ms. The first optimized
+banner opening also contained a 730.68 ms UI P90 outlier. Those negative and
+mixed measurements are retained, not discarded. Cold process/font/GPU work,
+late timing batches and host scheduling limit action-level causal conclusions.
+
+Retaining the two shipping changes is justified by the directly checked removal
+of redundant work: decoded images survive sheet dismissal within bounded memory,
+and native/voice updates do not rebuild the covered home and its tabs. The
+shipping widget regression also opens at 300 ms while the entrance is active,
+covering its completion callback. This last callback guard is outside the profile
+harness's measured windows, which begin after startup has settled.
+
+Continuous-scroll jank and first-ever opening latency remain unresolved on a
+real phone. Further work should begin with a physical-device trace; do not infer
+that changing source resolution, more repaint boundaries, or a global renderer
+switch is a verified remedy from these emulator numbers.
