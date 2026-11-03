@@ -249,8 +249,6 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     initialize();
   }
   Future<void> initialize() async {
-    // Load metadata alongside native state, before the first normal detail visit.
-    unawaited(CharacterArtCatalog.load());
     try { await native.invokeMethod('restore'); } catch (_) {}
     await reload();
     int? id;
@@ -1678,8 +1676,6 @@ class _ReminderDetailState extends State<ReminderDetail> {
       child: CharacterDetailBackdrop(speaker: speaker, builder: (context, art) => Column(children: [
         SizedBox(height: 28, child: Center(child: Container(width: 36, height: 4,
           decoration: BoxDecoration(color: context.colors.lineStrong, borderRadius: BorderRadius.circular(MemoRadius.pill))))),
-        // There are only a few blocks. Keep their existing lifetime and scroll
-        // behavior, but isolate static cards from independently scrolling text.
         Expanded(child: SingleChildScrollView(
           key: const ValueKey('reminder-detail-scroll'),
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -1733,7 +1729,7 @@ class _ReminderDetailState extends State<ReminderDetail> {
             ],
             const SizedBox(height: 12),
             ReminderAudioPanel(key: ValueKey('audio-${r.id}'), reminder: r),
-          ].map((child) => RepaintBoundary(key: child.key, child: child)).toList()))),
+          ]))),
         // This stays outside the scroller: artwork and a long reminder cannot
         // push the exit below the screen or intercept its hit target.
         Padding(padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),

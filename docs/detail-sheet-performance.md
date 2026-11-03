@@ -9,15 +9,14 @@ The baseline is v0.9.21 (`6169648a01e27218f5abec541123282b1b79f163`).
   with a 6 MiB estimated RGBA budget. Trimming and memory-pressure events evict
   old entries. This budget describes tracked decoded pixels, not total app/GPU
   memory. Flutter may also evict entries under its normal cache policy.
-- Character metadata starts loading alongside application initialization.
 - Native task state continues loading while a detail is open. Voice, selection,
   and task updates defer the covered home rebuild until dismissal; the modal's
   own acknowledgement, postpone and edit actions remain active. Repeated events
   coalesce into one home refresh. No microphone lifecycle changes are included.
-- The outer detail retains its original scroll view and column, with separate
-  repaint boundaries around content blocks. The small number of blocks remain
-  mounted, preserving nested text offsets and audio ownership without a lazy
-  list or additional keep-alive state. The long-text viewport and pinned edit
+- The outer detail retains its original scroll view, column and paint structure.
+  The small number of blocks remain mounted, preserving nested text offsets and
+  audio ownership without a lazy list or additional keep-alive state.
+  The long-text viewport and pinned edit
   button remain. Original images, day/night palettes, gradients and framing are
   unchanged; no additional images or runtime blur are introduced.
 
@@ -49,10 +48,20 @@ results do not justify declaring every interaction faster. Software raster P90
 was hundreds of milliseconds even without source changes, so these values must
 not be interpreted as phone performance.
 
-The final implementation therefore keeps the original small column and scroll
-view, adding only per-block repaint boundaries. This also avoids lazy-list
-lifetime complexity. The final experiment runs optimized before baseline,
-reversing the previous order; it still uses identical fixtures and build modes.
+The second experiment kept the original column but added per-block repaint
+boundaries. [Run 41583849879](https://github.com/niceday-hh/codex_flutter2/actions/runs/41583849879)
+also passed 108 captures, with optimized commit
+`0615018d0f8aff8b2f6ad6c6a3e1281d88c6abb6` running before baseline. Its samples
+are in [iteration-2](performance/detail-sheet/iteration-2/). It did not demonstrate
+a consistent raster improvement either (for example, repeated home/banner raster
+P90 260.32 -> 281.61 ms). Initial UI outliers and order-dependent results prevent
+an unconditional performance claim.
+
+The shipping implementation therefore restores original painting and metadata
+loading too. Only bounded image retention and covered-home rebuild coalescing
+remain, supported directly by behavior tests. Continuous scrolling is not marked
+as solved. The final rendering experiment still runs optimized before baseline
+with identical fixtures; results cannot establish real-phone FPS.
 
 `.github/workflows/detail-performance.yml` builds the same profile test harness
 around baseline and current Flutter UI. A plain Android wrapper and mocked native
