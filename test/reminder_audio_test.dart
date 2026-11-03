@@ -171,6 +171,37 @@ void main() {
     expect(find.text('保存音频').hitTestable(), findsOneWidget); expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
+  testWidgets('scrolling audio out of view preserves the audition and panel state', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 480));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var stops = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+      if (call.method == 'reminderAudioJob') return jsonEncode({...job, 'ready': true});
+      if (call.method == 'reminderAudioReady' || call.method == 'playSpeechPreview') return true;
+      if (call.method == 'stopSpeechPreview') stops++;
+      return null;
+    });
+    await tester.pumpWidget(MaterialApp(home: MediaQuery(data: const MediaQueryData(size: Size(320, 480),
+      textScaler: TextScaler.linear(1.6)), child: Scaffold(body: ReminderDetail(
+        reminder: Reminder(id: 7, text: List.filled(20, '这是一条很长的提醒正文。').join()),
+        onAck: () async {}, onSkip: () async {}, onPostpone: (_) async => null, onEdit: () {})))));
+    await tester.pumpAndSettle();
+    await revealDetailAction(tester, find.text('试听提醒'));
+    await tester.tap(find.text('试听提醒')); await tester.pumpAndSettle();
+    expect(speech.previewState.value.playing, isTrue);
+    final panel = tester.state(find.byType(ReminderAudioPanel));
+    final before = stops;
+    final scroll = find.descendant(of: find.byKey(const ValueKey('reminder-detail-scroll')),
+      matching: find.byType(Scrollable)).first;
+    tester.state<ScrollableState>(scroll).position.jumpTo(0); await tester.pumpAndSettle();
+    expect(tester.state(find.byType(ReminderAudioPanel, skipOffstage: false)), same(panel));
+    expect(speech.previewState.value.playing, isTrue);
+    expect(stops, before, reason: 'scrolling must not dispose the audio owner');
+    await revealDetailAction(tester, find.text('停止试听'));
+    expect(tester.state(find.byType(ReminderAudioPanel)), same(panel));
+    await tester.pumpWidget(const SizedBox()); await tester.pumpAndSettle();
+    expect(stops, before + 1, reason: 'closing the detail must still stop its audition');
+  });
   test('an old completion or disposed owner cannot stop a newer preview', () async {
     final session = SpeechSession(); final a = Object(), b = Object(); final tokens = <int>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {

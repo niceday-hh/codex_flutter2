@@ -1621,6 +1621,17 @@ class ReminderDetail extends StatefulWidget {
     required this.onSkip, required this.onPostpone, required this.onEdit, this.defaults = const {}});
   @override State<ReminderDetail> createState() => _ReminderDetailState();
 }
+/// Preserve nested text offsets, audition ownership and candidate audio when a
+/// sliver moves out of view. Repaint isolation must not change their lifetime.
+class _DetailPersistentBlock extends StatefulWidget {
+  final Widget child;
+  const _DetailPersistentBlock({super.key, required this.child});
+  @override State<_DetailPersistentBlock> createState() => _DetailPersistentBlockState();
+}
+class _DetailPersistentBlockState extends State<_DetailPersistentBlock> with AutomaticKeepAliveClientMixin {
+  @override bool get wantKeepAlive => true;
+  @override Widget build(BuildContext context) { super.build(context); return widget.child; }
+}
 class _ReminderDetailState extends State<ReminderDetail> {
   bool busy = false;
   Future<void> _ack() async {
@@ -1733,7 +1744,7 @@ class _ReminderDetailState extends State<ReminderDetail> {
             ],
             const SizedBox(height: 12),
             ReminderAudioPanel(key: ValueKey('audio-${r.id}'), reminder: r),
-          ])),
+          ].map((child) => _DetailPersistentBlock(key: child.key, child: child)).toList())),
         // This stays outside the scroller: artwork and a long reminder cannot
         // push the exit below the screen or intercept its hit target.
         Padding(padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),

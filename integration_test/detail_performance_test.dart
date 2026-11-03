@@ -65,7 +65,14 @@ void main() {
               'ui_us': sample.map((f) => f.buildDuration.inMicroseconds).toList(),
               'raster_us': sample.map((f) => f.rasterDuration.inMicroseconds).toList()};
             rows.add(row);
-            debugPrint('DETAIL_FRAME:${jsonEncode(row)}', wrapWidth: 100000);
+            // Android/Flutter log output can truncate individual long lines.
+            // Send checked, numbered ASCII chunks, each comfortably below 1KB.
+            final payload = base64Encode(utf8.encode(jsonEncode(row)));
+            final total = (payload.length / 600).ceil();
+            for (var part = 0; part < total; part++) {
+              final end = (part + 1) * 600;
+              debugPrint('DETAIL_CHUNK:${rows.length}:$part:$total:${payload.substring(part * 600, end < payload.length ? end : payload.length)}');
+            }
           }
           await measure('open', () async {
             await tester.tap(find.text(r.text).first);
