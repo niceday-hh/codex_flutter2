@@ -115,8 +115,6 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: python3 tool/prepare_signing.py
-      - name: Native notification, speech, state and backup tests
-        run: cd android && ./gradlew :app:testReleaseUnitTest --no-daemon -Ptarget-platform=android-arm64
       - uses: actions/cache/restore@v4
         id: nativecache
         with:
@@ -124,6 +122,11 @@ jobs:
           key: mnn-cxx-v2-arm64-release-${{ hashFiles('native/app/src/main/cpp/**', 'native/app/build.gradle.kts', 'tool/fetch_mnn.py') }}
       - name: Build arm64 APK
         run: flutter build apk --release --target-platform android-arm64
+      # Flutter regenerates registrants with releaseMode=true, excluding dev-only
+      # native plugins. Direct Gradle immediately after pub get can otherwise
+      # reference integration_test while Gradle excludes its release dependency.
+      - name: Native notification, speech, state and backup tests
+        run: cd android && ./gradlew :app:testReleaseUnitTest --no-daemon -Ptarget-platform=android-arm64
       - uses: actions/cache/save@v4
         if: steps.nativecache.outputs.cache-hit != 'true'
         with:
