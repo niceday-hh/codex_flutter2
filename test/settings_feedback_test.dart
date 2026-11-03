@@ -41,7 +41,9 @@ void main() {
     final tile = find.widgetWithText(ListTile, '离线识别模型后台保留时长');
     for (final seconds in [60, 15, 0, 30]) {
       await tester.ensureVisible(tile); await tester.pumpAndSettle();
-      await tester.tap(tile); await tester.pumpAndSettle();
+      // The settings action intentionally stays busy while its choice dialog
+      // is open; settle would wait forever for the covered progress spinner.
+      await tester.tap(tile); await tester.pump(); await tester.pump(const Duration(milliseconds: 400));
       expect(find.byType(SimpleDialogOption), findsNWidgets(4));
       await tester.tap(find.widgetWithText(SimpleDialogOption, asrBackgroundRetentionLabel(seconds)));
       await tester.pumpAndSettle();

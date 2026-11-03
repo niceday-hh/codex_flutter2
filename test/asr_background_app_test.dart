@@ -6,6 +6,17 @@ import 'package:timed_memo/asr.dart';
 import 'package:timed_memo/main.dart';
 import 'package:timed_memo/reminder.dart';
 
+void enterBackground(WidgetTester tester) {
+  for (final state in [AppLifecycleState.inactive, AppLifecycleState.hidden, AppLifecycleState.paused]) {
+    tester.binding.handleAppLifecycleStateChanged(state);
+  }
+}
+void resumeApp(WidgetTester tester) {
+  for (final state in [AppLifecycleState.hidden, AppLifecycleState.inactive, AppLifecycleState.resumed]) {
+    tester.binding.handleAppLifecycleStateChanged(state);
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   for (final seconds in [0, 15, 30, 60]) {
@@ -22,7 +33,7 @@ void main() {
       });
       await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
       asr.status.value = '测试中的已加载模型';
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      enterBackground(tester);
       await tester.pump();
       expect(cancellations, greaterThan(0)); expect(starts, 0);
       if (seconds == 0) {
@@ -32,7 +43,7 @@ void main() {
         await tester.pump(Duration(seconds: seconds));
         expect(asr.status.value, contains('已释放'));
       }
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      resumeApp(tester);
       await tester.pumpAndSettle();
       await tester.pumpWidget(const SizedBox()); await tester.pump();
     });
@@ -48,8 +59,8 @@ void main() {
       return null;
     });
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused); await tester.pump();
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed); await tester.pumpAndSettle();
+    enterBackground(tester); await tester.pump();
+    resumeApp(tester); await tester.pumpAndSettle();
     asr.status.value = '前台复用的模型';
     stopped.complete(); await tester.pump();
     await tester.pump(const Duration(seconds: 60));
