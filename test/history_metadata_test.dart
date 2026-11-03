@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:timed_memo/appearance.dart';
 import 'package:timed_memo/design_tokens.dart';
@@ -11,6 +12,14 @@ import 'ui_preview_test.dart' show capture, previewKey;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() async {
+    if (Platform.environment['MEMO_UI_PREVIEWS'] != '1') return;
+    final bytes = File(Platform.environment['MEMO_PREVIEW_FONT']!).readAsBytesSync();
+    for (final family in ['Roboto', 'Ahem', 'FlutterTest']) {
+      await (FontLoader(family)..addFont(Future.value(ByteData.sublistView(bytes)))).load();
+    }
+    await (FontLoader('MaterialIcons')..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
+  });
   for (final accent in MemoAccent.values) {
     for (final mode in [ThemeMode.light, ThemeMode.dark]) {
       testWidgets('history configuration badges follow ${accent.name}/${mode.name} at 320dp', (tester) async {
