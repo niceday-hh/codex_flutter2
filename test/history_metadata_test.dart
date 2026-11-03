@@ -19,6 +19,7 @@ void main() {
       await (FontLoader(family)..addFont(Future.value(ByteData.sublistView(bytes)))).load();
     }
     await (FontLoader('MaterialIcons')..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
+    await (FontLoader('MemoSerif')..addFont(rootBundle.load('assets/fonts/MemoSerif-Regular.otf'))).load();
   });
   for (final accent in MemoAccent.values) {
     for (final mode in [ThemeMode.light, ThemeMode.dark]) {

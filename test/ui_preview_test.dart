@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:timed_memo/widgets/memo_tab_bar.dart';
 import 'package:timed_memo/design_tokens.dart';
 import 'package:timed_memo/main.dart';
+import 'package:timed_memo/character_art.dart';
 import 'package:timed_memo/settings_page.dart';
 import 'package:timed_memo/reminder.dart';
 import 'package:timed_memo/voice_flow.dart';
@@ -35,6 +36,9 @@ Future<void> capture(WidgetTester tester, String name) async {
 void main() {
   setUpAll(() async {
     if (!previewsEnabled) return;
+    // Keep the screenshot fixture stable before interacting with audio actions:
+    // a late art catalog switches the detail subtree and replaces its panel.
+    await CharacterArtCatalog.load();
     final bytes = File(Platform.environment['MEMO_PREVIEW_FONT']!).readAsBytesSync();
     // The test harness paints unstyled text with its own fallback font, which
     // has no CJK glyphs. Register the preview font under every family name the
@@ -45,6 +49,7 @@ void main() {
     }
     final icons = FontLoader('MaterialIcons')..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
     await icons.load();
+    await (FontLoader('MemoSerif')..addFont(rootBundle.load('assets/fonts/MemoSerif-Regular.otf'))).load();
   });
   testWidgets('render actual settings overview and voice input sheet', (tester) async {
     tester.view.devicePixelRatio = 2; tester.view.physicalSize = const Size(786, 1704);
