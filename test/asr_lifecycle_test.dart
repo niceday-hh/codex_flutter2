@@ -4,6 +4,7 @@ import 'package:timed_memo/asr.dart';
 import 'package:timed_memo/reminder.dart';
 
 class WarmAsr extends AsrSession {
+  WarmAsr({super.clock});
   int prepares = 0, releases = 0;
   @override Future<void> prepare() async { prepares++; }
   @override void release() { releases++; super.release(); }
@@ -25,23 +26,102 @@ void main() {
     expect(session.status.value, '离线模型已释放');
     session.release(); session.status.dispose();
   });
-  testWidgets('an unpinned foreground model expires after 20 seconds', (tester) async {
-    final session = WarmAsr();
+  testWidgets('an unpinned background model expires after the default 30 seconds', (tester) async {
+    final session = WarmAsr(clock: tester.binding.clock.now);
     await session.retainVoice(); session.releaseVoice();
     expect(session.releases, 0);
-    await tester.pump(const Duration(seconds: 19)); expect(session.releases, 0);
+    await tester.pump(const Duration(seconds: 29)); expect(session.releases, 0);
     await tester.pump(const Duration(seconds: 1)); expect(session.releases, 1);
     session.release(); session.status.dispose();
   });
   testWidgets('a foreground visit keeps the model warm across idle tab switches', (tester) async {
-    final session = WarmAsr()..setForeground(true);
+    final session = WarmAsr(clock: tester.binding.clock.now)..setForeground(true);
     await session.retainVoice(); session.releaseVoice();
     await tester.pump(const Duration(minutes: 3));
     expect(session.releases, 0);
     session.setForeground(false);
-    await tester.pump(const Duration(seconds: 20));
+    await tester.pump(const Duration(seconds: 30));
     expect(session.releases, 1);
     session.release(); session.status.dispose();
+  });
+  for (final seconds in asrBackgroundRetentionOptions) {
+    testWidgets('background retention honors $seconds seconds and releases after capture stops', (tester) async {
+      final session = WarmAsr(clock: tester.binding.clock.now)
+        ..setForeground(true)..setBackgroundRetentionSeconds(seconds);
+      await session.retainVoice();
+      session.setForeground(false);
+      session.releaseVoice();
+      if (seconds > 0) {
+        await tester.pump(Duration(seconds: seconds - 1));
+        expect(session.releases, 0);
+        await tester.pump(const Duration(seconds: 1));
+      }
+      expect(session.releases, greaterThan(0));
+      session.release(); session.status.dispose();
+    });
+  }
+  testWidgets('returning to the foreground cancels expiry and starts a fresh background window', (tester) async {
+    final session = WarmAsr(clock: tester.binding.clock.now)
+      ..setForeground(true)..setBackgroundRetentionSeconds(15);
+    await session.retainVoice(); session.releaseVoice();
+    session.setForeground(false);
+    await tester.pump(const Duration(seconds: 14));
+    session.setForeground(true);
+    await tester.pump(const Duration(minutes: 2));
+    expect(session.releases, 0);
+    session.setForeground(false);
+    await tester.pump(const Duration(seconds: 14)); expect(session.releases, 0);
+    await tester.pump(const Duration(seconds: 1)); expect(session.releases, 1);
+    session.release(); session.status.dispose();
+  });
+  testWidgets('a slow capture shutdown and repeated paused events do not extend retention', (tester) async {
+    final session = WarmAsr(clock: tester.binding.clock.now)
+      ..setForeground(true)..setBackgroundRetentionSeconds(15);
+    await session.retainVoice(); session.setForeground(false);
+    await tester.pump(const Duration(seconds: 10));
+    session.setForeground(false); session.releaseVoice();
+    await tester.pump(const Duration(seconds: 4)); expect(session.releases, 0);
+    await tester.pump(const Duration(seconds: 1)); expect(session.releases, 1);
+    session.release(); session.status.dispose();
+  });
+  testWidgets('resuming after process suspension checks the deadline before a delayed timer fires', (tester) async {
+    var now = DateTime(2026, 11, 3);
+    final session = WarmAsr(clock: () => now)..setForeground(true)..setBackgroundRetentionSeconds(15);
+    await session.retainVoice(); session.releaseVoice(); session.setForeground(false);
+    now = now.add(const Duration(seconds: 16));
+    session.setForeground(true);
+    expect(session.releases, 1);
+    await tester.pump(const Duration(seconds: 60)); expect(session.releases, 1);
+    session.release(); session.status.dispose();
+  });
+  testWidgets('background expiry defers destruction until an active voice lease drains', (tester) async {
+    final session = WarmAsr(clock: tester.binding.clock.now)..setForeground(true);
+    await session.retainVoice(); session.setForeground(false);
+    await tester.pump(const Duration(seconds: 30));
+    expect(session.releases, 1);
+    expect(session.status.value, isNot(contains('已释放')));
+    session.releaseVoice();
+    expect(session.status.value, contains('已释放'));
+    session.release(); session.status.dispose();
+  });
+  testWidgets('memory pressure and TTS can evict during a background grace period', (tester) async {
+    for (final tts in [false, true]) {
+      final session = WarmAsr(clock: tester.binding.clock.now)
+        ..setForeground(true)..setBackgroundRetentionSeconds(60);
+      await session.retainVoice(); session.releaseVoice(); session.setForeground(false);
+      if (tts) { await session.withoutModel(() async {}); } else { session.release(); }
+      expect(session.status.value, contains('已释放'));
+      final released = session.releases;
+      await tester.pump(const Duration(seconds: 60)); expect(session.releases, released);
+      session.release(); session.status.dispose();
+    }
+  });
+  test('retention values have a bounded migration default', () {
+    for (final value in [null, -1, 20, 120, 30.0, '30']) {
+      expect(asrBackgroundRetentionSeconds(value), 30);
+    }
+    expect(asrBackgroundRetentionLabel(0), '立即释放');
+    expect(asrBackgroundRetentionLabel(15), '15 秒');
   });
   testWidgets('memory or TTS release still wins over foreground retention', (tester) async {
     final session = WarmAsr()..setForeground(true);

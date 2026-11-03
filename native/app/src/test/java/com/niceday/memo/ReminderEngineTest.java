@@ -18,6 +18,13 @@ public class ReminderEngineTest {
     Context context;
     ReminderEngine engine;
     long token;
+    @Test public void backgroundModelRetentionSurvivesSavingAndReloadingDefaults() throws Exception {
+        for (int seconds : new int[]{0, 15, 30, 60}) {
+            engine.defaults(new JSONObject().put("asrBackgroundRetentionSeconds", seconds).toString());
+            JSONObject state = new JSONObject(new ReminderEngine(context).state());
+            assertEquals(seconds, state.getJSONObject("defaults").getInt("asrBackgroundRetentionSeconds"));
+        }
+    }
     @Before public void setup() throws Exception {
         context = RuntimeEnvironment.getApplication();
         org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofDays(21000));

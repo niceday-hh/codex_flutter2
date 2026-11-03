@@ -174,7 +174,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   final _settingsMessenger = GlobalKey<ScaffoldMessengerState>();
   GlobalKey? _settingsTargetKey;
   String? _settingsTargetTitle;
-  int _entryEpoch = 0, _lifecycleEpoch = 0;
+  int _entryEpoch = 0;
   DateTime selectedDate = DateTime.now();
   DateTime calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
   /// Ids picked in batch mode. Non-empty means the list is in selection
@@ -305,10 +305,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     setState(() => calendarMonth = DateTime(calendarMonth.year, calendarMonth.month + delta));
   }
   Future<void> _pauseForBackground() async {
-    final ticket = ++_lifecycleEpoch;
     asr.setForeground(false);
     try { await voice.pause(); } catch (_) {}
-    finally { if (!_foreground && ticket == _lifecycleEpoch) asr.release(); }
   }
   @override void dispose() {
     voice.removeListener(_voiceChanged); voice.dispose();
@@ -328,7 +326,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     }
     if (state == AppLifecycleState.resumed) {
       _foreground = true;
-      _lifecycleEpoch++; asr.setForeground(true);
+      asr.setForeground(true);
       if (_wasPaused) { _wasPaused = false; _entryPending = true; _entryEpoch++; }
       unawaited(reload().then((_) async { await _maybeStartHandsFree(); _warmManualTab(); }));
     }
@@ -367,6 +365,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   Future<void> reload() async {
     try {
       await store.load();
+      asr.setBackgroundRetentionSeconds(store.defaults['asrBackgroundRetentionSeconds']);
       // A row can disappear between ticks (the native side finishes a task,
       // a repeat is cancelled); a stale id would keep the bar counting a
       // reminder that is no longer on the page.
@@ -903,6 +902,21 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   /// information — speech is off, so there is nothing to say about it.
   List<Widget> _statusChips(Reminder r, bool dim) {
     final chips = <Widget>[];
+    if (dim) {
+      // History describes the saved configuration, not today's audio cache or
+      // whether a completed repeat is still scheduled. Reuse the home brand
+      // tokens so both icons and text follow the user's accent in either theme.
+      chips.add(MemoTag(r.repeatLabel, icon: r.repeat == 'none'
+        ? Icons.event_outlined : Icons.repeat_rounded));
+      chips.add(MemoTag(switch (r.speechMode) {
+        'on' => '语音开启', 'inherit' => '语音跟随默认', _ => '语音关闭',
+      }, icon: switch (r.speechMode) {
+        'on' => Icons.volume_up_outlined,
+        'inherit' => Icons.settings_voice_outlined,
+        _ => Icons.volume_off_outlined,
+      }));
+      return chips;
+    }
     // No "已结束" chip: this builder only meets an ended row inside the history
     // page, where every row is ended — a label repeated down the whole list is
     // noise, not information.
@@ -1181,6 +1195,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       'handsFree' => toggle(d['handsFree'] as bool? ?? false),
       'autoStop' => toggle(d['voiceAutoStop'] as bool? ?? true),
       'silence' => '${d['voiceSilenceSeconds'] ?? 5} 秒',
+      'asrRetention' => asrBackgroundRetentionLabel(d['asrBackgroundRetentionSeconds']),
       'offline' => '已内置 · 无需联网',
       'groups' => '${store.voiceGroups.length} 个角色组',
       'speechMode' => toggle(d['speechMode'] == 'on'),
@@ -1331,6 +1346,20 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       }),
     ]),
     settingsHint('单次录音最长45秒，确认过程不播放语音。'),
+    section('模型与性能', ''), settingsGroup([
+      settingRow(Icons.memory_outlined, '离线识别模型后台保留时长',
+        asrBackgroundRetentionLabel(store.defaults['asrBackgroundRetentionSeconds']), () async {
+        final seconds = await showDialog<int>(context: context, builder: (c) => SimpleDialog(
+          title: const Text('离线识别模型后台保留时长'),
+          children: [for (final value in asrBackgroundRetentionOptions) SimpleDialogOption(
+            onPressed: () => Navigator.pop(c, value), child: Text(asrBackgroundRetentionLabel(value)))]));
+        if (seconds != null) {
+          store.defaults['asrBackgroundRetentionSeconds'] = seconds;
+          await persistDefaults();
+        }
+      }),
+    ]),
+    settingsHint('默认保留30秒，返回时可复用已加载的模型。后台立即关闭麦克风；内存紧张、生成播报语音或系统回收进程时可能提前释放。'),
     section('识别方式', ''), settingsGroup([
       ListTile(key: settingKey('本机离线'), leading:  Icon(Icons.shield_outlined, color: context.colors.brand500), title: const Text('本机离线'),
         subtitle: const Text('录音只在本机识别'), trailing: const MemoTag('已内置')),
