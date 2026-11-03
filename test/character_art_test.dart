@@ -194,9 +194,12 @@ void main() {
     await tester.runAsync(() => precacheImage(image.image, tester.element(find.byType(ReminderDetail))));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await tester.scrollUntilVisible(find.text('保存音频'), 160,
-      scrollable: find.descendant(of: find.byKey(const ValueKey('reminder-detail-scroll')),
-        matching: find.byType(Scrollable)).first);
+    // Drag the outer list's padding, not the independently scrollable正文.
+    final rect = tester.getRect(find.byKey(const ValueKey('reminder-detail-scroll')));
+    for (var attempt = 0; attempt < 12 && find.text('保存音频').hitTestable().evaluate().isEmpty; attempt++) {
+      await tester.dragFrom(Offset(rect.right - 6, rect.bottom - 24), const Offset(0, -160));
+      await tester.pumpAndSettle();
+    }
     await tester.pumpAndSettle();
     expect(find.text('保存音频').hitTestable(), findsOneWidget);
     expect(find.text('编辑提醒').hitTestable(), findsOneWidget);
