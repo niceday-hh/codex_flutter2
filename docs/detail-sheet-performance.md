@@ -34,6 +34,25 @@ uses the platform font.
 
 ## AOT emulator experiment
 
+### Renderer-specific cache limitation
+
+The benchmark logs identify Impeller OpenGLES. In the project's pinned Flutter
+3.35.7 engine, both
+[GPUSurfaceGLImpeller](https://github.com/flutter/flutter/blob/3.35.7/engine/src/flutter/shell/gpu/gpu_surface_gl_impeller.cc)
+and
+[GPUSurfaceVulkanImpeller](https://github.com/flutter/flutter/blob/3.35.7/engine/src/flutter/shell/gpu/gpu_surface_vulkan_impeller.cc)
+return `false` from `EnableRasterCache()`. A repaint boundary can isolate display
+list recording, but it does not thereby guarantee a cached bitmap of all image
+and gradient layers on this renderer. A small source WebP does not remove the
+screen-sized blending workload. This helps explain why extra paint boundaries
+did not consistently improve this experiment; it does not prove the cause on an
+unprofiled phone.
+
+This is separate from Flutter's decoded `ImageCache`: retaining the selected
+asset still avoids unnecessary decoding and image/texture preparation on repeat
+visits. No global renderer switch, framebuffer snapshots or extra image files
+are introduced by the shipping implementation.
+
 ### First experiment and implementation choice
 
 [Run 41568990937](https://github.com/niceday-hh/codex_flutter2/actions/runs/41568990937)
