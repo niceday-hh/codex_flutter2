@@ -1,0 +1,90 @@
+name: Detail sheet performance comparison
+on:
+  push:
+    branches: [perf/detail-sheet]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: detail-performance-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.7'
+          cache: true
+      - run: bash tool/bootstrap.sh
+      - run: python3 tool/fetch_test_runtime.py
+      - run: flutter analyze
+      - run: flutter test --timeout=45s --fail-fast
+        env:
+          LD_LIBRARY_PATH: ${{ env.SHERPA_TEST_LIB }}
+  benchmark:
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.7'
+          cache: true
+      - name: Build identical profile harnesses around baseline and current UI
+        run: |
+          mkdir -p "$RUNNER_TEMP/baseline"
+          git archive 6169648a01e27218f5abec541123282b1b79f163 | tar -x -C "$RUNNER_TEMP/baseline"
+          cp pubspec.yaml "$RUNNER_TEMP/baseline/pubspec.yaml"
+          cp -R integration_test "$RUNNER_TEMP/baseline/"
+          flutter create --platforms=android --android-language=java --project-name=timed_memo --org=com.niceday --no-pub "$RUNNER_TEMP/profile-wrapper"
+          for revision in baseline optimized; do
+            source_dir="$GITHUB_WORKSPACE"
+            if [ "$revision" = baseline ]; then source_dir="$RUNNER_TEMP/baseline"; fi
+            cp -R "$RUNNER_TEMP/profile-wrapper/android" "$source_dir/android"
+            (cd "$source_dir" && flutter pub get && flutter build apk --profile --target-platform android-x64 --target integration_test/detail_performance_test.dart --dart-define=DETAIL_REVISION="$revision")
+            cp "$source_dir/build/app/outputs/flutter-apk/app-profile.apk" "$RUNNER_TEMP/$revision.apk"
+          done
+      - name: Enable KVM
+        run: sudo chmod 666 /dev/kvm
+      - name: Measure both revisions on the same Android 15 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            python3 tool/run_detail_benchmark.py "$RUNNER_TEMP/baseline.apk" baseline
+            python3 tool/run_detail_benchmark.py "$RUNNER_TEMP/optimized.apk" optimized
+      - name: Preserve measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: detail-frame-timings
+          path: detail-*
+      - name: Publish raw report blobs for review
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          for path in detail-*.json detail-*.log; do
+            if [ -f "$path" ]; then
+              blob=$(base64 -w0 "$path" | jq -Rs '{content: ., encoding: "base64"}' | gh api "repos/$GH_REPO/git/blobs" --input - --jq .sha)
+              echo "DETAIL_REPORT $path $blob"
+            fi
+          done

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:timed_memo/widgets/widgets.dart';
 import 'package:timed_memo/main.dart';
@@ -10,6 +11,34 @@ import 'package:timed_memo/task_library.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('opening and updating a detail defers covered home builds until dismissal', (tester) async {
+    var body = '打开前的提醒';
+    final reminder = Reminder(id: 7, text: body);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+      if (call.method == 'getState') return jsonEncode({'reminders': [{...reminder.toJson(), 'text': body}],
+        'defaults': {}, 'status': {'notifications': true, 'exact': true}});
+      return null;
+    });
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, null));
+    await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
+    final home = find.descendant(of: find.byType(MemoHome), matching: find.byType(Scaffold)).first;
+    final before = tester.widget<Scaffold>(home);
+    await tester.tap(find.text(body).first); await tester.pumpAndSettle();
+    expect(tester.widget<Scaffold>(home), same(before), reason: 'voice pause must not rebuild the covered tabs');
+    body = '弹窗期间收到的新内容';
+    final response = Completer<void>();
+    tester.binding.defaultBinaryMessenger.handlePlatformMessage('memo/native',
+      const StandardMethodCodec().encodeMethodCall(const MethodCall('stateChanged')),
+      (_) => response.complete());
+    await tester.pump(); await response.future; await tester.pumpAndSettle();
+    expect(tester.widget<Scaffold>(home), same(before));
+    Navigator.of(tester.element(find.byType(ReminderDetail))).pop(); await tester.pumpAndSettle();
+    expect(tester.widget<Scaffold>(home), isNot(same(before)));
+    expect(find.text(body), findsWidgets, reason: 'updates must not be lost while the modal is open');
+    await tester.pumpWidget(const SizedBox()); await tester.pumpAndSettle();
+  });
   testWidgets('history opens on the first tap and repeated taps cannot queue routes while stop is pending', (tester) async {
     final stopped = Completer<void>(); var cancellations = 0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {

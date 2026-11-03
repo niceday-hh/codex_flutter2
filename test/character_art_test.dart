@@ -16,6 +16,29 @@ final screenshots = Platform.environment['MEMO_CHARACTER_PREVIEWS'] == '1';
 const boundaryKey = ValueKey('character-preview');
 
 void main() {
+  testWidgets('recent decoded art survives closing a sheet and memory pressure clears it', (tester) async {
+    final catalog = await tester.runAsync(() => CharacterArtCatalog.load());
+    final cache = CharacterImageCache.instance;
+    cache.clear();
+    final art = catalog!.entries['228']!;
+    final host = MaterialApp(home: Scaffold(body: Builder(builder: (context) => TextButton(
+      onPressed: () => showModalBottomSheet<void>(context: context, isScrollControlled: true,
+        builder: (_) => ReminderDetail(reminder: Reminder(id: 12, text: '缓存检查', speechMode: 'on', speechVoice: '228'),
+          onAck: () async {}, onSkip: () async {}, onPostpone: (at) async => at, onEdit: () {})),
+      child: const Text('打开')))));
+    await tester.pumpWidget(host); await tester.tap(find.text('打开')); await tester.pumpAndSettle();
+    await tester.runAsync(() => precacheImage(cache.provider(art), tester.element(find.byType(ReminderDetail))));
+    await tester.pumpAndSettle();
+    Navigator.of(tester.element(find.byType(ReminderDetail))).pop(); await tester.pumpAndSettle();
+    final status = await tester.runAsync(() => cache.provider(art).obtainCacheStatus(configuration: ImageConfiguration.empty));
+    expect(status!.keepAlive, isTrue);
+    for (final other in catalog.entries.values.toSet()) { cache.touch(other); }
+    expect(cache.length, lessThanOrEqualTo(CharacterImageCache.maxEntries));
+    expect(cache.estimatedBytes, lessThanOrEqualTo(CharacterImageCache.maxBytes));
+    cache.didHaveMemoryPressure();
+    expect(cache.length, 0);
+    await tester.pumpWidget(const SizedBox()); await tester.pumpAndSettle();
+  });
   setUpAll(() async {
     if (!screenshots) return;
     final bytes = File('assets/fonts/MemoSerif-Regular.otf').readAsBytesSync();

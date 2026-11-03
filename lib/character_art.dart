@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -166,26 +167,47 @@ class CharacterDetailBackdrop extends StatelessWidget {
   }
 }
 
-/// Evict this decoration on exit instead of retaining every role visited in the
-/// global image cache. No other page currently displays these asset providers.
+/// Keep a small working set across sheet visits instead of decoding on every
+/// open. This does not change Flutter's global cache limits or pin live images.
+class CharacterImageCache with WidgetsBindingObserver {
+  CharacterImageCache._();
+  static final instance = CharacterImageCache._();
+  static const maxEntries = 6, maxBytes = 6 * 1024 * 1024;
+  final _recent = LinkedHashMap<String, CharacterArt>();
+  bool _observing = false;
+  int get estimatedBytes => _recent.values.fold(0, (sum, art) => sum + art.width * art.height * 4);
+  int get length => _recent.length;
+  ImageProvider provider(CharacterArt art) => ResizeImage.resizeIfNeeded(
+    art.width, art.height, AssetImage(art.asset));
+  void touch(CharacterArt art) {
+    if (!_observing) { WidgetsBinding.instance.addObserver(this); _observing = true; }
+    _recent.remove(art.asset);
+    _recent[art.asset] = art;
+    while (_recent.length > maxEntries || estimatedBytes > maxBytes) {
+      _evict(_recent.remove(_recent.keys.first)!);
+    }
+  }
+  void _evict(CharacterArt art) { unawaited(provider(art).evict().catchError((Object _) => false)); }
+  void clear() {
+    final old = _recent.values.toList(); _recent.clear();
+    for (final art in old) { _evict(art); }
+  }
+  @override void didHaveMemoryPressure() => clear();
+}
+
 class _DecodedCharacterArt extends StatefulWidget {
   final CharacterArt art;
   const _DecodedCharacterArt({required this.art});
   @override State<_DecodedCharacterArt> createState() => _DecodedCharacterArtState();
 }
 class _DecodedCharacterArtState extends State<_DecodedCharacterArt> {
-  ImageProvider _provider(CharacterArt art) => ResizeImage.resizeIfNeeded(
-    art.width, art.height, AssetImage(art.asset));
-  void _release(CharacterArt art) {
-    unawaited(_provider(art).evict().catchError((Object _) => false));
-  }
+  @override void initState() { super.initState(); CharacterImageCache.instance.touch(widget.art); }
   @override void didUpdateWidget(_DecodedCharacterArt oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.art.asset != widget.art.asset) _release(oldWidget.art);
+    if (oldWidget.art.asset != widget.art.asset) CharacterImageCache.instance.touch(widget.art);
   }
-  @override void dispose() { _release(widget.art); super.dispose(); }
   @override Widget build(BuildContext context) => Image(
-    image: _provider(widget.art), key: const ValueKey('detail-character-image'),
+    image: CharacterImageCache.instance.provider(widget.art), key: const ValueKey('detail-character-image'),
     width: double.infinity, height: double.infinity, fit: BoxFit.contain,
     alignment: Alignment.topRight, filterQuality: FilterQuality.low,
     errorBuilder: (_, __, ___) => const SizedBox.shrink());

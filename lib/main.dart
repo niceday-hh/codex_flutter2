@@ -169,6 +169,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   bool _dialogScheduled = false, _wasPaused = false, _entryPending = true;
   bool _initialized = false, _foreground = true, _checkingEntry = false, _entryAgain = false, _suppressVoiceEntry = false;
   bool _taskLibraryOpen = false, _settingsSheetOpen = false, _detailOpen = false, _editorOpen = false;
+  bool _homeRefreshPending = false;
   ValueNotifier<Reminder>? _detailSelection;
   final _settingsMessenger = GlobalKey<ScaffoldMessengerState>();
   GlobalKey? _settingsTargetKey;
@@ -248,6 +249,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     initialize();
   }
   Future<void> initialize() async {
+    // Load metadata alongside native state, before the first normal detail visit.
+    unawaited(CharacterArtCatalog.load());
     try { await native.invokeMethod('restore'); } catch (_) {}
     await reload();
     int? id;
@@ -335,7 +338,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   @override void didHaveMemoryPressure() { asr.release(); }
   void _voiceChanged() {
     if (!mounted) return;
-    setState(() {});
+    _refreshHome();
     if (_dialogScheduled) return;
     _dialogScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -372,15 +375,21 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       _selection.retain(store.reminders.map((r) => r.id));
       if (mounted) {
         if (_settingsSheetOpen) { loading = false; error = null; }
-        else { setState(() { loading = false; error = null; }); }
+        else { loading = false; error = null; _refreshHome(); }
         _playEntrance();
       }
     } catch (e) {
       if (mounted) {
         if (_settingsSheetOpen) { loading = false; error = niceError(e); toast(error!, error: true); }
-        else { setState(() { loading = false; error = niceError(e); }); }
+        else { loading = false; error = niceError(e); _refreshHome(); }
       }
     }
+  }
+  /// Data keeps updating while the modal is open. Only the covered home paint
+  /// is deferred; acknowledgement, native events and the modal remain live.
+  void _refreshHome() {
+    if (_detailOpen) { _homeRefreshPending = true; return; }
+    setState(() {});
   }
   Widget _selectionBar() {
     // A paused task has no occurrence to complete. Disabling the verb is
@@ -553,7 +562,12 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
           }
           return landed;
         }, onEdit: () { Navigator.pop(sheetContext); edit(current); })));
-    } finally { _detailOpen = false; _detailSelection = null; selection.dispose(); }
+    } finally {
+      _detailOpen = false; _detailSelection = null; selection.dispose();
+      if (mounted && _homeRefreshPending) {
+        _homeRefreshPending = false; setState(() {});
+      }
+    }
   }
   Future<void> remove(Reminder r) async {
     final yes = await showDialog<bool>(context: context, builder: (c) => AlertDialog(
@@ -1664,10 +1678,12 @@ class _ReminderDetailState extends State<ReminderDetail> {
       child: CharacterDetailBackdrop(speaker: speaker, builder: (context, art) => Column(children: [
         SizedBox(height: 28, child: Center(child: Container(width: 36, height: 4,
           decoration: BoxDecoration(color: context.colors.lineStrong, borderRadius: BorderRadius.circular(MemoRadius.pill))))),
-        Expanded(child: SingleChildScrollView(
+        // SliverList supplies separate repaint boundaries for content blocks;
+        // scrolling does not repaint one monolithic column of text and cards.
+        Expanded(child: ListView(
           key: const ValueKey('reminder-detail-scroll'),
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          children: [
             ConstrainedBox(constraints: BoxConstraints(minHeight: art == null ? 0 : 228),
               child: Align(alignment: Alignment.topLeft, child: FractionallySizedBox(
                 widthFactor: art == null ? 1 : .58,
@@ -1717,7 +1733,7 @@ class _ReminderDetailState extends State<ReminderDetail> {
             ],
             const SizedBox(height: 12),
             ReminderAudioPanel(key: ValueKey('audio-${r.id}'), reminder: r),
-          ]))),
+          ])),
         // This stays outside the scroller: artwork and a long reminder cannot
         // push the exit below the screen or intercept its hit target.
         Padding(padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
