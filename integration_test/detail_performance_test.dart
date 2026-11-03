@@ -31,8 +31,10 @@ void main() {
           date: DateTime(2030, 1, 1, 9), archived: archived,
           speechMode: 'on', speechVoice: '$sid', speechState: 'ready');
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
-          if (call.method == 'getState') return jsonEncode({'reminders': [{...r.toJson(), 'speechState': 'ready'}],
-            'defaults': {}, 'status': {'notifications': true, 'exact': true}});
+          if (call.method == 'getState') {
+            return jsonEncode({'reminders': [{...r.toJson(), 'speechState': 'ready'}],
+              'defaults': {}, 'status': {'notifications': true, 'exact': true}});
+          }
           if (call.method == 'initialReminderId') return 0;
           return null;
         });

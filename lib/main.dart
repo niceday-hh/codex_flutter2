@@ -423,7 +423,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     _entryPending = false; _entryEpoch++; speech.stopPreview();
     unawaited(voice.pause(keepDraft: false).catchError((Object e) { toast(niceError(e), error: true); }));
   }
-  void _selectionChanged() { if (mounted) setState(() {}); }
+  void _selectionChanged() { if (mounted) _refreshHome(); }
   void _togglePick(Reminder r) {
     HapticFeedback.selectionClick();
     _selection.toggle(r.id);

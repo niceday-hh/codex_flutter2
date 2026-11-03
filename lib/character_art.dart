@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:async';
-import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -173,7 +172,7 @@ class CharacterImageCache with WidgetsBindingObserver {
   CharacterImageCache._();
   static final instance = CharacterImageCache._();
   static const maxEntries = 6, maxBytes = 6 * 1024 * 1024;
-  final _recent = LinkedHashMap<String, CharacterArt>();
+  final _recent = <String, CharacterArt>{}; // insertion order is the LRU order
   bool _observing = false;
   int get estimatedBytes => _recent.values.fold(0, (sum, art) => sum + art.width * art.height * 4);
   int get length => _recent.length;

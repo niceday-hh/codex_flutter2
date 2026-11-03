@@ -15,8 +15,10 @@ void main() {
     var body = '打开前的提醒';
     final reminder = Reminder(id: 7, text: body);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
-      if (call.method == 'getState') return jsonEncode({'reminders': [{...reminder.toJson(), 'text': body}],
-        'defaults': {}, 'status': {'notifications': true, 'exact': true}});
+      if (call.method == 'getState') {
+        return jsonEncode({'reminders': [{...reminder.toJson(), 'text': body}],
+          'defaults': {}, 'status': {'notifications': true, 'exact': true}});
+      }
       return null;
     });
     await tester.binding.setSurfaceSize(const Size(393, 852));
