@@ -1,7 +1,6 @@
 // AOT benchmark of the real app UI with deterministic native data. No ASR/TTS
 // synthesis or microphone runs here: this deliberately isolates sheet rendering.
 import 'dart:convert';
-import 'dart:developer' as developer;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -49,19 +48,24 @@ void main() {
         }
         for (var visit = 0; visit < 3; visit++) {
           Future<void> measure(String phase, Future<void> Function() action) async {
-            final start = developer.Timeline.now;
+            // Drain previous engine batches before opening a new window. The
+            // framework/VM clocks need not share a directly comparable epoch.
+            await Future<void>.delayed(const Duration(milliseconds: 500));
+            frames.clear();
+            final clock = Stopwatch()..start();
             await action();
-            final end = developer.Timeline.now;
-            // Profile batches arrive ~100ms apart. Flush without manufacturing
-            // animation frames, then select only timestamps inside the action.
-            await Future<void>.delayed(const Duration(milliseconds: 300));
-            final sample = frames.where((f) {
-              final at = f.timestampInMicroseconds(ui.FramePhase.buildStart);
-              return at >= start && at <= end;
-            }).toList();
+            clock.stop();
+            // Capture late raster completions too, using the same quiet-batch
+            // approach as integration_test's watchPerformance. Do not synthesize
+            // extra frames to make an empty capture appear successful.
+            await Future<void>.delayed(const Duration(seconds: 1));
+            for (var retry = 0; frames.isEmpty && retry < 3; retry++) {
+              await Future<void>.delayed(const Duration(seconds: 1));
+            }
+            final sample = frames.toList();
             expect(sample, isNotEmpty, reason: '$phase must contain actual engine frames');
             final row = <String, dynamic>{'revision': revision, 'route': archived ? 'history' : 'home',
-              'speaker': sid, 'visit': visit, 'phase': phase, 'elapsed_ms': (end - start) / 1000,
+              'speaker': sid, 'visit': visit, 'phase': phase, 'elapsed_ms': clock.elapsedMicroseconds / 1000,
               'ui_us': sample.map((f) => f.buildDuration.inMicroseconds).toList(),
               'raster_us': sample.map((f) => f.rasterDuration.inMicroseconds).toList()};
             rows.add(row);

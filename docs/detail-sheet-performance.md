@@ -46,9 +46,10 @@ detail three times. It records opening, outer-content scrolling and nested-text
 scrolling separately: 54 measurements per revision. Text, dimensions and gesture
 durations are identical. Metadata is loaded before navigation in both builds.
 
-`SchedulerBinding.addTimingsCallback` supplies real engine build/raster timings;
-timestamp filtering excludes frames outside each measured action. The harness
-waits for batched delivery, then persists every sample rather than merely a test
+`SchedulerBinding.addTimingsCallback` supplies real engine build/raster timings.
+The harness drains previous batches before each action and waits for late raster
+completions afterwards, without comparing engine timestamps to a different clock.
+It persists every sample rather than merely a test
 runtime or an average FPS. `tool/summarize_detail_benchmark.py` reports medians,
 90th percentiles and frame counts above 16.67/8.33 ms. Those thresholds describe
 work duration, not a direct measurement of presented FPS.

@@ -38,11 +38,16 @@ def main(apk, revision):
     started = time.monotonic()
     while time.monotonic() - started < 600:
         log = adb('logcat', '-d', '-v', 'brief', 'flutter:I', '*:S')
-        if 'DETAIL_BENCHMARK_DONE:' in log:
-            break
         if 'Test failed.' in log or 'EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK' in log:
             Path(f'detail-{revision}.log').write_text(log)
             raise RuntimeError(log[-12000:])
+        if 'DETAIL_BENCHMARK_DONE:' in log:
+            time.sleep(1)
+            log = adb('logcat', '-d', '-v', 'brief', 'flutter:I', '*:S')
+            if 'Test failed.' in log or 'EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK' in log:
+                Path(f'detail-{revision}.log').write_text(log)
+                raise RuntimeError(log[-12000:])
+            break
         time.sleep(5)
     else:
         Path(f'detail-{revision}.log').write_text(log)
