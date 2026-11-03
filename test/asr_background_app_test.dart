@@ -12,8 +12,10 @@ void main() {
     testWidgets('background stops the recorder while honoring the saved $seconds second model grace', (tester) async {
       var cancellations = 0, starts = 0;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
-        if (call.method == 'getState') return jsonEncode({'reminders': [], 'defaults': {
-          'asrBackgroundRetentionSeconds': seconds}, 'status': {}});
+        if (call.method == 'getState') {
+          return jsonEncode({'reminders': [], 'defaults': {
+            'asrBackgroundRetentionSeconds': seconds}, 'status': {}});
+        }
         if (call.method == 'cancelRecording') { cancellations++; }
         if (call.method == 'startRecording') { starts++; }
         return null;
@@ -38,8 +40,10 @@ void main() {
   testWidgets('a late recorder stop from the background cannot evict a new foreground model', (tester) async {
     final stopped = Completer<void>();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
-      if (call.method == 'getState') return jsonEncode({'reminders': [], 'defaults': {
-        'asrBackgroundRetentionSeconds': 15}, 'status': {}});
+      if (call.method == 'getState') {
+        return jsonEncode({'reminders': [], 'defaults': {
+          'asrBackgroundRetentionSeconds': 15}, 'status': {}});
+      }
       if (call.method == 'cancelRecording') { await stopped.future; }
       return null;
     });

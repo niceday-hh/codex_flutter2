@@ -84,6 +84,16 @@ void main() {
     await tester.pump(const Duration(seconds: 1)); expect(session.releases, 1);
     session.release(); session.status.dispose();
   });
+  testWidgets('resuming after process suspension checks the deadline before a delayed timer fires', (tester) async {
+    var now = DateTime(2026, 11, 3);
+    final session = WarmAsr(clock: () => now)..setForeground(true)..setBackgroundRetentionSeconds(15);
+    await session.retainVoice(); session.releaseVoice(); session.setForeground(false);
+    now = now.add(const Duration(seconds: 16));
+    session.setForeground(true);
+    expect(session.releases, 1);
+    await tester.pump(const Duration(seconds: 60)); expect(session.releases, 1);
+    session.release(); session.status.dispose();
+  });
   testWidgets('background expiry defers destruction until an active voice lease drains', (tester) async {
     final session = WarmAsr(clock: tester.binding.clock.now)..setForeground(true);
     await session.retainVoice(); session.setForeground(false);

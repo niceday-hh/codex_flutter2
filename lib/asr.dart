@@ -65,6 +65,12 @@ class AsrSession {
   // the microphone or eagerly loading it. Explicit memory/TTS release wins.
   void setForeground(bool foreground) {
     if (foreground) {
+      // A suspended process can resume before its overdue Timer is delivered.
+      // Do not revive an expired background cache in that event ordering.
+      if (!_keepForeground && _backgroundSince != null &&
+          _now().difference(_backgroundSince!) >= Duration(seconds: _backgroundRetentionSeconds)) {
+        release();
+      }
       _cancelIdle(); _backgroundSince = null;
     } else if (_keepForeground || _backgroundSince == null) {
       _backgroundSince = _now();
