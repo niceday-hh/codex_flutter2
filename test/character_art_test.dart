@@ -11,6 +11,7 @@ import 'package:timed_memo/character_art.dart';
 import 'package:timed_memo/design_tokens.dart';
 import 'package:timed_memo/main.dart';
 import 'package:timed_memo/reminder.dart';
+import 'detail_test_helpers.dart';
 
 final screenshots = Platform.environment['MEMO_CHARACTER_PREVIEWS'] == '1';
 const boundaryKey = ValueKey('character-preview');
@@ -164,7 +165,7 @@ void main() {
             file.parent.createSync(recursive: true); file.writeAsBytesSync(png!.buffer.asUint8List()); image.dispose();
           });
         }
-        await tester.ensureVisible(find.text('保存音频'));
+        await revealDetailAction(tester, find.text('保存音频'));
         await tester.pumpAndSettle();
         expect(find.text('保存音频').hitTestable(), findsOneWidget);
         expect(find.text('编辑提醒').hitTestable(), findsOneWidget);
@@ -194,12 +195,7 @@ void main() {
     await tester.runAsync(() => precacheImage(image.image, tester.element(find.byType(ReminderDetail))));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    // Drag the outer list's padding, not the independently scrollable正文.
-    final rect = tester.getRect(find.byKey(const ValueKey('reminder-detail-scroll')));
-    for (var attempt = 0; attempt < 12 && find.text('保存音频').hitTestable().evaluate().isEmpty; attempt++) {
-      await tester.dragFrom(Offset(rect.right - 6, rect.bottom - 24), const Offset(0, -160));
-      await tester.pumpAndSettle();
-    }
+    await revealDetailAction(tester, find.text('保存音频'));
     await tester.pumpAndSettle();
     expect(find.text('保存音频').hitTestable(), findsOneWidget);
     expect(find.text('编辑提醒').hitTestable(), findsOneWidget);

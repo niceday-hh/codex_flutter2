@@ -7,6 +7,7 @@ import 'package:timed_memo/reminder.dart';
 import 'package:timed_memo/main.dart' show ReminderDetail;
 import 'package:timed_memo/reminder_audio.dart';
 import 'package:timed_memo/speech.dart';
+import 'detail_test_helpers.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -166,7 +167,7 @@ void main() {
         reminder: Reminder(id: 7, text: List.filled(20, '这是一条很长的提醒正文。').join()),
         onAck: () async {}, onSkip: () async {}, onPostpone: (_) async => null, onEdit: () {})))));
     await tester.pump();
-    await tester.ensureVisible(find.text('保存音频')); await tester.pumpAndSettle();
+    await revealDetailAction(tester, find.text('保存音频')); await tester.pumpAndSettle();
     expect(find.text('保存音频').hitTestable(), findsOneWidget); expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
+import 'detail_test_helpers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -101,7 +102,7 @@ void main() {
     });
     await tester.pumpWidget(const RepaintBoundary(key: previewKey, child: MemoApp())); await tester.pumpAndSettle();
     await tester.tap(find.text(row.text).first); await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('保存音频')); await tester.pumpAndSettle();
+    await revealDetailAction(tester, find.text('保存音频')); await tester.pumpAndSettle();
     await capture(tester, 'reminder-audio-actions');
     await tester.tap(find.text('保存音频')); await tester.pumpAndSettle();
     expect(find.text('音频已保存到所选位置。'), findsOneWidget);
@@ -109,7 +110,7 @@ void main() {
     await tester.tap(find.text('换一版')); await tester.pumpAndSettle();
     expect(find.text('使用此版本'), findsOneWidget,
       reason: tester.widget<Text>(find.byKey(const ValueKey('reminder-audio-feedback'))).data);
-    await tester.ensureVisible(find.text('使用此版本')); await tester.pumpAndSettle();
+    await revealDetailAction(tester, find.text('使用此版本')); await tester.pumpAndSettle();
     await capture(tester, 'reminder-audio-candidate');
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   }, skip: !previewsEnabled);
