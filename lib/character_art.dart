@@ -35,11 +35,11 @@ class CharacterArt {
   /// landmark stays at the top right while unimportant body/weapon edges crop.
   Rect placement(Size size) {
     final portrait = isPortrait;
-    final wantedHeight = portrait ? math.max(520.0, size.height * .93) : 310.0;
+    final wantedHeight = portrait ? math.min(640.0, math.max(500.0, size.height * .82)) : 310.0;
     final scale = layout == 'wide_contain' ? size.width / bounds.width
       : math.max(size.width * .78 / bounds.width, wantedHeight / bounds.height);
-    final x = size.width * .79 - focus.dx * scale;
-    final y = 96 - focus.dy * scale;
+    final x = size.width * (portrait ? .73 : .79) - focus.dx * scale;
+    final y = (portrait ? 126 : 96) - focus.dy * scale;
     return Rect.fromLTWH(x, y, width * scale, height * scale);
   }
 }
@@ -126,11 +126,11 @@ class CharacterDetailBackdrop extends StatelessWidget {
   const CharacterDetailBackdrop({super.key, required this.speaker, required this.builder});
 
   @override Widget build(BuildContext context) {
-    if (speaker == null) return builder(context, null);
+    if (speaker == null) return ColoredBox(color: context.colors.surfaceAlt, child: builder(context, null));
     return FutureBuilder<CharacterArtCatalog>(future: CharacterArtCatalog.load(), initialData: CharacterArtCatalog._cached,
       builder: (context, snapshot) {
         final art = snapshot.data?.entries[speaker];
-        if (art == null) return builder(context, null);
+        if (art == null) return ColoredBox(color: context.colors.surfaceAlt, child: builder(context, null));
         final roles = Theme.of(context).brightness == Brightness.dark ? art.dark : art.light;
         return Theme(data: roles == null ? Theme.of(context) : characterDetailTheme(Theme.of(context), roles),
           child: Builder(builder: (context) => ColoredBox(color: context.colors.surfaceAlt,

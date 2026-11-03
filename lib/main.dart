@@ -520,7 +520,9 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     final selection = _detailSelection = ValueNotifier(r);
     try {
       await showModalBottomSheet<void>(context: context, isScrollControlled: true,
-        backgroundColor: context.colors.surfaceAlt, showDragHandle: true,
+        backgroundColor: Colors.transparent, showDragHandle: false,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(MemoRadius.xxl))),
         // Asymmetric on purpose: up in 260ms, down in 200ms. The default pair
         // (300/250, easeInOut) makes every sheet feel like a drawer being
         // pulled; this one feels thrown.
@@ -1660,11 +1662,13 @@ class _ReminderDetailState extends State<ReminderDetail> {
     final voiceName = speakerIndex == null ? null : speechVoiceNames[speakerIndex];
     return FractionallySizedBox(heightFactor: .94, child: SafeArea(top: false,
       child: CharacterDetailBackdrop(speaker: speaker, builder: (context, art) => Column(children: [
+        SizedBox(height: 28, child: Center(child: Container(width: 36, height: 4,
+          decoration: BoxDecoration(color: context.colors.lineStrong, borderRadius: BorderRadius.circular(MemoRadius.pill))))),
         Expanded(child: SingleChildScrollView(
           key: const ValueKey('reminder-detail-scroll'),
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            ConstrainedBox(constraints: BoxConstraints(minHeight: art == null ? 0 : 248),
+            ConstrainedBox(constraints: BoxConstraints(minHeight: art == null ? 0 : 228),
               child: Align(alignment: Alignment.topLeft, child: FractionallySizedBox(
                 widthFactor: art == null ? 1 : .58,
                 child: Padding(padding: const EdgeInsets.fromLTRB(4, 8, 0, 20),

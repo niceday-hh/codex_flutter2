@@ -60,7 +60,7 @@ void main() {
         final rect = art.placement(size);
         expect(rect.width.isFinite && rect.width > 0 && rect.height.isFinite && rect.height > 0, isTrue);
         final focus = Offset(rect.left + art.focus.dx * rect.width / art.width, rect.top + art.focus.dy * rect.height / art.height);
-        expect(focus.dx, closeTo(size.width * .79, .001)); expect(focus.dy, closeTo(96, .001));
+        expect(focus.dx, closeTo(size.width * (art.isPortrait ? .73 : .79), .001)); expect(focus.dy, closeTo(art.isPortrait ? 126 : 96, .001));
       }
     }
     expect(catalog.entries['115']!.bounds.width, lessThan(640));

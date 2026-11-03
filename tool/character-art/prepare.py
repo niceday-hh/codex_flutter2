@@ -24,7 +24,7 @@ for asset, frame in frames.items():
     styles[asset].update(frame)
 # The focal landmark is manually checked against these two review/reference assets.
 styles['assets/character_banners/genshin_keqing.webp']['focus'] = [416, 137]
-styles['assets/character_portraits/honkai_suit-129915.webp']['focus'] = [184, 148]
+styles['assets/character_portraits/honkai_suit-129915.webp']['focus'] = [216, 148]
 output = {'generator': 'Google Material Color Utilities 0.4.0 / QuantizerCelebi + Score + Scheme', 'images': styles}
 (ROOT / 'assets/character_art/art_styles.json').write_text(json.dumps(output, ensure_ascii=False, separators=(',', ':')) + '\n')
 print(f'Prepared {len(styles)} image frames and light/dark palettes')
