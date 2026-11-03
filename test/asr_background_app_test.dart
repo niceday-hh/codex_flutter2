@@ -14,8 +14,8 @@ void main() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
         if (call.method == 'getState') return jsonEncode({'reminders': [], 'defaults': {
           'asrBackgroundRetentionSeconds': seconds}, 'status': {}});
-        if (call.method == 'cancelRecording') cancellations++;
-        if (call.method == 'startRecording') starts++;
+        if (call.method == 'cancelRecording') { cancellations++; }
+        if (call.method == 'startRecording') { starts++; }
         return null;
       });
       await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
@@ -40,7 +40,7 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
       if (call.method == 'getState') return jsonEncode({'reminders': [], 'defaults': {
         'asrBackgroundRetentionSeconds': 15}, 'status': {}});
-      if (call.method == 'cancelRecording') return stopped.future;
+      if (call.method == 'cancelRecording') { await stopped.future; }
       return null;
     });
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();

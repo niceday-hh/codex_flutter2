@@ -46,7 +46,7 @@ jobs:
         env:
           MEMO_UI_PREVIEWS: '1'
           LD_LIBRARY_PATH: ${{ env.SHERPA_TEST_LIB }}
-        run: flutter test test/ui_preview_test.dart --timeout=90s
+        run: flutter test test/ui_preview_test.dart test/history_metadata_test.dart --timeout=90s
       - uses: actions/upload-artifact@v4
         if: always()
         with:
