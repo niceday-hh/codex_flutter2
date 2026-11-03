@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Exercise the outer viewport, including lazily built actions. Starting in
+/// Exercise the outer viewport and its actions. Starting in
 /// the正文 would scroll only that inner viewport and never reveal the actions.
 Future<void> revealDetailAction(WidgetTester tester, Finder target) async {
   final rect = tester.getRect(find.byKey(const ValueKey('reminder-detail-scroll')));

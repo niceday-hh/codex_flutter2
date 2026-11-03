@@ -385,7 +385,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       }
     }
   }
-  /// Data keeps updating while the modal is open. Only the covered home paint
+  /// Data keeps updating while the modal is open. Only the covered home rebuild
   /// is deferred; acknowledgement, native events and the modal remain live.
   void _refreshHome() {
     if (_detailOpen) { _homeRefreshPending = true; return; }
@@ -1621,17 +1621,6 @@ class ReminderDetail extends StatefulWidget {
     required this.onSkip, required this.onPostpone, required this.onEdit, this.defaults = const {}});
   @override State<ReminderDetail> createState() => _ReminderDetailState();
 }
-/// Preserve nested text offsets, audition ownership and candidate audio when a
-/// sliver moves out of view. Repaint isolation must not change their lifetime.
-class _DetailPersistentBlock extends StatefulWidget {
-  final Widget child;
-  const _DetailPersistentBlock({super.key, required this.child});
-  @override State<_DetailPersistentBlock> createState() => _DetailPersistentBlockState();
-}
-class _DetailPersistentBlockState extends State<_DetailPersistentBlock> with AutomaticKeepAliveClientMixin {
-  @override bool get wantKeepAlive => true;
-  @override Widget build(BuildContext context) { super.build(context); return widget.child; }
-}
 class _ReminderDetailState extends State<ReminderDetail> {
   bool busy = false;
   Future<void> _ack() async {
@@ -1689,12 +1678,12 @@ class _ReminderDetailState extends State<ReminderDetail> {
       child: CharacterDetailBackdrop(speaker: speaker, builder: (context, art) => Column(children: [
         SizedBox(height: 28, child: Center(child: Container(width: 36, height: 4,
           decoration: BoxDecoration(color: context.colors.lineStrong, borderRadius: BorderRadius.circular(MemoRadius.pill))))),
-        // SliverList supplies separate repaint boundaries for content blocks;
-        // scrolling does not repaint one monolithic column of text and cards.
-        Expanded(child: ListView(
+        // There are only a few blocks. Keep their existing lifetime and scroll
+        // behavior, but isolate static cards from independently scrolling text.
+        Expanded(child: SingleChildScrollView(
           key: const ValueKey('reminder-detail-scroll'),
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          children: [
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             ConstrainedBox(constraints: BoxConstraints(minHeight: art == null ? 0 : 228),
               child: Align(alignment: Alignment.topLeft, child: FractionallySizedBox(
                 widthFactor: art == null ? 1 : .58,
@@ -1744,7 +1733,7 @@ class _ReminderDetailState extends State<ReminderDetail> {
             ],
             const SizedBox(height: 12),
             ReminderAudioPanel(key: ValueKey('audio-${r.id}'), reminder: r),
-          ].map((child) => _DetailPersistentBlock(key: child.key, child: child)).toList())),
+          ].map((child) => RepaintBoundary(key: child.key, child: child)).toList()))),
         // This stays outside the scroller: artwork and a long reminder cannot
         // push the exit below the screen or intercept its hit target.
         Padding(padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),

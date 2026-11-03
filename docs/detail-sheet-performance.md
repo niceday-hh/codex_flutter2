@@ -14,8 +14,10 @@ The baseline is v0.9.21 (`6169648a01e27218f5abec541123282b1b79f163`).
   and task updates defer the covered home rebuild until dismissal; the modal's
   own acknowledgement, postpone and edit actions remain active. Repeated events
   coalesce into one home refresh. No microphone lifecycle changes are included.
-- The outer detail scroll view uses independently painted sliver children rather
-  than a single long column. The separate long-text viewport and pinned edit
+- The outer detail retains its original scroll view and column, with separate
+  repaint boundaries around content blocks. The small number of blocks remain
+  mounted, preserving nested text offsets and audio ownership without a lazy
+  list or additional keep-alive state. The long-text viewport and pinned edit
   button remain. Original images, day/night palettes, gradients and framing are
   unchanged; no additional images or runtime blur are introduced.
 
@@ -24,7 +26,7 @@ The baseline is v0.9.21 (`6169648a01e27218f5abec541123282b1b79f163`).
 The test suite checks decoded-cache survival after dismissal, bounded retention,
 memory-pressure clearing, no covered-home rebuild on opening or native state
 updates, and delivery of the latest task data after dismissal. Small-screen
-tests use actual outer-viewport gestures to reach lazily created audio actions;
+tests use actual outer-viewport gestures to reach audio actions;
 dragging the nested text viewport is a different operation.
 
 Six screenshots cover light/dark themes with banner, portrait and missing-art
@@ -33,13 +35,32 @@ uses the platform font.
 
 ## AOT emulator experiment
 
+### First experiment and implementation choice
+
+[Run 41568990937](https://github.com/niceday-hh/codex_flutter2/actions/runs/41568990937)
+passed all 108 captures (54 per revision), using optimized commit
+`076e5b765081adcfa668d8106d1d767e51e040bc`. Its raw samples and comparison are
+preserved in [iteration-1](performance/detail-sheet/iteration-1/).
+
+That experiment used a sliver list. Repeated home/banner opening UI P90 improved
+from 28.61 to 10.07 ms, but the first banner open had a 1055.86 ms UI outlier
+(baseline P90 68.29 ms), and some nested-text UI P90 values increased. Those
+results do not justify declaring every interaction faster. Software raster P90
+was hundreds of milliseconds even without source changes, so these values must
+not be interpreted as phone performance.
+
+The final implementation therefore keeps the original small column and scroll
+view, adding only per-block repaint boundaries. This also avoids lazy-list
+lifetime complexity. The final experiment runs optimized before baseline,
+reversing the previous order; it still uses identical fixtures and build modes.
+
 `.github/workflows/detail-performance.yml` builds the same profile test harness
 around baseline and current Flutter UI. A plain Android wrapper and mocked native
 channel deliberately isolate rendering from scheduling, ASR/TTS, recording and
 system dialogs. These are **not shipping APKs**. Production Flutter pages, image
 assets, local theme generation and detail navigation are used in both versions.
 
-Both run sequentially on the same Android 15 x86_64 emulator with KVM and
+Both run sequentially on the same Android 15 x86_64 Pixel 5 emulator with KVM and
 SwiftShader, with animations enabled. For each home/history route and each voice
 115 (banner), 228 (portrait), 803 (no artwork), the harness opens and closes the
 detail three times. It records opening, outer-content scrolling and nested-text
