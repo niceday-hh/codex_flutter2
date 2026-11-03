@@ -416,6 +416,23 @@ class MemoPalette {
       brand: b, cardBrand: brandFor(accent, Brightness.light), accent: accent);
   }
 
+  /// Content-based palette for a single reminder sheet; semantic status colours
+  /// stay stable. Roles are generated offline with Google Material Color Utilities.
+  MemoPalette withArtRoles(Map<String, String> roles) {
+    Color role(String name) => Color(int.parse('ff${roles[name]!.substring(1)}', radix: 16));
+    final surface = role('surface'), primary = role('primary'), container = role('primaryContainer');
+    Color tint(double opacity) => Color.alphaBlend(container.withValues(alpha: opacity), surface);
+    return MemoPalette(surface: surface, surfaceAlt: tint(.10), canvas: role('background'),
+      ink: role('onSurface'), inkSoft: role('onSurface'), muted: role('onSurfaceVariant'),
+      line: role('outlineVariant'), lineStrong: role('outline'), outline: role('outline'),
+      brand50: tint(.44), brand100: tint(.65), brand200: container, brand400: primary,
+      brand500: primary, brand600: primary, brand700: role('onPrimaryContainer'), brand800: role('onPrimaryContainer'),
+      onBrand: role('onPrimary'), onBrandSoft: role('onPrimaryContainer'),
+      amber: amber, amberSurface: amberSurface, amberInk: amberInk, amberDeep: amberDeep,
+      danger: danger, dangerSurface: dangerSurface, success: success, successSurface: successSurface,
+      warning: warning, warningSurface: warningSurface, brand: brand, cardBrand: cardBrand, accent: accent);
+  }
+
   /// 05–10 dawn, 10–17 day, otherwise night. Same three-band idea as before, but
   /// the stops now come from [cardBrand], not [brand]: the card is a dark
   /// surface in both themes and every label on it is white.

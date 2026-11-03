@@ -51,6 +51,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          python3 tool/upload_character_previews.py
           zip -qr character-ui-previews.zip character-ui-previews
           gh release upload "$CI_ASSET_TAG" character-ui-previews.zip --clobber
       - name: Native schedule checks

@@ -75,11 +75,10 @@ class MemoQuickTimeChips extends StatelessWidget {
           disabledBackgroundColor: context.colors.surfaceAlt,
           minimumSize: const Size(0, 44),
           padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 14),
-          textStyle: compact ? context.text.caption.copyWith(fontWeight: FontWeight.w600) : null,
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           shape: const StadiumBorder(),
         ),
-        child: Text(shift.label, style: context.text.label.copyWith(
+        child: Text(shift.label, style: (compact ? context.text.caption : context.text.label).copyWith(
           color: enabled ? context.colors.brand800 : context.colors.muted,
           fontWeight: FontWeight.w600)),
       ),

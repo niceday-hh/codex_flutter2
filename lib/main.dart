@@ -1664,9 +1664,9 @@ class _ReminderDetailState extends State<ReminderDetail> {
           key: const ValueKey('reminder-detail-scroll'),
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            ConstrainedBox(constraints: BoxConstraints(minHeight: speaker == null ? 0 : 214),
+            ConstrainedBox(constraints: BoxConstraints(minHeight: art == null ? 0 : 248),
               child: Align(alignment: Alignment.topLeft, child: FractionallySizedBox(
-                widthFactor: art == null ? 1 : .60,
+                widthFactor: art == null ? 1 : .58,
                 child: Padding(padding: const EdgeInsets.fromLTRB(4, 8, 0, 20),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(r.displayTime, style: context.text.detailTime),

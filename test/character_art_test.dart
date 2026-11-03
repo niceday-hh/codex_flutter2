@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:timed_memo/appearance.dart';
 import 'package:timed_memo/character_art.dart';
+import 'package:timed_memo/design_tokens.dart';
 import 'package:timed_memo/main.dart';
 import 'package:timed_memo/reminder.dart';
 
@@ -38,6 +39,36 @@ void main() {
     expect(catalog.entries['115']!.isPortrait, isFalse);
     expect(catalog.entries['228']!.isPortrait, isTrue);
   });
+  test('prepared palettes and subject framing stay valid for every bundled role', () {
+    final raw = jsonDecode(File('assets/character_art/art_catalog.json').readAsStringSync()) as Map<String, dynamic>;
+    final styles = jsonDecode(File('assets/character_art/art_styles.json').readAsStringSync()) as Map<String, dynamic>;
+    final catalog = CharacterArtCatalog.fromJson(raw, styles: styles['images'] as Map<String, dynamic>);
+    Color colour(String value) => Color(int.parse('ff${value.substring(1)}', radix: 16));
+    double contrast(Color a, Color b) {
+      final x = a.computeLuminance(), y = b.computeLuminance();
+      return x > y ? (x + .05) / (y + .05) : (y + .05) / (x + .05);
+    }
+    for (final art in catalog.entries.values) {
+      expect(art.light, isNotNull, reason: art.asset); expect(art.dark, isNotNull, reason: art.asset);
+      for (final roles in [art.light!, art.dark!]) {
+        for (final pair in [['primary', 'onPrimary'], ['primaryContainer', 'onPrimaryContainer'],
+            ['surface', 'onSurface'], ['surface', 'onSurfaceVariant']]) {
+          expect(contrast(colour(roles[pair[0]]!), colour(roles[pair[1]]!)), greaterThanOrEqualTo(4.5), reason: art.asset);
+        }
+      }
+      for (final size in [const Size(393, 740), const Size(320, 480), const Size(700, 280)]) {
+        final rect = art.placement(size);
+        expect(rect.width.isFinite && rect.width > 0 && rect.height.isFinite && rect.height > 0, isTrue);
+        final focus = Offset(rect.left + art.focus.dx * rect.width / art.width, rect.top + art.focus.dy * rect.height / art.height);
+        expect(focus.dx, closeTo(size.width * .79, .001)); expect(focus.dy, closeTo(96, .001));
+      }
+    }
+    expect(catalog.entries['115']!.bounds.width, lessThan(640));
+    expect(catalog.entries['228']!.light!['primary'], '#b62500');
+    final fallback = CharacterArtCatalog.fromJson(raw, styles: {'assets/character_banners/genshin_keqing.webp': {'bounds': [0, 0, -1, 0], 'light': {'primary': 'bad'}}});
+    expect(fallback.entries['115']!.light, isNull);
+    expect(fallback.entries['115']!.bounds.width, 640);
+  });
   test('art follows effective speech settings and never rerolls a random voice', () {
     final r = Reminder(speechMode: 'inherit');
     expect(reminderArtSpeaker(r, {'speechMode': 'off'}), isNull);
@@ -64,7 +95,7 @@ void main() {
           speechMode: 'on', speechVoice: '$sid', speechState: 'ready');
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
           if (call.method == 'getState') {
-            return jsonEncode({'reminders': [reminder.toJson()],
+            return jsonEncode({'reminders': [{...reminder.toJson(), 'speechState': 'ready'}],
               'defaults': {}, 'status': {'notifications': true, 'exact': true}});
           }
           if (call.method == 'initialReminderId') return 0;
@@ -93,6 +124,14 @@ void main() {
           expect(find.byKey(const ValueKey('detail-character-image')), findsNothing);
         }
         expect(find.text('编辑提醒').hitTestable(), findsOneWidget);
+        if (art != null) {
+          final local = tester.element(find.byKey(const ValueKey('reminder-detail-scroll')));
+          final roles = mode == ThemeMode.dark ? art.dark! : art.light!;
+          expect(Theme.of(local).colorScheme.primary.toARGB32(), int.parse('ff${roles['primary']!.substring(1)}', radix: 16));
+          expect(local.colors.brand500, Theme.of(local).colorScheme.primary);
+          expect(Theme.of(tester.element(find.byType(MemoHome))).colorScheme.primary, isNot(Theme.of(local).colorScheme.primary));
+          expect(find.text('到点语音播报当前关闭；试听和保存不会开启它。'), findsNothing);
+        }
         if (screenshots) {
           await tester.runAsync(() async {
             final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(boundaryKey));

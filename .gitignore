@@ -24,3 +24,6 @@ assets/vad/*.onnx
 
 tool/test-runtime/
 ui-shots/
+
+node_modules/
+character-ui-previews/
