@@ -6,6 +6,13 @@ import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 import 'reminder.dart';
 
 final asr = AsrSession();
+const asrBackgroundRetentionOptions = [0, 15, 30, 60];
+int asrBackgroundRetentionSeconds(Object? value) =>
+  value is int && asrBackgroundRetentionOptions.contains(value) ? value : 30;
+String asrBackgroundRetentionLabel(Object? value) {
+  final seconds = asrBackgroundRetentionSeconds(value);
+  return seconds == 0 ? '立即释放' : '$seconds 秒';
+}
 Future<String> transcribe(String pcmPath) => asr.transcribe(pcmPath);
 Future<void> discardRecording(String path) async {
   final pcm = File(path);
@@ -15,8 +22,8 @@ Future<void> discardRecording(String path) async {
 // One model per voice session, confined to a worker isolate. No FFI pointers
 // cross isolates; each utterance gets a fresh stream and reuses the model.
 class AsrSession {
-  final Duration idleTimeout;
-  AsrSession({this.idleTimeout = const Duration(seconds: 20)});
+  final DateTime Function() _now;
+  AsrSession({DateTime Function()? clock}) : _now = clock ?? DateTime.now;
   final status = ValueNotifier<String>('离线模型尚未准备');
   Isolate? _worker;
   ReceivePort? _port, _errors;
@@ -24,6 +31,8 @@ class AsrSession {
   Future<void>? _preparing;
   final _pending = <int, Completer<String>>{};
   Timer? _idle;
+  int _backgroundRetentionSeconds = 30;
+  DateTime? _backgroundSince;
   bool _keepForeground = false;
   int _serial = 0, _users = 0, _pins = 0, _vadGeneration = 0;
   Completer<void>? _unpinned;
@@ -31,10 +40,10 @@ class AsrSession {
   Future<bool> retainVoice({bool Function()? isCurrent}) async {
     while (_suspension != null) { await _suspension; }
     if (isCurrent != null && !isCurrent()) return false;
-    _pins++; _idle?.cancel();
+    _pins++;
     try {
       await prepare();
-      if (isCurrent != null && !isCurrent()) { releaseVoice(keepWarm: _keepForeground); return false; }
+      if (isCurrent != null && !isCurrent()) { releaseVoice(); return false; }
       return true;
     } catch (_) { releaseVoice(keepWarm: false); rethrow; }
   }
@@ -55,9 +64,20 @@ class AsrSession {
   // Retain an already loaded model for this foreground visit without opening
   // the microphone or eagerly loading it. Explicit memory/TTS release wins.
   void setForeground(bool foreground) {
+    if (foreground) {
+      _cancelIdle(); _backgroundSince = null;
+    } else if (_keepForeground || _backgroundSince == null) {
+      _backgroundSince = _now();
+    }
     _keepForeground = foreground;
-    if (foreground) { _idle?.cancel(); }
-    else { _armIdle(); }
+    if (!foreground) _armIdle();
+  }
+  void setBackgroundRetentionSeconds(Object? value) {
+    final seconds = asrBackgroundRetentionSeconds(value);
+    if (seconds == _backgroundRetentionSeconds) return;
+    _backgroundRetentionSeconds = seconds;
+    _cancelIdle();
+    if (!_keepForeground && _backgroundSince != null) _armIdle();
   }
   Future<int> startVad(double silence, {bool Function()? isCurrent}) async {
     await prepare();
@@ -102,7 +122,6 @@ class AsrSession {
   Future<void> prepare() async {
     if (_suspension != null) await _suspension;
     _releaseRequested = false;
-    _idle?.cancel();
     if (_commands != null) { _armIdle(); return Future.value(); }
     return _preparing ??= _prepare().whenComplete(() => _preparing = null);
   }
@@ -162,7 +181,6 @@ class AsrSession {
     _users++;
     try {
       await prepare();
-      _idle?.cancel();
       status.value = '正在本地识别…';
       final result = Completer<String>();
       final id = ++_serial;
@@ -180,16 +198,24 @@ class AsrSession {
     }
   }
   void _armIdle() {
-    _idle?.cancel();
-    if (_pins == 0 && !_keepForeground) _idle = Timer(idleTimeout, release);
+    if (_keepForeground || _idle != null) return;
+    // Count from entering the background, not from a late recognition/load
+    // completion. Expiry requests release even while a voice lease is draining.
+    final since = _backgroundSince ??= _now();
+    final remaining = Duration(seconds: _backgroundRetentionSeconds) - _now().difference(since);
+    if (remaining <= Duration.zero) { release(); }
+    else { _idle = Timer(remaining, () { _idle = null; release(); }); }
+  }
+  void _cancelIdle() {
+    _idle?.cancel(); _idle = null;
   }
   void release() {
-    _releaseRequested = true; _idle?.cancel();
+    _releaseRequested = true; _cancelIdle();
     if (_pins > 0 || _users > 0 || _pending.isNotEmpty || (_preparing != null && _commands == null)) return;
     _close(); status.value = '离线模型已释放，再次录音会自动准备';
   }
   void _close() {
-    _idle?.cancel(); _commands?.send(null);
+    _cancelIdle(); _commands?.send(null);
     // The worker frees its recognizer on normal shutdown. kill also bounds
     // native memory lifetime if a load or native crash failed the handshake.
     if (_commands == null) _worker?.kill(priority: Isolate.immediate);

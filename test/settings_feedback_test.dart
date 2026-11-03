@@ -7,6 +7,7 @@ import 'package:timed_memo/widgets/memo_tab_bar.dart';
 import 'package:timed_memo/main.dart';
 import 'package:timed_memo/reminder.dart';
 import 'package:timed_memo/settings_page.dart';
+import 'package:timed_memo/asr.dart';
 
 Future<void> openSettings(WidgetTester tester, String category) async {
   tester.view.devicePixelRatio = 1; tester.view.physicalSize = const Size(393, 852);
@@ -21,6 +22,37 @@ Finder sheetText(String text) => find.descendant(of: find.byType(SettingsSheet),
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('model retention is searchable, previews its value and saves every offered choice in the sheet', (tester) async {
+    var defaults = <String, dynamic>{}; var saves = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+      if (call.method == 'getState') return jsonEncode({'reminders': [], 'defaults': defaults, 'status': {}});
+      if (call.method == 'saveDefaults') {
+        saves++; defaults = jsonDecode(call.arguments as String) as Map<String, dynamic>;
+      }
+      return null;
+    });
+    await openSettings(tester, '语音录入');
+    await tester.tap(find.byTooltip('关闭设置分类')); await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('settings-search')), '后台 保留');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('settings-result-asrRetention'))); await tester.pumpAndSettle();
+    expect(find.text('当前：30 秒'), findsOneWidget); expect(saves, 0);
+    await tester.tap(find.text('前往设置')); await tester.pumpAndSettle();
+    final tile = find.widgetWithText(ListTile, '离线识别模型后台保留时长');
+    for (final seconds in [60, 15, 0, 30]) {
+      await tester.ensureVisible(tile); await tester.pumpAndSettle();
+      await tester.tap(tile); await tester.pumpAndSettle();
+      expect(find.byType(SimpleDialogOption), findsNWidgets(4));
+      await tester.tap(find.widgetWithText(SimpleDialogOption, asrBackgroundRetentionLabel(seconds)));
+      await tester.pumpAndSettle();
+      expect(defaults['asrBackgroundRetentionSeconds'], seconds);
+      expect(sheetText('设置已保存'), findsOneWidget);
+      expect(find.descendant(of: tile, matching: find.text(asrBackgroundRetentionLabel(seconds))), findsOneWidget);
+    }
+    expect(saves, 4);
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
   for (final fails in [false, true]) {
     testWidgets('test reminder shows ${fails ? 'error' : 'success'} inside the open sheet and sends once', (tester) async {
       final finished = Completer<void>(); var tests = 0;
