@@ -27,6 +27,14 @@ jobs:
       - run: flutter test --timeout=45s --fail-fast
         env:
           LD_LIBRARY_PATH: ${{ env.SHERPA_TEST_LIB }}
+      - name: Render and preserve light and dark detail previews
+        env:
+          MEMO_CHARACTER_PREVIEWS: '1'
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          flutter test test/character_art_test.dart --timeout=45s --fail-fast
+          python3 tool/upload_character_previews.py
   benchmark:
     needs: checks
     runs-on: ubuntu-24.04
@@ -70,6 +78,8 @@ jobs:
           script: |
             python3 tool/run_detail_benchmark.py "$RUNNER_TEMP/baseline.apk" baseline
             python3 tool/run_detail_benchmark.py "$RUNNER_TEMP/optimized.apk" optimized
+      - name: Summarize UI and raster timings
+        run: python3 tool/summarize_detail_benchmark.py
       - name: Preserve measurements
         if: always()
         uses: actions/upload-artifact@v4

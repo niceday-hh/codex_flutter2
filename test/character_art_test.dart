@@ -194,7 +194,9 @@ void main() {
     await tester.runAsync(() => precacheImage(image.image, tester.element(find.byType(ReminderDetail))));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await tester.ensureVisible(find.text('保存音频'));
+    await tester.scrollUntilVisible(find.text('保存音频'), 160,
+      scrollable: find.descendant(of: find.byKey(const ValueKey('reminder-detail-scroll')),
+        matching: find.byType(Scrollable)).first);
     await tester.pumpAndSettle();
     expect(find.text('保存音频').hitTestable(), findsOneWidget);
     expect(find.text('编辑提醒').hitTestable(), findsOneWidget);
