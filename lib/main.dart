@@ -715,6 +715,14 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     // Selection mode still drops the card: the card has no checkbox, and on a
     // day with a single reminder hiding it left *nothing* to tick.
     final hero = active.isEmpty || _selecting ? null : active.first;
+    // Warm the two backdrop layers for the next couple of taps while the home
+    // page is idle. Opening a detail then starts on baked textures instead of
+    // painting four full-screen gradients during the entrance animation.
+    final media = MediaQuery.sizeOf(context);
+    CharacterBackdropCache.instance.prewarm(
+      speakers: active.take(2).map((r) => reminderArtSpeaker(r, store.defaults)).whereType<String>(),
+      size: Size(media.width, media.height * .94),
+      palette: context.colors, brightness: Theme.of(context).brightness);
     final rest = active;
     final historyCount = store.reminders.where((r) => r.archived || r.completed).length;
     final today = DateTime(now.year, now.month, now.day);

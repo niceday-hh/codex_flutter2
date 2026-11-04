@@ -146,3 +146,58 @@ Continuous-scroll jank and first-ever opening latency remain unresolved on a
 real phone. Further work should begin with a physical-device trace; do not infer
 that changing source resolution, more repaint boundaries, or a global renderer
 switch is a verified remedy from these emulator numbers.
+
+## Baked backdrop layers
+
+The detail sheet used to paint four full-screen gradient fills on every frame:
+two radial halos, a horizontal left-to-right wash and a vertical bottom fade.
+They are now rendered once off-screen into two textures — an opaque underlay
+(surface colour plus both halos) and an alpha overlay (the two linear ramps) —
+with the character art unchanged between them.
+
+Two layers rather than one is deliberate: the horizontal wash sits *above* the
+art, so folding the art into the underlay would change what covers it.
+
+Software-raster timings from `flutter_tester` (393×760 logical, 2× density,
+median of five, art included) are **not** a raster win:
+
+| Stack | Per-frame paint |
+|---|---|
+| four gradients + art | ≈6.8 ms |
+| two baked textures + art | ≈6.7 ms |
+
+A CPU rasteriser samples a texture and evaluates a gradient at roughly the same
+per-pixel cost. On a tile-based phone GPU the relevant difference is overdraw:
+four alpha blends become one opaque write plus one alpha blend. That claim has
+to be checked with the profile harness on a device; no number from this
+software renderer should be read as FPS.
+
+What the change does verify in-repo:
+
+- **Pixel identity.** Over the same art, the baked pair differs from the live
+  gradients by at most 4/255 on a 3× surface, with 0.02% of subpixels above
+  3/255 (ramp shoulders only). A 1.5× bake reaches 116/255 and is rejected, so
+  the cache bakes at 2×.
+- **Live swap.** The sheet starts on the painters, then rebuilds on textures
+  once the offscreen render lands, keeping identical geometry
+  (`test/backdrop_bake_test.dart`).
+- **Bounded retention.** Three entries, 28 MiB, LRU; the last entry is never
+  evicted, since one phone-sized pair can exceed the budget by itself.
+
+### Storage
+
+`ui.Image` lives in engine memory. Persisting it would cost a PNG encode
+(hundreds of milliseconds for a phone-sized sheet), a decode and a texture
+upload on the next launch, keyed by theme, size and density — more work than
+the offscreen render it replaces, and stale as soon as any of those change.
+Nothing is written to disk.
+
+### Async and prewarm
+
+`Picture.toImage` records on the UI thread (microseconds) and rasterises on the
+raster thread, so the bake never blocks Dart. It cannot move to an isolate:
+`ui.Picture` is not transferable and the offscreen surface belongs to the
+engine. `HomePage` asks the cache to bake the next two tasks' backdrops 600 ms
+after the list settles; by the time a sheet opens the textures are usually
+already there. A missed prewarm falls back to the painters for the entrance and
+swaps in when the bake lands, so the first frame never waits.

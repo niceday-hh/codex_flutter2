@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -119,48 +120,231 @@ ThemeData characterDetailTheme(ThemeData parent, Map<String, String> roles) {
       foregroundColor: WidgetStatePropertyAll(palette.brand700), side: WidgetStatePropertyAll(BorderSide(color: palette.line)))));
 }
 
+/// Vertical span where the artwork dissolves into the sheet surface.
+({double start, double end}) characterBackdropFade(CharacterArt art, Size size) {
+  final rect = art.placement(size);
+  final bottom = rect.top + art.bounds.bottom * rect.height / art.height;
+  final end = bottom.clamp(math.min(240.0, size.height), size.height).toDouble();
+  return (start: math.max(0.0, end - (art.isPortrait ? 220 : 110)), end: end);
+}
+
+/// The two gradient stacks that sandwich the artwork, rendered once into
+/// textures. Both are pure colour ramps, so replaying them from a baked image
+/// is pixel-identical to painting four full-screen gradients on every frame.
+class CharacterBackdropBake {
+  final ui.Image underlay, overlay;
+  const CharacterBackdropBake({required this.underlay, required this.overlay});
+  int get bytes => (underlay.width * underlay.height + overlay.width * overlay.height) * 4;
+}
+
+Future<ui.Image> _recordBackdropLayer(Size size, double ratio, void Function(Canvas, Size) draw) async {
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder, Offset.zero & size);
+  canvas.scale(ratio);
+  draw(canvas, size);
+  final picture = recorder.endRecording();
+  try {
+    return await picture.toImage(
+      (size.width * ratio).round().clamp(1, 4096), (size.height * ratio).round().clamp(1, 4096));
+  } finally {
+    picture.dispose();
+  }
+}
+
+Future<CharacterBackdropBake> bakeCharacterBackdrop(
+    CharacterArt art, Size size, MemoPalette palette, double ratio) async {
+  final base = palette.surfaceAlt, tint = palette.brand500, container = palette.brand200;
+  final fade = characterBackdropFade(art, size);
+  final underlay = await _recordBackdropLayer(size, ratio, (canvas, s) {
+    final full = Offset.zero & s;
+    canvas.drawRect(full, Paint()..color = base);
+    canvas.drawRect(full, Paint()..shader = RadialGradient(center: const Alignment(.9, -.7), radius: 1.15,
+      colors: [tint.withValues(alpha: .13), tint.withValues(alpha: 0)]).createShader(full));
+    canvas.drawRect(full, Paint()..shader = RadialGradient(center: const Alignment(-.7, .6), radius: 1.2,
+      colors: [container.withValues(alpha: .30), base.withValues(alpha: 0)]).createShader(full));
+  });
+  final overlay = await _recordBackdropLayer(size, ratio, (canvas, s) {
+    final full = Offset.zero & s;
+    canvas.drawRect(full, Paint()..shader = LinearGradient(
+      stops: const [0, .40, .54, .68, 1], colors: [base, base.withValues(alpha: .99),
+      base.withValues(alpha: .94), base.withValues(alpha: .18), base.withValues(alpha: .03)]).createShader(full));
+    canvas.drawRect(full, Paint()..shader = LinearGradient(
+      begin: Alignment.topCenter, end: Alignment.bottomCenter,
+      stops: [0, fade.start / s.height, fade.end / s.height, 1],
+      colors: [base.withValues(alpha: 0), base.withValues(alpha: .04), base, base]).createShader(full));
+  });
+  return CharacterBackdropBake(underlay: underlay, overlay: overlay);
+}
+
+/// Keeps the last few baked backdrops alive across sheet visits. Images live in
+/// engine memory only: a PNG round-trip costs more than the offscreen render and
+/// would have to be redone per theme, size and density anyway.
+class CharacterBackdropCache {
+  CharacterBackdropCache._();
+  static final instance = CharacterBackdropCache._();
+  static const maxEntries = 3, maxBytes = 28 * 1024 * 1024, maxPixelRatio = 2.0;
+  final _recent = <String, CharacterBackdropBake>{}; // insertion order is the LRU order
+  final _pending = <String, Future<CharacterBackdropBake?>>{};
+  String? _prewarmToken;
+  int get length => _recent.length;
+
+  static String keyFor(String speaker, Size size, Brightness brightness, MemoPalette palette) =>
+    '$speaker|${size.width.round()}x${size.height.round()}|${brightness.index}|'
+    '${Object.hash(palette.surfaceAlt, palette.brand500, palette.brand200)}';
+
+  CharacterBackdropBake? peek(String key) => _recent[key];
+
+  Future<CharacterBackdropBake?> obtain(String key, Future<CharacterBackdropBake> Function() build) {
+    final hit = _recent.remove(key);
+    if (hit != null) { _recent[key] = hit; return Future.value(hit); }
+    return _pending[key] ??= _start(key, build);
+  }
+
+  Future<CharacterBackdropBake?> _start(String key, Future<CharacterBackdropBake> Function() build) async {
+    try {
+      final value = await build();
+      _recent[key] = value;
+      _trim();
+      return value;
+    } catch (_) {
+      return null;
+    } finally {
+      _pending.remove(key);
+    }
+  }
+
+  void _trim() {
+    var bytes = _recent.values.fold(0, (sum, value) => sum + value.bytes);
+    // Never evict the only entry: a phone-sized 3× bake can exceed the budget
+    // on its own, and dropping it would force a rebake on every open.
+    while (_recent.length > maxEntries || (bytes > maxBytes && _recent.length > 1)) {
+      bytes -= _recent.remove(_recent.keys.first)!.bytes;
+    }
+  }
+
+  /// Bakes the backdrops for the next couple of taps while the home page is
+  /// idle. The work starts after the entrance has settled, so the home frame
+  /// keeps its own budget; the modal then opens on textures instead of
+  /// gradients. Two entries at 2× already reach ~18 MiB on a 393dp phone.
+  void prewarm({required Iterable<String> speakers, required Size size,
+      required MemoPalette palette, required Brightness brightness}) {
+    final wanted = speakers.toSet().take(2).toList();
+    if (wanted.isEmpty) return;
+    final token = '${wanted.join(',')}|${size.width.round()}x${size.height.round()}|${brightness.index}';
+    if (_prewarmToken == token) return;
+    _prewarmToken = token;
+    Future<void>.delayed(const Duration(milliseconds: 600), () async {
+      if (_prewarmToken != token) return; // a newer home state superseded this pass
+      final catalog = await CharacterArtCatalog.load();
+      for (final speaker in wanted) {
+        if (_prewarmToken != token) return;
+        final art = catalog.entries[speaker];
+        if (art == null) continue;
+        final key = keyFor(speaker, size, brightness, palette);
+        if (_recent.containsKey(key) || _pending.containsKey(key)) continue;
+        await obtain(key, () => bakeCharacterBackdrop(art, size, palette, maxPixelRatio));
+      }
+    });
+  }
+
+  /// Drops the working set without disposing: a widget may still be painting
+  /// one of these images this frame. Unreachable images are collected by the
+  /// engine's own finalizers.
+  void clear() { _recent.clear(); _prewarmToken = null; }
+}
+
+class _BackdropUnderlayPainter extends CustomPainter {
+  final Color base, tint, container;
+  const _BackdropUnderlayPainter(this.base, this.tint, this.container);
+  @override void paint(Canvas canvas, Size size) {
+    final full = Offset.zero & size;
+    canvas.drawRect(full, Paint()..color = base);
+    canvas.drawRect(full, Paint()..shader = RadialGradient(center: const Alignment(.9, -.7), radius: 1.15,
+      colors: [tint.withValues(alpha: .13), tint.withValues(alpha: 0)]).createShader(full));
+    canvas.drawRect(full, Paint()..shader = RadialGradient(center: const Alignment(-.7, .6), radius: 1.2,
+      colors: [container.withValues(alpha: .30), base.withValues(alpha: 0)]).createShader(full));
+  }
+  @override bool shouldRepaint(_BackdropUnderlayPainter old) =>
+    old.base != base || old.tint != tint || old.container != container;
+}
+
+class _BackdropOverlayPainter extends CustomPainter {
+  final Color base;
+  final double fadeStart, fadeEnd;
+  const _BackdropOverlayPainter(this.base, this.fadeStart, this.fadeEnd);
+  @override void paint(Canvas canvas, Size size) {
+    final full = Offset.zero & size;
+    canvas.drawRect(full, Paint()..shader = LinearGradient(
+      stops: const [0, .40, .54, .68, 1], colors: [base, base.withValues(alpha: .99),
+      base.withValues(alpha: .94), base.withValues(alpha: .18), base.withValues(alpha: .03)]).createShader(full));
+    canvas.drawRect(full, Paint()..shader = LinearGradient(
+      begin: Alignment.topCenter, end: Alignment.bottomCenter,
+      stops: [0, fadeStart / size.height, fadeEnd / size.height, 1],
+      colors: [base.withValues(alpha: 0), base.withValues(alpha: .04), base, base]).createShader(full));
+  }
+  @override bool shouldRepaint(_BackdropOverlayPainter old) =>
+    old.base != base || old.fadeStart != fadeStart || old.fadeEnd != fadeEnd;
+}
+
 /// All art and colour metadata is local. No image analysis or blur on navigation.
-class CharacterDetailBackdrop extends StatelessWidget {
+class CharacterDetailBackdrop extends StatefulWidget {
   final String? speaker;
   final Widget Function(BuildContext, CharacterArt?) builder;
   const CharacterDetailBackdrop({super.key, required this.speaker, required this.builder});
+  @override State<CharacterDetailBackdrop> createState() => _CharacterDetailBackdropState();
+}
+
+class _CharacterDetailBackdropState extends State<CharacterDetailBackdrop> {
+  CharacterBackdropBake? _bake;
+  String? _requested;
+
+  void _resolve(String key, Size size, CharacterArt art, MemoPalette palette, Brightness brightness) {
+    if (_requested == key) return;
+    _requested = key;
+    final hit = CharacterBackdropCache.instance.peek(key);
+    _bake = hit;
+    if (hit != null) return;
+    unawaited(CharacterBackdropCache.instance.obtain(key,
+      () => bakeCharacterBackdrop(art, size, palette, CharacterBackdropCache.maxPixelRatio)).then((value) {
+        if (!mounted || _requested != key || value == null) return;
+        setState(() => _bake = value);
+      }));
+  }
 
   @override Widget build(BuildContext context) {
-    if (speaker == null) return ColoredBox(color: context.colors.surfaceAlt, child: builder(context, null));
+    if (widget.speaker == null) return ColoredBox(color: context.colors.surfaceAlt, child: widget.builder(context, null));
     return FutureBuilder<CharacterArtCatalog>(future: CharacterArtCatalog.load(), initialData: CharacterArtCatalog._cached,
       builder: (context, snapshot) {
-        final art = snapshot.data?.entries[speaker];
-        if (art == null) return ColoredBox(color: context.colors.surfaceAlt, child: builder(context, null));
+        final art = snapshot.data?.entries[widget.speaker];
+        if (art == null) return ColoredBox(color: context.colors.surfaceAlt, child: widget.builder(context, null));
         final roles = Theme.of(context).brightness == Brightness.dark ? art.dark : art.light;
         return Theme(data: roles == null ? Theme.of(context) : characterDetailTheme(Theme.of(context), roles),
           child: Builder(builder: (context) => ColoredBox(color: context.colors.surfaceAlt,
             child: ClipRect(child: Stack(children: [
               Positioned.fill(child: IgnorePointer(child: ExcludeSemantics(child: RepaintBoundary(
                 child: LayoutBuilder(builder: (context, box) {
-                  final base = context.colors.surfaceAlt, tint = context.colors.brand500;
-                  final rect = art.placement(box.biggest);
-                  final bottom = rect.top + art.bounds.bottom * rect.height / art.height;
-                  final fadeEnd = bottom.clamp(math.min(240.0, box.maxHeight), box.maxHeight).toDouble();
-                  final fadeStart = math.max(0.0, fadeEnd - (art.isPortrait ? 220 : 110));
+                  final base = context.colors.surfaceAlt;
+                  final size = box.biggest;
+                  final palette = context.colors;
+                  final key = CharacterBackdropCache.keyFor(widget.speaker!, size,
+                    Theme.of(context).brightness, palette);
+                  _resolve(key, size, art, palette, Theme.of(context).brightness);
+                  final bake = _bake;
+                  final fade = characterBackdropFade(art, size);
                   return Stack(children: [
-                    Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(
-                      gradient: RadialGradient(center: const Alignment(.9, -.7), radius: 1.15,
-                        colors: [tint.withValues(alpha: .13), tint.withValues(alpha: 0)])))),
-                    Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(
-                      gradient: RadialGradient(center: const Alignment(-.7, .6), radius: 1.2,
-                        colors: [context.colors.brand200.withValues(alpha: .30), base.withValues(alpha: 0)])))),
-                    Positioned.fromRect(rect: rect, child: _DecodedCharacterArt(art: art)),
-                    Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(
-                      gradient: LinearGradient(stops: const [0, .40, .54, .68, 1], colors: [
-                        base, base.withValues(alpha: .99), base.withValues(alpha: .94),
-                        base.withValues(alpha: .18), base.withValues(alpha: .03)])))),
-                    Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(
-                      gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                        stops: [0, fadeStart / box.maxHeight, fadeEnd / box.maxHeight, 1],
-                        colors: [base.withValues(alpha: 0), base.withValues(alpha: .04), base, base])))),
+                    // The two baked layers replace four full-screen gradients.
+                    // Until the first bake lands the painters draw the same
+                    // ramps, so the entrance never shows a different colour.
+                    Positioned.fill(child: bake == null
+                      ? CustomPaint(painter: _BackdropUnderlayPainter(base, palette.brand500, palette.brand200))
+                      : RawImage(image: bake.underlay, fit: BoxFit.fill, filterQuality: FilterQuality.low)),
+                    Positioned.fromRect(rect: art.placement(size), child: _DecodedCharacterArt(art: art)),
+                    Positioned.fill(child: bake == null
+                      ? CustomPaint(painter: _BackdropOverlayPainter(base, fade.start, fade.end))
+                      : RawImage(image: bake.overlay, fit: BoxFit.fill, filterQuality: FilterQuality.low)),
                   ]);
                 }))))),
-              builder(context, art),
+              widget.builder(context, art),
             ])))));
       });
   }
