@@ -83,11 +83,13 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
           if (!done.contains(i) && error(i) != null) Padding(padding: const EdgeInsets.only(top: 8),
             child: Text(error(i)!, style: context.text.caption.copyWith(color: context.colors.danger))),
         ]))),
-      if (feedback != null) Text(feedback!, style: context.text.body.copyWith(color: context.colors.danger)),
-      const SizedBox(height: 16),
+    ]),
+    bottomNavigationBar: SafeArea(child: Padding(padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (feedback != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(feedback!, style: context.text.caption.copyWith(color: context.colors.danger))),
       FilledButton(onPressed: saving || selected.isEmpty ? null : save,
         child: Text(saving ? '正在创建…' : '创建 ${selected.length} 条提醒')),
       TextButton(onPressed: saving ? null : () => Navigator.pop(context, done.isNotEmpty), child: Text(done.isEmpty ? '取消' : '返回，保留已创建的提醒')),
-    ]),
+    ]))),
   ));
 }

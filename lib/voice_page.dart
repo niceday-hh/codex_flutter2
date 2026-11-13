@@ -38,7 +38,7 @@ class _VoicePageState extends State<VoicePage> {
         decoration:  BoxDecoration(shape: BoxShape.circle,
           gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
             colors: [context.colors.brand400, context.colors.brand600])),
-        child: InkWell(customBorder: const CircleBorder(), onTap: flow.busy ? null : () {
+        child: InkWell(customBorder: const CircleBorder(), onTap: flow.busy && flow.phase != VoicePhase.preparing ? null : () {
           HapticFeedback.mediumImpact();
           if (flow.phase == VoicePhase.recording) { flow.finish(); } else { flow.startRecording(); }
         }, child: Center(child: flow.busy
@@ -47,7 +47,8 @@ class _VoicePageState extends State<VoicePage> {
     const SizedBox(height: 18),
     Text(flow.message.isEmpty ? '点击开始说话' : flow.message, textAlign: TextAlign.center, style: context.text.headline),
     ValueListenableBuilder<String>(valueListenable: asr.status, builder: (_, status, _) =>
-      Text(status, textAlign: TextAlign.center,
+      Text(flow.capturing && status.contains('模型') && !status.contains('就绪')
+        ? '识别准备中，声音已暂存' : status, textAlign: TextAlign.center,
         style: context.text.caption.copyWith(color: context.colors.muted))),
     if (flow.capturing) ValueListenableBuilder<int>(valueListenable: flow.countdown,
       builder: (_, seconds, __) => Text('剩余 $seconds 秒', textAlign: TextAlign.center,
@@ -64,8 +65,8 @@ class _VoicePageState extends State<VoicePage> {
     FilledButton(onPressed: text.text.trim().isEmpty || flow.busy || flow.capturing ? null : () { FocusScope.of(context).unfocus(); flow.reviewText(text.text); },
       child: const Text('确认并设置提醒')),
     const SizedBox(height: 12),
-    OutlinedButton(onPressed: flow.busy ? null : flow.phase == VoicePhase.recording ? flow.finish : flow.startRecording,
-      child: Text(flow.phase == VoicePhase.recording ? '结束录音' : '重新录音')),
+    OutlinedButton(onPressed: flow.phase == VoicePhase.saving ? null : flow.busy ? flow.cancel : flow.phase == VoicePhase.recording ? flow.finish : flow.startRecording,
+      child: Text(flow.busy ? '取消录音' : flow.phase == VoicePhase.recording ? '结束录音' : '重新录音')),
     const SizedBox(height: 20),
     const MemoHint('说完后安静片刻，会自动进入确认。也可以说“开启语音播报”“提醒间隔三分钟”“总共提醒五次”。单次录音最长45秒，切到后台会关闭麦克风。',
       align: TextAlign.center),

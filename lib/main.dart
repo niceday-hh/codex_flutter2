@@ -360,8 +360,11 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     if (!mounted || _editorOpen) return;
     _editorOpen = true; _pauseForNavigation();
     try {
-      await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => TaskBatchPage(
-        drafts: drafts, source: source, store: store, edit: _editBatchDraft)));
+      await showModalBottomSheet<bool>(context: context, isScrollControlled: true, useSafeArea: true,
+        isDismissible: false, enableDrag: false, clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MemoRadius.xxl)),
+        builder: (_) => SizedBox(height: MediaQuery.sizeOf(context).height * .94, child: TaskBatchPage(
+          drafts: drafts, source: source, store: store, edit: _editBatchDraft)));
       if (mounted) await reload();
     } finally { _editorOpen = false; }
   }

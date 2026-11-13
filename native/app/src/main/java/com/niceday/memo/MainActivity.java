@@ -95,6 +95,7 @@ public final class MainActivity extends FlutterActivity {
     private MediaPlayer speechPreview;
     private final VitsSynthesizer synthesizer = new VitsSynthesizer();
     private AudioRecord recorder;
+    private boolean recordingPermissionPending;
     private Thread audioThread;
     private volatile boolean recording;
     private volatile String audioError;
@@ -281,13 +282,14 @@ public final class MainActivity extends FlutterActivity {
                         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                             if (permissionResult != null) throw new IllegalStateException("权限请求处理中");
                             permissionResult = result;
+                            recordingPermissionPending = true;
                             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 102);
                         } else { startRecording(); result.success(null); }
                     }
                     case "stopRecording" -> result.success(stopRecording(false));
                     case "cancelRecording" -> {
-                        if (permissionResult != null && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                            permissionResult.error("CANCELLED", "录音已取消", null); permissionResult = null;
+                        if (permissionResult != null && recordingPermissionPending) {
+                            permissionResult.error("CANCELLED", "录音已取消", null); permissionResult = null; recordingPermissionPending = false;
                         }
                         stopRecording(true); result.success(null);
                     }
@@ -357,6 +359,7 @@ public final class MainActivity extends FlutterActivity {
             boolean granted = grants.length > 0 && grants[0] == PackageManager.PERMISSION_GRANTED;
             try {
                 if (request == 102) {
+                    recordingPermissionPending = false;
                     if (!granted) throw new IllegalStateException("请在系统设置中允许麦克风权限");
                     startRecording(); result.success(null);
                 } else result.success(granted);
