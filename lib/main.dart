@@ -7,6 +7,8 @@ import 'asr.dart';
 import 'reminder.dart';
 import 'reminder_search.dart';
 import 'voice_parser.dart';
+import 'task_batch.dart';
+import 'scene_templates.dart';
 import 'speech.dart';
 import 'reminder_audio.dart';
 import 'character_art.dart';
@@ -164,7 +166,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   bool loading = true;
   String? error;
   late final voice = VoiceFlow(capture: OfflineVoiceCapture(asr), store: store,
-    openVoicePage: () { if (mounted) setState(() => tab = 2); }, onSaved: reload);
+    openVoicePage: () { if (mounted) setState(() => tab = 2); }, onSaved: reload, onBatch: _reviewBatch);
   DialogRoute<void>? _voiceDialog;
   bool _dialogScheduled = false, _wasPaused = false, _entryPending = true;
   bool _initialized = false, _foreground = true, _checkingEntry = false, _entryAgain = false, _suppressVoiceEntry = false;
@@ -351,6 +353,25 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
         Navigator.of(context).push(route).whenComplete(() { if (identical(_voiceDialog, route)) _voiceDialog = null; });
       }
     });
+  }
+  Future<Reminder?> _editBatchDraft(BuildContext context, Reminder draft) => Navigator.push<Reminder>(context,
+    MaterialPageRoute(builder: (_) => ReminderEditor(reminder: draft, store: store, draftOnly: true)));
+  Future<void> _reviewBatch(String source, List<ParsedVoice> drafts) async {
+    if (!mounted || _editorOpen) return;
+    _editorOpen = true; _pauseForNavigation();
+    try {
+      await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => TaskBatchPage(
+        drafts: drafts, source: source, store: store, edit: _editBatchDraft)));
+      if (mounted) await reload();
+    } finally { _editorOpen = false; }
+  }
+  Future<void> _openScenes() async {
+    if (_editorOpen) return;
+    _editorOpen = true; _pauseForNavigation();
+    try {
+      await Navigator.push<void>(context, MaterialPageRoute(builder: (_) => SceneTemplatesPage(store: store, edit: _editBatchDraft)));
+      if (mounted) await reload();
+    } finally { _editorOpen = false; }
   }
   Future<void> _editVoiceDraft() async {
     final parsed = voice.pending;
@@ -752,6 +773,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
           const SizedBox(width: MemoSpace.sm),
           MemoIconButton(icon: Icons.inventory_2_outlined, tooltip: '历史任务', onTap: taskLibrary),
         ])),
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: Align(alignment: Alignment.centerLeft,
+          child: TextButton.icon(onPressed: _openScenes, icon: const Icon(Icons.auto_awesome_outlined, size: 18), label: const Text('场景模板')))),
         // The kicker line. It used to be a lone label with nothing on the
         // right; the count gives it a second edge, which is what makes the
         // header read as a masthead rather than a stray date.
@@ -1783,7 +1806,8 @@ class ReminderEditor extends StatefulWidget {
   final Reminder reminder;
   final MemoStore store;
   final ParsedVoice? voice;
-  const ReminderEditor({super.key, required this.reminder, required this.store, this.voice});
+  final bool draftOnly;
+  const ReminderEditor({super.key, required this.reminder, required this.store, this.voice, this.draftOnly = false});
   @override State<ReminderEditor> createState() => _ReminderEditorState();
 }
 class _ReminderEditorState extends State<ReminderEditor> {
@@ -1805,6 +1829,7 @@ class _ReminderEditorState extends State<ReminderEditor> {
     else if (r.repeat == 'weekly' && r.days.isEmpty) { error = '请选择重复星期'; }
     else if (r.repeat == 'none' && !r.date.isAfter(DateTime.now())) { error = '请选择未来的日期和时间'; }
     if (error != null) { ScaffoldMessenger.of(context).showSnackBar(memoSnackBar(error, error: true)); return; }
+    if (widget.draftOnly) { Navigator.pop(context, r); return; }
     setState(() => saving = true);
     try {
       await native.invokeMethod('requestNotifications');

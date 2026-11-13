@@ -32,7 +32,7 @@ void main() {
     final flow = VoiceFlow(capture: c, store: store, clock: () => at,
       openVoicePage: () => opened++, onSaved: () async {});
     await flow.startCommands();
-    expect(c.waitsForModel, [true]);
+    expect(c.waitsForModel, [false]);
     expect(flow.phase, VoicePhase.commands);
     expect(c.silences, [0.7]);
     c.results.add(CapturedVoice('开始录音', at));
