@@ -116,7 +116,7 @@ class OfflineVoiceCapture implements VoiceCapture {
     for (var i = 0; i < 40; i++) {
       if (!_current(ticket)) return;
       if (await native.invokeMethod<bool>('microphoneReady') == true) return;
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await _untilCancelled(Future<void>.delayed(const Duration(milliseconds: 100)), _cancelled.future);
     }
     throw StateError('麦克风暂不可用，请先关闭 YOYO 面板或其它录音应用后重试');
   }
