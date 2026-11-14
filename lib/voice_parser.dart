@@ -221,38 +221,52 @@ VoiceControls extractVoiceControls(String source, Reminder r) {
   return VoiceControls(body, settings.reversed.toList(), warning);
 }
 
-/// Conservative multi-task parser: split only at punctuation followed by an
-/// explicit scheduling prefix, never at an arbitrary comma inside the body.
-/// The existing single-task parser remains unchanged.
+/// Used only after an explicit choice of multi-task mode. ASR output often has
+/// no punctuation: scheduling expressions, not commas, delimit candidates.
+/// Quoted text is masked without changing offsets; the single-task parser stays
+/// untouched. All candidates are reviewed by the user before any native save.
 List<ParsedVoice> parseVoiceBatch(String source, {DateTime? now, required Reminder Function() defaults}) {
   final current = now ?? DateTime.now();
+  List<ParsedVoice> fallback([String? warning]) {
+    final p = parseVoice(source, now: current, defaults: defaults());
+    return [warning == null ? p : ParsedVoice(p.reminder, p.hasTime, warning, p.reference,
+      relativeDelay: p.relativeDelay, settings: p.settings)];
+  }
   const n = r'[零〇一二两三四五六七八九十百千\d]+';
-  final prefix = RegExp('^(?:(今天|明天|后天|每天|每日|工作日|(?:每周|每星期|周|星期)[一二三四五六日天1-7]|(?:$n年)?$n月$n[日号])?'
-    '(?:凌晨|午夜|早上|上午|中午|下午|傍晚|晚上)?(?:$n[点时](?:半|一刻|三刻|$n分?)?|\\d{1,2}[:：]\\d{1,2})|(?:$n|半)(?:个)?(?:小时|分钟|秒)[以之]?后)');
-  String normalize(String s) => s.replaceFirst(RegExp(r'^明早'), '明天早上')
-    .replaceFirst(RegExp(r'^明晚'), '明天晚上').replaceFirst(RegExp(r'^今晚'), '今天晚上');
-  final pieces = source.split(RegExp(r'[，,；;。\n]+'));
-  final groups = <String>[];
-  for (final part in pieces) {
-    final piece = normalize(part.trim().replaceFirst(RegExp(r'^(?:然后|另外|再)(?=(?:明|今|后|早|晚|下|上|中|每|周|星期|工作日|[零一二两三四五六七八九十\d]))'), ''));
-    if (piece.isEmpty) continue;
-    if (groups.isEmpty || prefix.hasMatch(piece)) { groups.add(piece); }
-    else { groups[groups.length - 1] += '，$piece'; }
+  final text = source.trim()
+    .replaceAllMapped(RegExp(r'([\u3400-\u9fff\d])\s+(?=[\u3400-\u9fff\d])'), (m) => m.group(1)!)
+    .replaceFirst(RegExp(r'^(?:请)?(?:帮我|给我)?(?:设置|创建)?(?:提醒我|提醒)[，,：:\s]*'), '')
+    .replaceAll('明早', '明天早上').replaceAll('明晚', '明天晚上').replaceAll('今晚', '今天晚上');
+  // Same-length mask keeps every match aligned with the original reminder body.
+  final mask = StringBuffer();
+  final quotes = <String>[];
+  const pairs = {'“': '”', '「': '」', '『': '』', '《': '》', '"': '"'};
+  for (var i = 0; i < text.length; i++) {
+    final c = text[i];
+    if (quotes.isNotEmpty && c == quotes.last) { quotes.removeLast(); mask.write(' '); }
+    else if (pairs.containsKey(c)) { quotes.add(pairs[c]!); mask.write(' '); }
+    else { mask.write(quotes.isEmpty ? c : ' '); }
   }
-  if (groups.length < 2 || groups.length > 10 || !prefix.hasMatch(groups.first)) {
-    return [parseVoice(source, now: current, defaults: defaults())];
-  }
-  // Quoted passages may describe times rather than instruct the app.
-  if (RegExp('[“”「」《》]').hasMatch(source)) {
-    return [parseVoice(source, now: current, defaults: defaults())];
-  }
+  final timing = RegExp('(?:(今天|明天|后天|每天|每日|工作日|(?:每周|每星期|周|星期)[一二三四五六日天1-7]|(?:$n年)?(?:$n月)?$n[日号])?'
+    '(?:凌晨|午夜|早上|上午|中午|下午|傍晚|晚上)?(?:$n[点时](?:半|一刻|三刻|$n分?)?|\\d{1,2}[:：]\\d{1,2}(?:[:：]\\d{1,2})?)'
+    '|(?:(?:$n个半|一个半|$n|半)(?:个)?(?:天|小时|分钟|分|秒钟|秒))+[以之]?后)');
+  final matches = timing.allMatches(mask.toString()).toList();
+  if (matches.isEmpty) return fallback();
+  // A leading non-scheduling passage must not turn time references into tasks.
+  if (!RegExp(r'^[\s，,；;。]*(?:先|首先)?[\s，,；;。]*$').hasMatch(text.substring(0, matches.first.start))) return fallback();
+  if (matches.length > 10) return fallback('一次最多核对10条提醒，请减少条数后重新录入。');
   var inheritedDate = '';
-  return groups.map((group) {
-    final match = prefix.firstMatch(group)!;
+  final rows = <ParsedVoice>[];
+  for (var i = 0; i < matches.length; i++) {
+    final match = matches[i];
     final explicitDate = match.group(1);
     if (explicitDate != null) inheritedDate = explicitDate;
     final instruction = '${explicitDate == null && !match.group(0)!.endsWith('后') ? inheritedDate : ''}${match.group(0)}';
-    final body = group.substring(match.end).replaceFirst(RegExp(r'^\s*(?:提醒我|提醒)?\s*'), '');
-    return parseVoice('$instruction提醒我$body', now: current, defaults: defaults());
-  }).toList();
+    var body = text.substring(match.end, i + 1 < matches.length ? matches[i + 1].start : text.length)
+      .replaceFirst(RegExp(r'^[\s，,：:]*(?:提醒我|提醒)?\s*'), '');
+    body = body.replaceFirst(RegExp(r'[\s，,；;。]*(?:然后|另外|接着|再|还有)[\s，,；;。]*$'), '')
+      .replaceFirst(RegExp(r'[\s，,；;。、]+$'), '');
+    rows.add(parseVoice('$instruction提醒我$body', now: current, defaults: defaults()));
+  }
+  return rows;
 }

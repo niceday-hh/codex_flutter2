@@ -69,17 +69,27 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
   @override Widget build(BuildContext context) => PopScope(canPop: !saving, child: Scaffold(
     appBar: AppBar(title: Text('核对 ${rows.length} 条提醒')),
     body: ListView(padding: const EdgeInsets.all(20), children: [
-      Text('逐条核对后，再一起创建', style: context.text.title),
+      Text(rows.length == 1 ? '仅识别到 1 条，请核对' : '逐条核对后，再一起创建', style: context.text.title),
+      const SizedBox(height: 8),
+      Text(rows.length == 1 ? '如需多条，请返回修改原话，为每件事补充时间。' : '点铅笔单独调整时间、正文和提醒方式；取消勾选即可跳过。',
+        style: context.text.caption.copyWith(color: context.colors.muted)),
       const SizedBox(height: 12),
-      MemoCard(child: Text(widget.source, style: context.text.body)),
+      ExpansionTile(key: const ValueKey('batch-source'), tilePadding: EdgeInsets.zero,
+        title: Text('查看原始内容', style: context.text.label),
+        children: [Padding(padding: const EdgeInsets.only(bottom: 12), child: Align(alignment: Alignment.centerLeft,
+          child: Text(widget.source, style: context.text.body)))]),
       const SizedBox(height: 16),
       for (var i = 0; i < rows.length; i++) Padding(padding: const EdgeInsets.only(bottom: 12), child: MemoCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [Checkbox(value: !excluded.contains(i), onChanged: saving || done.contains(i) ? null : (value) => setState(() {
+          Row(children: [Text('${i + 1}'.padLeft(2, '0'), style: context.text.label.copyWith(color: context.colors.muted)),
+            const SizedBox(width: 8), Expanded(child: Text(done.contains(i) ? '已创建' : excluded.contains(i) ? '已跳过' : '待创建', style: context.text.caption)),
+            Checkbox(semanticLabel: '创建第 ${i + 1} 条', value: !excluded.contains(i), onChanged: saving || done.contains(i) ? null : (value) => setState(() {
             if (value == true) { excluded.remove(i); } else { excluded.add(i); }
-          })), Expanded(child: Text('${rows[i].date.year}/${rows[i].date.month}/${rows[i].date.day}  ${rows[i].time}',
-            style: context.text.label.copyWith(color: context.colors.brand700))),
+          })),
             IconButton(tooltip: '编辑第 ${i + 1} 条', onPressed: saving || done.contains(i) ? null : () => edit(i), icon: const Icon(Icons.edit_outlined))]),
+          Text('${rows[i].date.year}/${rows[i].date.month}/${rows[i].date.day}  ${rows[i].time}',
+            style: context.text.label.copyWith(color: context.colors.brand700)),
+          const SizedBox(height: 8),
           Text(rows[i].text, style: context.text.title),
           const SizedBox(height: 8),
           Wrap(spacing: 8, runSpacing: 6, children: [MemoTag(rows[i].repeatLabel),
@@ -94,6 +104,7 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
       if (feedback != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(feedback!, style: context.text.caption.copyWith(color: context.colors.danger))),
       FilledButton(onPressed: saving || selected.isEmpty ? null : save,
         child: Text(saving ? '正在创建…' : '创建 ${selected.length} 条提醒')),
+      if (done.isEmpty) TextButton(onPressed: saving ? null : () => Navigator.pop(context, false), child: const Text('返回修改原话')),
       TextButton(onPressed: saving ? null : () => Navigator.pop(context, done.isNotEmpty), child: Text(done.isEmpty ? '取消' : '返回，保留已创建的提醒')),
     ]))),
   ));
