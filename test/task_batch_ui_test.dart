@@ -131,7 +131,7 @@ void main() {
     expect(find.text('已跳过'), findsOneWidget);
     await tester.tap(find.text('创建 1 条提醒')); await tester.pumpAndSettle();
     expect(saved.single['text'], '修改后的起床');
-    expect(Reminder.fromJson(saved.single).date, at.add(const Duration(hours: 1)));
+    expect(Reminder.fromJson(saved.single).date.millisecondsSinceEpoch, at.add(const Duration(hours: 1)).millisecondsSinceEpoch);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
   testWidgets('partial save retries only remaining rows and never saves when merely editing', (tester) async {
