@@ -52,11 +52,12 @@ class _SceneTemplatesPageState extends State<SceneTemplatesPage> {
     if (busy) return;
     setState(() => busy = true);
     try {
-      final initial = DateTime.now().add(const Duration(minutes: 5));
-      final start = await showMemoTimeSheet(context, initial: initial);
-      if (!mounted || start == null) return;
+      // A placeholder is used only to construct unsaved drafts; relative labels
+      // remain visible until the user explicitly chooses a start time.
+      final placeholder = DateTime.now();
       await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => TaskBatchPage(
-        drafts: scene.instantiate(start, widget.store), source: '${scene.name} · 可逐条调整时间与设置', store: widget.store, edit: widget.edit)));
+        drafts: scene.instantiate(placeholder, widget.store), source: scene.name, store: widget.store, edit: widget.edit,
+        sceneName: scene.name, sceneOffsets: scene.items.map((item) => item['offset'] as int).toList())));
     } finally { if (mounted) setState(() => busy = false); }
   }
   Future<void> saveCurrent() async {
@@ -94,7 +95,7 @@ class _SceneTemplatesPageState extends State<SceneTemplatesPage> {
     appBar: AppBar(title: const Text('场景模板')),
     body: ListView(padding: const EdgeInsets.all(20), children: [
       Text('把常用安排，变成一键开始。', style: context.text.title),
-      const SizedBox(height: 8), const MemoHint('先选择开始时间，再核对每条提醒。不会自动重复创建。'),
+      const SizedBox(height: 8), const MemoHint('先预览安排，再选择开始时间；逐条核对后才创建提醒。'),
       const SizedBox(height: 20),
       for (final scene in [...builtInScenes, ...custom]) Padding(padding: const EdgeInsets.only(bottom: 14), child: MemoCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

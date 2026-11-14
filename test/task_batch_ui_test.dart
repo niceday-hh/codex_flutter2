@@ -11,6 +11,7 @@ import 'package:timed_memo/task_batch.dart';
 import 'package:timed_memo/voice_parser.dart';
 import 'package:timed_memo/voice_flow.dart';
 import 'package:timed_memo/widgets/memo_tab_bar.dart';
+import 'package:timed_memo/widgets/memo_time_sheet.dart';
 import 'ui_preview_test.dart' show capture, previewKey, previewsEnabled;
 
 void main() {
@@ -53,6 +54,20 @@ void main() {
           MemoTokens.forAccent(accent, mode == ThemeMode.dark ? Brightness.dark : Brightness.light).colors.brand700);
         expect(tester.takeException(), isNull);
         if (previewsEnabled) await capture(tester, 'scenes-${accent.name}-${mode.name}');
+        await tester.ensureVisible(find.text('预览 3 条提醒')); await tester.pumpAndSettle();
+        await tester.tap(find.text('预览 3 条提醒')); await tester.pumpAndSettle();
+        expect(find.byType(MemoTimeSheet), findsNothing);
+        expect(find.text('未设置 · 选择时间'), findsOneWidget);
+        expect(find.text('30 分钟后'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        if (previewsEnabled) await capture(tester, 'scene-relative-${accent.name}-${mode.name}');
+        await tester.tap(find.byKey(const ValueKey('scene-start-time'))); await tester.pumpAndSettle();
+        expect(find.text('设置场景开始时间'), findsOneWidget);
+        await tester.tap(find.text('确定')); await tester.pumpAndSettle();
+        expect(find.text('未设置 · 选择时间'), findsNothing);
+        if (previewsEnabled) await capture(tester, 'scene-scheduled-${accent.name}-${mode.name}');
+        Navigator.of(tester.element(find.byType(TaskBatchPage))).pop(); await tester.pumpAndSettle();
+
         final at = DateTime.now().add(const Duration(days: 1));
         Navigator.of(sceneContext).push(MaterialPageRoute<void>(builder: (_) => TaskBatchPage(
           drafts: [for (var i = 0; i < 3; i++) ParsedVoice(Reminder(text: ['起床', '出门', '读书'][i], date: at.add(Duration(hours: i))), true, null, at)],
