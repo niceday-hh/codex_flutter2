@@ -91,6 +91,8 @@ void main() {
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
   testWidgets('single candidate is explicit and returning preserves source for correction', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
       if (call.method == 'getState') return '{"reminders":[],"defaults":{},"status":{}}';
       return null;
@@ -107,6 +109,8 @@ void main() {
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
   testWidgets('editing a row and excluding another only saves the selected revised draft', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final saved = <Map<String, dynamic>>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
       if (call.method == 'getState') return '{"reminders":[],"defaults":{},"status":{}}';
@@ -123,7 +127,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('编辑第 1 条')); await tester.pumpAndSettle();
     expect(find.text('修改后的起床'), findsOneWidget); expect(saved, isEmpty);
-    await tester.ensureVisible(find.byType(Checkbox).last); await tester.tap(find.byType(Checkbox).last); await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byType(Checkbox).last); await tester.pumpAndSettle(); await tester.tap(find.byType(Checkbox).last); await tester.pumpAndSettle();
     expect(find.text('已跳过'), findsOneWidget);
     await tester.tap(find.text('创建 1 条提醒')); await tester.pumpAndSettle();
     expect(saved.single['text'], '修改后的起床');
