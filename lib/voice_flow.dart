@@ -180,7 +180,7 @@ class VoiceFlow extends ChangeNotifier {
   // Mode commands are accepted only at the beginning of the memo, never inside
   // its body (e.g. a reminder to research “多任务模式”).
   String _takeModePrefix(String value) {
-    final match = RegExp(r'^\s*(?:(?:请)?(?:切换到|切换为|使用|采用|进入))?(单任务|多任务)\s*(?:模式)?[，,。；;：:\s]*').firstMatch(value);
+    final match = RegExp(r'^\s*(?:(?:请)?(?:切换到|切换为|使用|采用|进入))?(单任务|多任务)\s*(?:模式|(?=[，,。；;：:\s]|$))[，,。；;：:\s]*').firstMatch(value);
     if (match == null) return value.trim();
     _taskMode = match.group(1) == '多任务' ? VoiceTaskMode.multiple : VoiceTaskMode.single;
     return value.substring(match.end).trim();

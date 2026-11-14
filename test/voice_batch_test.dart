@@ -154,6 +154,8 @@ void main() {
     await flow.cancel(); flow.selectTaskMode(VoiceTaskMode.single);
     await flow.reviewText('明天九点提醒我研究多任务模式');
     expect(flow.taskMode, VoiceTaskMode.single); expect(flow.pending?.reminder.text, '研究多任务模式');
+    await flow.cancel(); await flow.reviewText('多任务管理教程');
+    expect(flow.taskMode, VoiceTaskMode.single); expect(flow.text, '多任务管理教程');
     flow.dispose(); await tester.pump();
   });
 
