@@ -95,6 +95,7 @@ public final class MainActivity extends FlutterActivity {
     private MediaPlayer speechPreview;
     private final VitsSynthesizer synthesizer = new VitsSynthesizer();
     private AudioRecord recorder;
+    private boolean recordingPermissionPending;
     private Thread audioThread;
     private volatile boolean recording;
     private volatile String audioError;
@@ -208,6 +209,26 @@ public final class MainActivity extends FlutterActivity {
                     }
                     case "stopSpeechPreview" -> { stopSpeechPreview(); result.success(null); }
                     case "filesDir" -> result.success(getFilesDir().getAbsolutePath());
+                    case "getSceneTemplates" -> result.success(getSharedPreferences("memo-scenes", MODE_PRIVATE).getString("items", "[]"));
+                    case "saveSceneTemplates" -> {
+                        String raw = (String) call.arguments;
+                        if (raw == null || raw.length() > 262144) throw new IllegalArgumentException("模板过大");
+                        org.json.JSONArray scenes = new org.json.JSONArray(raw);
+                        if (scenes.length() > 20) throw new IllegalArgumentException("最多保存20个模板");
+                        for (int i = 0; i < scenes.length(); i++) {
+                            org.json.JSONObject scene = scenes.getJSONObject(i);
+                            String name = scene.getString("name").trim();
+                            org.json.JSONArray items = scene.getJSONArray("items");
+                            if (name.isEmpty() || name.length() > 30 || items.length() < 1 || items.length() > 10) throw new IllegalArgumentException("模板格式无效");
+                            for (int j = 0; j < items.length(); j++) {
+                                org.json.JSONObject item = items.getJSONObject(j);
+                                if (item.getString("text").trim().isEmpty() || item.getLong("offset") < 0 || item.getLong("offset") > 5256000) throw new IllegalArgumentException("模板时间或内容无效");
+                            }
+                        }
+                        if (!getSharedPreferences("memo-scenes", MODE_PRIVATE).edit().putString("items", raw).commit()) throw new IllegalStateException("模板未能保存，请重试");
+                        result.success(null);
+                    }
+                    case "reserveReminderId" -> result.success(store.reserveReminderId());
                     case "save" -> { store.save((String) call.arguments); result.success(null); }
                     case "saveDefaults" -> { store.defaults((String) call.arguments); result.success(null); }
                     case "delete" -> { store.delete((Integer) call.arguments); result.success(null); }
@@ -262,11 +283,17 @@ public final class MainActivity extends FlutterActivity {
                         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                             if (permissionResult != null) throw new IllegalStateException("权限请求处理中");
                             permissionResult = result;
+                            recordingPermissionPending = true;
                             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 102);
                         } else { startRecording(); result.success(null); }
                     }
                     case "stopRecording" -> result.success(stopRecording(false));
-                    case "cancelRecording" -> { stopRecording(true); result.success(null); }
+                    case "cancelRecording" -> {
+                        if (permissionResult != null && recordingPermissionPending) {
+                            permissionResult.error("CANCELLED", "录音已取消", null); permissionResult = null; recordingPermissionPending = false;
+                        }
+                        stopRecording(true); result.success(null);
+                    }
                     case "initialReminderId" -> result.success(getIntent().getIntExtra("reminderId", 0));
                     case "restore" -> { store.restore(false); result.success(null); }
                     case "testReminder" -> { result.success(store.createSelfTest(15)); requestSpeechPreparation(); }
@@ -333,6 +360,7 @@ public final class MainActivity extends FlutterActivity {
             boolean granted = grants.length > 0 && grants[0] == PackageManager.PERMISSION_GRANTED;
             try {
                 if (request == 102) {
+                    recordingPermissionPending = false;
                     if (!granted) throw new IllegalStateException("请在系统设置中允许麦克风权限");
                     startRecording(); result.success(null);
                 } else result.success(granted);
@@ -425,7 +453,7 @@ public final class MainActivity extends FlutterActivity {
             recorder.release(); recorder = null;
             throw new IOException("麦克风初始化失败，可能被其他应用占用");
         }
-        audioFile = new File(getCacheDir(), "memo-recording.pcm");
+        audioFile = File.createTempFile("memo-recording-", ".pcm", getCacheDir());
         FileOutputStream output = new FileOutputStream(audioFile);
         audioError = null;
         try { recorder.startRecording(); }

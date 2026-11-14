@@ -41,6 +41,13 @@ class OfflineVoiceCapture implements VoiceCapture {
   Future<bool>? _modelReady;
   DateTime _started = DateTime.now();
   int _generation = 0, _leaseTicket = 0, _recordTicket = 0;
+  Completer<void> _cancelled = Completer<void>();
+  void interrupt() {
+    if (!_cancelled.isCompleted) _cancelled.complete();
+    _accepting = false; _recordTicket++;
+  }
+  Future<T> _untilCancelled<T>(Future<T> work, Future<void> cancelled) =>
+    Future.any([work, cancelled.then<T>((_) => throw StateError('录音已取消'))]);
   @override Future<void> open({bool waitForModel = true}) async {
     if (_modelReady == null) {
       final ticket = ++_leaseTicket;
@@ -79,7 +86,10 @@ class OfflineVoiceCapture implements VoiceCapture {
     }
   }
   @override Future<void> start(double silence, void Function(int) endpoint, void Function(Object) level) async {
+    final before = _recordTicket;
     await _unsubscribe();
+    if (_recordTicket != before + 1) return;
+    _cancelled = Completer<void>();
     final ticket = _recordTicket;
     _accepting = true;
     _vad = session.vadEvents.stream.listen((event) {
@@ -100,13 +110,13 @@ class OfflineVoiceCapture implements VoiceCapture {
       onError: (Object _) {});
     unawaited(_prepareDetector(silence, ticket, endpoint));
     _started = DateTime.now();
-    await native.invokeMethod<void>('startRecording');
+    await _untilCancelled(native.invokeMethod<void>('startRecording'), _cancelled.future);
     _started = DateTime.now();
     // A visible assistant can silence an otherwise successfully started recorder.
     for (var i = 0; i < 40; i++) {
       if (!_current(ticket)) return;
       if (await native.invokeMethod<bool>('microphoneReady') == true) return;
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await _untilCancelled(Future<void>.delayed(const Duration(milliseconds: 100)), _cancelled.future);
     }
     throw StateError('麦克风暂不可用，请先关闭 YOYO 面板或其它录音应用后重试');
   }
@@ -119,18 +129,21 @@ class OfflineVoiceCapture implements VoiceCapture {
   }
   @override Future<CapturedVoice> stop({int? endSample}) async {
     final ended = DateTime.now();
+    final cancelled = _cancelled.future;
+    final ready = _modelReady;
     await _unsubscribe();
     final path = await native.invokeMethod<String>('stopRecording');
     if (path == null) throw StateError('没有录音，请重试');
     final reference = endSample != null && endSample > 0
       ? _started.add(Duration(microseconds: (endSample * 1000000 / 16000).round())) : ended;
     try {
-      if (_modelReady == null || !await _modelReady!) throw StateError('语音准备已取消');
+      if (ready == null || !await _untilCancelled(ready, cancelled)) throw StateError('语音准备已取消');
       final text = await session.transcribe(path, maxSamples: endSample);
       return CapturedVoice(text, reference.isAfter(ended) ? ended : reference);
     } catch (_) { await discardRecording(path); rethrow; }
   }
   @override Future<void> cancel() async {
+    interrupt();
     await _unsubscribe();
     await native.invokeMethod<void>('cancelRecording');
   }
@@ -153,6 +166,7 @@ class VoiceFlow extends ChangeNotifier {
   final VoidCallback openVoicePage;
   final Future<void> Function() onSaved;
   final DateTime Function() now;
+  final Future<void> Function(String, List<ParsedVoice>)? onBatch;
   final meter = RecordingMeter();
   VoicePhase phase = VoicePhase.idle;
   ParsedVoice? pending;
@@ -169,13 +183,18 @@ class VoiceFlow extends ChangeNotifier {
   int get secondsLeft => countdown.value;
   set secondsLeft(int value) => countdown.value = value;
   int _epoch = 0;
+  Completer<void> _interrupted = Completer<void>();
+  void _interruptWait() {
+    if (!_interrupted.isCompleted) _interrupted.complete();
+    _interrupted = Completer<void>();
+  }
   VoicePhase _captureMode = VoicePhase.idle;
   bool _disposed = false;
   Timer? _limit, _ticker;
   DateTime? _confirmDeadline, _commandDeadline;
   Future<void> _tail = Future.value();
   VoiceFlow({required this.capture, required this.store, required this.openVoicePage,
-    required this.onSaved, DateTime Function()? clock}) : now = clock ?? DateTime.now;
+    required this.onSaved, this.onBatch, DateTime Function()? clock}) : now = clock ?? DateTime.now;
   bool get capturing => phase == VoicePhase.commands || phase == VoicePhase.recording || phase == VoicePhase.confirming;
   bool get busy => phase == VoicePhase.preparing || phase == VoicePhase.processing || phase == VoicePhase.saving;
   bool get active => phase != VoicePhase.idle;
@@ -198,15 +217,17 @@ class VoiceFlow extends ChangeNotifier {
   Future<void> startCommands() => _start(VoicePhase.commands);
   Future<void> startRecording() => _start(VoicePhase.recording);
   Future<void> _start(VoicePhase mode) {
+    if (capture is OfflineVoiceCapture) (capture as OfflineVoiceCapture).interrupt();
+    _interruptWait();
     final ticket = ++_epoch;
     _stopTimers(); pending = null; _confirmDeadline = null; _commandDeadline = null;
     phase = VoicePhase.preparing;
-    message = mode == VoicePhase.recording ? '正在打开麦克风…' : '正在准备麦克风和离线模型…'; _notify();
+    message = mode == VoicePhase.recording ? '正在打开麦克风…' : '正在打开麦克风…'; _notify();
     return _queue(() async {
       try {
         await capture.cancel();
         if (!_current(ticket)) return;
-        await capture.open(waitForModel: mode != VoicePhase.recording);
+        await capture.open(waitForModel: false);
         if (!_current(ticket)) return;
         if (mode == VoicePhase.recording) { text = ''; reference = null; openVoicePage(); }
         await _listen(mode, ticket);
@@ -247,11 +268,13 @@ class VoiceFlow extends ChangeNotifier {
     if (!capturing && phase != VoicePhase.preparing) return Future.value();
     final mode = pending != null ? VoicePhase.confirming : _captureMode;
     final ticket = _epoch;
+    final interrupted = _interrupted.future;
     _stopTimers(); phase = VoicePhase.processing; message = '正在本地识别…'; _notify();
     return _queue(() async {
       try {
         if (!_current(ticket)) return;
-        final result = await capture.stop(endSample: endSample);
+        final result = await Future.any([capture.stop(endSample: endSample),
+          interrupted.then<CapturedVoice>((_) => throw StateError('录音已取消'))]);
         if (!_current(ticket)) return;
         final utterance = result.text.trim();
         if (mode == VoicePhase.commands) {
@@ -287,11 +310,19 @@ class VoiceFlow extends ChangeNotifier {
     final ticket = ++_epoch;
     text = value.trim(); reference ??= now();
     return _queue(() async {
-      try { await capture.open(); if (_current(ticket)) await _prepareConfirmation(ticket); }
+      try { await capture.open(waitForModel: false); if (_current(ticket)) await _prepareConfirmation(ticket); }
       catch (e) { await _failure(e, ticket); }
     });
   }
   Future<void> _prepareConfirmation(int ticket) async {
+    final batch = parseVoiceBatch(text, now: reference ?? now(), defaults: store.draft);
+    if (batch.length > 1 && onBatch != null) {
+      await capture.cancel(); capture.release();
+      if (!_current(ticket)) return;
+      phase = VoicePhase.idle; pending = null; _notify();
+      unawaited(onBatch!(text, batch));
+      return;
+    }
     pending = parseVoice(text, now: reference ?? now(), defaults: store.draft());
     _confirmDeadline = now().add(const Duration(seconds: 20));
     phase = VoicePhase.preparing; message = '请核对日期、时间和内容'; _notify();
@@ -335,6 +366,8 @@ class VoiceFlow extends ChangeNotifier {
     }
   }
   Future<void> pause({bool keepDraft = true, String notice = '聆听已暂停，麦克风已关闭'}) {
+    if (capture is OfflineVoiceCapture) (capture as OfflineVoiceCapture).interrupt();
+    _interruptWait();
     ++_epoch; _stopTimers(); phase = VoicePhase.idle; message = notice;
     if (!keepDraft) pending = null;
     _notify();
@@ -351,6 +384,8 @@ class VoiceFlow extends ChangeNotifier {
     await _closeInside(niceError(error));
   }
   @override void dispose() {
+    _interruptWait();
+    if (capture is OfflineVoiceCapture) (capture as OfflineVoiceCapture).interrupt();
     _disposed = true; ++_epoch; _stopTimers();
     unawaited(_queue(() async { try { await capture.cancel(); } finally { capture.release(); } }));
     meter.dispose(); countdown.dispose(); super.dispose();

@@ -231,6 +231,16 @@ public final class ReminderEngine {
         BackupCodec.validateStyle(values);
         return ensureChannel(values);
     }
+    /** Reserve a stable identity before a batch draft's first save. Retrying a
+     * partially persisted save updates that identity rather than duplicating it. */
+    public synchronized int reserveReminderId() throws JSONException {
+        int id = prefs.getInt("nextId", 1);
+        JSONArray rows = read();
+        for (int i = 0; i < rows.length(); i++) id = Math.max(id, rows.getJSONObject(i).getInt("id") + 1);
+        if (id <= 0 || id == Integer.MAX_VALUE) throw new IllegalStateException("提醒编号已耗尽");
+        if (!prefs.edit().putInt("nextId", id + 1).commit()) throw new IllegalStateException("无法保存提醒编号");
+        return id;
+    }
     public void save(String json) throws JSONException {
         JSONObject r = new JSONObject(json);
         r.remove("notificationChannelId"); r.remove("notificationStyle"); r.remove("historyScheduledAt");
