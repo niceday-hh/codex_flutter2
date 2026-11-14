@@ -143,7 +143,7 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
             if (value == true) { excluded.remove(i); } else { excluded.add(i); }
           })),
             IconButton(tooltip: '编辑第 ${i + 1} 条', onPressed: saving || choosingStart || needsStart || done.contains(i) ? null : () => edit(i), icon: const Icon(Icons.edit_outlined))]),
-          if (isScene && !needsStart) Text(relativeLabel(i), style: context.text.caption.copyWith(color: context.colors.muted)),
+          if (isScene && !needsStart) Text(customTimes.contains(i) ? '单独安排' : relativeLabel(i), style: context.text.caption.copyWith(color: context.colors.muted)),
           Text(needsStart ? relativeLabel(i) : '${rows[i].date.year}/${rows[i].date.month}/${rows[i].date.day}  ${rows[i].time}',
             style: context.text.label.copyWith(color: context.colors.brand700)),
           const SizedBox(height: 8),

@@ -48,7 +48,7 @@ void main() {
     expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '请先选择开始时间')).onPressed, isNull);
     expect(saved, isEmpty);
     await tap(tester, find.byKey(const ValueKey('scene-start-time')));
-    await tap(tester, find.text('取消'));
+    await tap(tester, find.descendant(of: find.byType(MemoTimeSheet), matching: find.text('取消')));
     expect(find.byType(TaskBatchPage), findsOneWidget);
     expect(find.text('未设置 · 选择时间'), findsOneWidget); expect(saved, isEmpty);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
@@ -96,7 +96,7 @@ void main() {
     expect(tester.takeException(), isNull);
     await tap(tester, find.byKey(const ValueKey('scene-start-time')));
     expect(find.text('设置场景开始时间'), findsOneWidget); expect(tester.takeException(), isNull);
-    await tap(tester, find.text('取消'));
+    await tap(tester, find.descendant(of: find.byType(MemoTimeSheet), matching: find.text('取消')));
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
 }
