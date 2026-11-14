@@ -49,6 +49,11 @@ void main() {
     expect(rows.last.reminder.date, DateTime(2030, 1, 2, 11));
     expect(parse('明天九点阅读“十点开门').length, 1);
   });
+  test('short day aliases do not rewrite words in the reminder body', () {
+    final rows = parse('明早九点整理今晚的资料十点学习');
+    expect(rows.map((p) => p.reminder.text), ['整理今晚的资料', '学习']);
+    expect(rows.last.reminder.date, DateTime(2030, 1, 2, 10));
+  });
   test('missing bodies and excessive candidates stay reviewable and cannot be silently dropped', () {
     final rows = parse('明天九点，十点学习');
     expect(rows.length, 2); expect(rows.first.reminder.text, isEmpty);
