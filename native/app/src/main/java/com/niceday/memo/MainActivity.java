@@ -104,8 +104,9 @@ public final class MainActivity extends FlutterActivity {
     @Override public void onCreate(Bundle state) {
         if (!capturedLaunch) { new ReminderEngine(this).captureSnapshot("launchSnapshot"); capturedLaunch = true; }
         super.onCreate(state);
-        // Prevent reminder text leaking through task-switcher previews or screenshots.
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        // Normal app pages may be captured. Reminder dialogs and overlays keep
+        // their own secure windows, independently of this Activity.
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
     }
     private EventChannel.EventSink pcmSink;
     @Override public void configureFlutterEngine(FlutterEngine engine) {

@@ -15,17 +15,31 @@ class TaskBatchPage extends StatefulWidget {
   final MemoStore store;
   final EditBatchDraft edit;
   final bool voiceSource;
-  const TaskBatchPage({super.key, required this.drafts, required this.source, required this.store, required this.edit, this.voiceSource = false});
+  final String? sceneName;
+  final List<int>? sceneOffsets;
+  const TaskBatchPage({super.key, required this.drafts, required this.source, required this.store, required this.edit,
+    this.voiceSource = false, this.sceneName, this.sceneOffsets})
+    : assert((sceneName == null) == (sceneOffsets == null)),
+      assert(sceneOffsets == null || sceneOffsets.length == drafts.length);
   @override State<TaskBatchPage> createState() => _TaskBatchPageState();
 }
 class _TaskBatchPageState extends State<TaskBatchPage> {
   late final rows = widget.drafts.map((p) => p.reminder).toList();
   late final warnings = widget.drafts.map((p) => p.warning).toList();
   final done = <int>{}, excluded = <int>{};
-  bool saving = false;
+  final customTimes = <int>{};
+  DateTime? sceneStart;
+  bool saving = false, choosingStart = false;
+  bool get isScene => widget.sceneOffsets != null;
+  bool get needsStart => isScene && sceneStart == null;
+  String relativeLabel(int i) {
+    final offset = widget.sceneOffsets![i];
+    return offset == 0 ? '开始时' : '$offset 分钟后';
+  }
   String? feedback;
   List<int> get selected => [for (var i = 0; i < rows.length; i++) if (!done.contains(i) && !excluded.contains(i)) i];
   String? error(int i) {
+    if (needsStart) return '请先选择开始时间';
     final r = rows[i];
     if (!r.dateConfirmed || !r.timeConfirmed) return '请确认日期与时间';
     if (r.text.trim().isEmpty) return '请填写提醒内容';
@@ -33,13 +47,39 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
     return warnings[i];
   }
   Future<void> edit(int i) async {
+    if (saving || choosingStart || needsStart || done.contains(i)) return;
     final copy = Reminder.fromJson(rows[i].toJson())
       ..dateConfirmed = rows[i].dateConfirmed ..timeConfirmed = rows[i].timeConfirmed;
     final updated = await widget.edit(context, copy);
-    if (updated != null && mounted) setState(() { rows[i] = updated; warnings[i] = null; feedback = null; });
+    if (updated != null && mounted) {
+      setState(() {
+        if (isScene && updated.date.millisecondsSinceEpoch != rows[i].date.millisecondsSinceEpoch) { customTimes.add(i); }
+        rows[i] = updated; warnings[i] = null; feedback = null;
+      });
+    }
+  }
+  Future<void> chooseStart() async {
+    if (!isScene || saving || choosingStart || done.isNotEmpty) return;
+    setState(() => choosingStart = true);
+    try {
+      final now = DateTime.now();
+      final suggested = now.add(const Duration(minutes: 5));
+      final initial = sceneStart != null && sceneStart!.isAfter(now) ? sceneStart!
+        : DateTime(suggested.year, suggested.month, suggested.day, suggested.hour, suggested.minute);
+      final start = await showMemoTimeSheet(context, initial: initial, title: '设置场景开始时间');
+      if (!mounted || start == null) return;
+      setState(() {
+        sceneStart = start; feedback = null;
+        for (var i = 0; i < rows.length; i++) {
+          if (customTimes.contains(i) || done.contains(i)) { continue; }
+          rows[i].date = start.add(Duration(minutes: widget.sceneOffsets![i]));
+          rows[i].dateConfirmed = true; rows[i].timeConfirmed = true;
+        }
+      });
+    } finally { if (mounted) setState(() => choosingStart = false); }
   }
   Future<void> save() async {
-    if (saving || selected.isEmpty) return;
+    if (saving || choosingStart || needsStart || selected.isEmpty) return;
     final selection = selected;
     if (selection.any((i) => error(i) != null)) {
       setState(() => feedback = '请先编辑标注的提醒，或取消勾选。'); return;
@@ -68,14 +108,29 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
   }
   void unawaitedPrepare() { speech.preparePending().catchError((Object _) {}); }
   @override Widget build(BuildContext context) => PopScope(canPop: !saving, child: Scaffold(
-    appBar: AppBar(title: Text('核对 ${rows.length} 条提醒')),
+    appBar: AppBar(title: Text(widget.sceneName ?? '核对 ${rows.length} 条提醒', maxLines: 1, overflow: TextOverflow.ellipsis)),
     body: ListView(padding: const EdgeInsets.all(20), children: [
-      Text(widget.voiceSource && rows.length == 1 ? '仅识别到 1 条，请核对' : '逐条核对后，再一起创建', style: context.text.title),
+      Text(needsStart ? '先看安排，再选择开始时间'
+        : widget.voiceSource && rows.length == 1 ? '仅识别到 1 条，请核对' : '逐条核对后，再一起创建', style: context.text.title),
       const SizedBox(height: 8),
-      Text(widget.voiceSource && rows.length == 1 ? '如需多条，请返回修改原话，为每件事补充时间。' : '点铅笔单独调整时间、正文和提醒方式；取消勾选即可跳过。',
+      Text(needsStart ? '共 ${rows.length} 条提醒。先预览相对安排，选择开始时间后可逐条编辑。'
+        : widget.voiceSource && rows.length == 1 ? '如需多条，请返回修改原话，为每件事补充时间。' : '点铅笔单独调整时间、正文和提醒方式；取消勾选即可跳过。',
         style: context.text.caption.copyWith(color: context.colors.muted)),
       const SizedBox(height: 12),
-      ExpansionTile(key: const ValueKey('batch-source'), tilePadding: EdgeInsets.zero,
+      if (isScene) ...[
+        MemoCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          ListTile(key: const ValueKey('scene-start-time'), contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.schedule_outlined, color: context.colors.brand700),
+            title: Text('开始时间', style: context.text.label),
+            subtitle: Text(sceneStart == null ? '未设置 · 选择时间' : memoTimeLabel(sceneStart!),
+              style: context.text.body.copyWith(color: context.colors.brand700)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: saving || choosingStart || done.isNotEmpty ? null : chooseStart),
+          Text(done.isNotEmpty ? '已有提醒创建，可单独调整剩余条目。'
+            : needsStart ? '选择后将显示每条提醒的实际日期和时刻。' : '更改开始时间时，已单独调整的时间会保留。',
+            style: context.text.caption.copyWith(color: context.colors.muted)),
+        ])),
+      ] else ExpansionTile(key: const ValueKey('batch-source'), tilePadding: EdgeInsets.zero,
         title: Text('查看原始内容', style: context.text.label),
         children: [Padding(padding: const EdgeInsets.only(bottom: 12), child: Align(alignment: Alignment.centerLeft,
           child: Text(widget.source, style: context.text.body)))]),
@@ -83,28 +138,30 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
       for (var i = 0; i < rows.length; i++) Padding(padding: const EdgeInsets.only(bottom: 12), child: MemoCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [Text('${i + 1}'.padLeft(2, '0'), style: context.text.label.copyWith(color: context.colors.muted)),
-            const SizedBox(width: 8), Expanded(child: Text(done.contains(i) ? '已创建' : excluded.contains(i) ? '已跳过' : '待创建', style: context.text.caption)),
+            const SizedBox(width: 8), Expanded(child: Text(done.contains(i) ? '已创建' : excluded.contains(i) ? '已跳过' : needsStart ? '待设时间' : '待创建', style: context.text.caption)),
             Checkbox(semanticLabel: '创建第 ${i + 1} 条', value: !excluded.contains(i), onChanged: saving || done.contains(i) ? null : (value) => setState(() {
             if (value == true) { excluded.remove(i); } else { excluded.add(i); }
           })),
-            IconButton(tooltip: '编辑第 ${i + 1} 条', onPressed: saving || done.contains(i) ? null : () => edit(i), icon: const Icon(Icons.edit_outlined))]),
-          Text('${rows[i].date.year}/${rows[i].date.month}/${rows[i].date.day}  ${rows[i].time}',
+            IconButton(tooltip: '编辑第 ${i + 1} 条', onPressed: saving || choosingStart || needsStart || done.contains(i) ? null : () => edit(i), icon: const Icon(Icons.edit_outlined))]),
+          if (isScene && !needsStart) Text(customTimes.contains(i) ? '单独安排' : relativeLabel(i), style: context.text.caption.copyWith(color: context.colors.muted)),
+          Text(needsStart ? relativeLabel(i) : '${rows[i].date.year}/${rows[i].date.month}/${rows[i].date.day}  ${rows[i].time}',
             style: context.text.label.copyWith(color: context.colors.brand700)),
           const SizedBox(height: 8),
           Text(rows[i].text, style: context.text.title),
           const SizedBox(height: 8),
           Wrap(spacing: 8, runSpacing: 6, children: [MemoTag(rows[i].repeatLabel),
             MemoTag(rows[i].speechMode == 'on' ? '语音开启' : rows[i].speechMode == 'off' ? '语音关闭' : '语音跟随默认'),
+            if (customTimes.contains(i)) const MemoTag('时间已单独调整'),
             if (done.contains(i)) const MemoTag('已创建')]),
-          if (!done.contains(i) && error(i) != null) Padding(padding: const EdgeInsets.only(top: 8),
+          if (!needsStart && !done.contains(i) && error(i) != null) Padding(padding: const EdgeInsets.only(top: 8),
             child: Text(error(i)!, style: context.text.caption.copyWith(color: context.colors.danger))),
         ]))),
     ]),
     bottomNavigationBar: SafeArea(child: Padding(padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       if (feedback != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(feedback!, style: context.text.caption.copyWith(color: context.colors.danger))),
-      FilledButton(onPressed: saving || selected.isEmpty ? null : save,
-        child: Text(saving ? '正在创建…' : '创建 ${selected.length} 条提醒')),
+      FilledButton(onPressed: saving || choosingStart || needsStart || selected.isEmpty ? null : save,
+        child: Text(saving ? '正在创建…' : needsStart ? '请先选择开始时间' : '创建 ${selected.length} 条提醒')),
       if (widget.voiceSource && done.isEmpty) TextButton(onPressed: saving ? null : () => Navigator.pop(context, false), child: const Text('返回修改原话')),
       TextButton(onPressed: saving ? null : () => Navigator.pop(context, done.isNotEmpty), child: Text(done.isEmpty ? '取消' : '返回，保留已创建的提醒')),
     ]))),
