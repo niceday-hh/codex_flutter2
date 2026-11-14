@@ -1373,7 +1373,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
         value: store.defaults['handsFree'] as bool? ?? false,
         onChanged: (v) async { store.defaults['handsFree'] = v; await persistDefaults(); }),
     ]),
-    settingsHint('说“开始录音”后进入正式录入。切换Tab不会重新开麦，编辑和待确认内容不被打断。'),
+    settingsHint('可连续说“开始录音，多任务模式，时间和事情”；未指定模式时按单任务录入。切换Tab不会重新开麦。'),
     section('录音', ''), settingsGroup([
       SwitchListTile(key: settingKey('静音后自动结束'), title: const Text('静音后自动结束'),
         subtitle: const Text('说完后自动进入确认'),

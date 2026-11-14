@@ -9,6 +9,7 @@ import 'app_error.dart';
 import 'voice_parser.dart';
 
 enum VoicePhase { idle, preparing, commands, recording, processing, confirming, saving }
+enum VoiceTaskMode { single, multiple }
 
 class CapturedVoice {
   final String text;
@@ -169,6 +170,21 @@ class VoiceFlow extends ChangeNotifier {
   final Future<void> Function(String, List<ParsedVoice>)? onBatch;
   final meter = RecordingMeter();
   VoicePhase phase = VoicePhase.idle;
+  VoiceTaskMode _taskMode = VoiceTaskMode.single;
+  VoiceTaskMode get taskMode => _taskMode;
+  bool get canSelectTaskMode => !active && pending == null;
+  void selectTaskMode(VoiceTaskMode mode) {
+    if (!canSelectTaskMode || mode == _taskMode) return;
+    _taskMode = mode; _notify();
+  }
+  // Mode commands are accepted only at the beginning of the memo, never inside
+  // its body (e.g. a reminder to research “多任务模式”).
+  String _takeModePrefix(String value) {
+    final match = RegExp(r'^\s*(?:(?:请)?(?:切换到|切换为|使用|采用|进入))?(单任务|多任务)\s*(?:模式|(?=[，,。；;：:\s]|$))[，,。；;：:\s]*').firstMatch(value);
+    if (match == null) return value.trim();
+    _taskMode = match.group(1) == '多任务' ? VoiceTaskMode.multiple : VoiceTaskMode.single;
+    return value.substring(match.end).trim();
+  }
   ParsedVoice? pending;
   String text = '', message = '';
   DateTime? reference;
@@ -214,7 +230,11 @@ class VoiceFlow extends ChangeNotifier {
       elapsed++; if (secondsLeft > 0) secondsLeft--;
     });
   }
-  Future<void> startCommands() => _start(VoicePhase.commands);
+  Future<void> startCommands() {
+    // Every external/home entry starts a fresh, safe single-task session.
+    _taskMode = VoiceTaskMode.single;
+    return _start(VoicePhase.commands);
+  }
   Future<void> startRecording() => _start(VoicePhase.recording);
   Future<void> _start(VoicePhase mode) {
     if (capture is OfflineVoiceCapture) (capture as OfflineVoiceCapture).interrupt();
@@ -249,7 +269,7 @@ class VoiceFlow extends ChangeNotifier {
     phase = mode; meter.start();
     if (mode == VoicePhase.commands) _commandDeadline ??= now().add(const Duration(seconds: 15));
     message = switch (mode) {
-      VoicePhase.commands => '正在预听，可说“开始录音”',
+      VoicePhase.commands => '可连续说“开始录音，多任务模式，时间和事情”',
       VoicePhase.confirming => '请说“确认”“重新录音”或“取消”',
       _ => '正在录音；连续安静后自动识别',
     };
@@ -285,7 +305,7 @@ class VoiceFlow extends ChangeNotifier {
             return;
           }
           openVoicePage();
-          final remainder = utterance.substring(start.end).trim();
+          final remainder = _takeModePrefix(utterance.substring(start.end));
           if (remainder.isNotEmpty) {
             text = remainder; reference = result.reference;
             await _prepareConfirmation(ticket);
@@ -298,8 +318,11 @@ class VoiceFlow extends ChangeNotifier {
           } else if (isVoiceCancel(utterance)) { pending = null; await _closeInside('已取消创建'); }
           else { message = '请说“确认”“重新录音”或“取消”'; await _listen(VoicePhase.confirming, ticket); }
         } else {
-          text = utterance; reference = result.reference;
-          if (utterance.isEmpty) { await _closeInside('没有听清，请重新录音'); return; }
+          text = _takeModePrefix(utterance); reference = result.reference;
+          if (text.isEmpty) {
+            if (utterance.isNotEmpty) { await _listen(VoicePhase.recording, ticket); return; }
+            await _closeInside('没有听清，请重新录音'); return;
+          }
           await _prepareConfirmation(ticket);
         }
       } catch (e) { await _failure(e, ticket); }
@@ -308,17 +331,20 @@ class VoiceFlow extends ChangeNotifier {
   Future<void> reviewText(String value) {
     if (busy || capturing) return Future.value();
     final ticket = ++_epoch;
-    text = value.trim(); reference ??= now();
+    text = _takeModePrefix(value); reference ??= now();
     return _queue(() async {
       try { await capture.open(waitForModel: false); if (_current(ticket)) await _prepareConfirmation(ticket); }
       catch (e) { await _failure(e, ticket); }
     });
   }
   Future<void> _prepareConfirmation(int ticket) async {
-    final batch = parseVoiceBatch(text, now: reference ?? now(), defaults: store.draft);
-    if (batch.length > 1 && onBatch != null) {
+    if (_taskMode == VoiceTaskMode.multiple) {
+      final batch = parseVoiceBatch(text, now: reference ?? now(), defaults: store.draft);
       await capture.cancel(); capture.release();
       if (!_current(ticket)) return;
+      if (onBatch == null) {
+        phase = VoicePhase.idle; pending = null; message = '多任务确认暂不可用，请重试'; _notify(); return;
+      }
       phase = VoicePhase.idle; pending = null; _notify();
       unawaited(onBatch!(text, batch));
       return;

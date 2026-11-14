@@ -9,6 +9,7 @@ import 'package:timed_memo/design_tokens.dart';
 import 'package:timed_memo/reminder.dart';
 import 'package:timed_memo/task_batch.dart';
 import 'package:timed_memo/voice_parser.dart';
+import 'package:timed_memo/voice_flow.dart';
 import 'package:timed_memo/widgets/memo_tab_bar.dart';
 import 'ui_preview_test.dart' show capture, previewKey, previewsEnabled;
 
@@ -35,6 +36,15 @@ void main() {
           return null;
         });
         await tester.pumpWidget(const RepaintBoundary(key: previewKey, child: MemoApp())); await tester.pumpAndSettle();
+        await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('语音'))); await tester.pumpAndSettle();
+        expect(tester.widget<SegmentedButton<VoiceTaskMode>>(find.byKey(const ValueKey('voice-task-mode'))).selected, {VoiceTaskMode.single});
+        if (previewsEnabled) await capture(tester, 'voice-single-${accent.name}-${mode.name}');
+        await tester.tap(find.text('多任务')); await tester.pumpAndSettle();
+        expect(tester.widget<SegmentedButton<VoiceTaskMode>>(find.byKey(const ValueKey('voice-task-mode'))).selected, {VoiceTaskMode.multiple});
+        expect(find.text('核对多条提醒'), findsOneWidget);
+        if (previewsEnabled) await capture(tester, 'voice-multiple-${accent.name}-${mode.name}');
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('备忘录'))); await tester.pumpAndSettle();
         await tester.tap(find.text('场景模板')); await tester.pumpAndSettle();
         expect(find.text('晚间学习'), findsOneWidget);
         final sceneContext = tester.element(find.text('晚间学习'));
@@ -66,17 +76,62 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
     await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('语音'))); await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '明天七点起床，八点出门');
+    await tester.tap(find.text('多任务')); await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '明天九点起床十点学习');
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('确认并设置提醒'));
-    await tester.tap(find.text('确认并设置提醒')); await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('核对多条提醒'));
+    await tester.tap(find.text('核对多条提醒')); await tester.pumpAndSettle();
     expect(find.text('核对 2 条提醒'), findsOneWidget); expect(saves, 0);
     await tester.tap(find.text('创建 2 条提醒')); await tester.pumpAndSettle();
     expect(saves, 2); expect(find.text('核对 2 条提醒'), findsNothing);
     expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, isEmpty);
-    final confirm = tester.widget<FilledButton>(find.widgetWithText(FilledButton, '确认并设置提醒'));
+    final confirm = tester.widget<FilledButton>(find.widgetWithText(FilledButton, '核对多条提醒'));
     expect(confirm.onPressed, isNull);
     expect(find.text('提醒已创建'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  });
+  testWidgets('single candidate is explicit and returning preserves source for correction', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+      if (call.method == 'getState') return '{"reminders":[],"defaults":{},"status":{}}';
+      return null;
+    });
+    await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('语音'))); await tester.pumpAndSettle();
+    await tester.tap(find.text('多任务')); await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '明天九点起床'); await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('核对多条提醒')); await tester.tap(find.text('核对多条提醒')); await tester.pumpAndSettle();
+    expect(find.text('仅识别到 1 条，请核对'), findsOneWidget);
+    await tester.tap(find.text('返回修改原话')); await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, '明天九点起床');
+    expect(tester.widget<SegmentedButton<VoiceTaskMode>>(find.byKey(const ValueKey('voice-task-mode'))).selected, {VoiceTaskMode.multiple});
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  });
+  testWidgets('editing a row and excluding another only saves the selected revised draft', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final saved = <Map<String, dynamic>>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+      if (call.method == 'getState') return '{"reminders":[],"defaults":{},"status":{}}';
+      if (call.method == 'reserveReminderId') return 42;
+      if (call.method == 'save') saved.add(jsonDecode(call.arguments as String) as Map<String, dynamic>);
+      return null;
+    });
+    await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
+    final context = tester.element(find.text('场景模板'));
+    final at = DateTime.now().add(const Duration(days: 1));
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => TaskBatchPage(
+      drafts: [for (final name in ['起床', '学习']) ParsedVoice(Reminder(text: name, date: at), true, null, at)],
+      source: '明天九点起床十点学习', store: MemoStore(), edit: (_, r) async => r..text = '修改后的起床'..date = at.add(const Duration(hours: 1)))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('编辑第 1 条')); await tester.pumpAndSettle();
+    expect(find.text('修改后的起床'), findsOneWidget); expect(saved, isEmpty);
+    await tester.ensureVisible(find.byType(Checkbox).last); await tester.pumpAndSettle(); await tester.tap(find.byType(Checkbox).last); await tester.pumpAndSettle();
+    expect(find.text('已跳过'), findsOneWidget);
+    await tester.tap(find.text('创建 1 条提醒')); await tester.pumpAndSettle();
+    expect(saved.single['text'], '修改后的起床');
+    expect(Reminder.fromJson(saved.single).date.millisecondsSinceEpoch, at.add(const Duration(hours: 1)).millisecondsSinceEpoch);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });
   testWidgets('partial save retries only remaining rows and never saves when merely editing', (tester) async {

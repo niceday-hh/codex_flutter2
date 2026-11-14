@@ -32,7 +32,26 @@ class _VoicePageState extends State<VoicePage> {
           Text('离线识别', style: context.text.overline.copyWith(color: context.colors.brand700)),
         ]))]),
     const SizedBox(height: 6), Text('说下时间和事情，剩下的交给提醒。', style: context.text.body.copyWith(color: context.colors.muted)),
-    const SizedBox(height: 28),
+    const SizedBox(height: 20),
+    SegmentedButton<VoiceTaskMode>(
+      key: const ValueKey('voice-task-mode'),
+      showSelectedIcon: false,
+      segments: const [
+        ButtonSegment(value: VoiceTaskMode.single, icon: Icon(Icons.note_alt_outlined), label: Text('单任务')),
+        ButtonSegment(value: VoiceTaskMode.multiple, icon: Icon(Icons.library_books_outlined), label: Text('多任务')),
+      ],
+      selected: {flow.taskMode},
+      onSelectionChanged: flow.canSelectTaskMode ? (selection) => flow.selectTaskMode(selection.first) : null,
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? context.colors.brand100 : context.colors.surface),
+        foregroundColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? context.colors.brand700 : context.colors.muted),
+        side: WidgetStatePropertyAll(BorderSide(color: context.colors.line)),
+        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 14, horizontal: 12)),
+      )),
+    const SizedBox(height: 8),
+    Text(flow.taskMode == VoiceTaskMode.single ? '一次创建一条提醒' : '一次说多件事，逐条核对后创建',
+      textAlign: TextAlign.center, style: context.text.caption.copyWith(color: context.colors.muted)),
+    const SizedBox(height: 24),
     Center(child: Semantics(button: true, label: flow.phase == VoicePhase.recording ? '停止录音并识别' : '开始录音',
       child: Material(type: MaterialType.transparency, child: Ink(width: 150, height: 150,
         decoration:  BoxDecoration(shape: BoxShape.circle,
@@ -60,15 +79,19 @@ class _VoicePageState extends State<VoicePage> {
       child: Padding(padding: const EdgeInsets.all(16), child:
       TextField(controller: text, enabled: !flow.busy && !flow.capturing, minLines: 3, maxLines: 6,
         onChanged: (v) { flow.text = v; flow.reference = v.trim().isEmpty ? null : flow.reference ?? DateTime.now(); setState(() {}); },
-        decoration: const InputDecoration(hintText: '例如：20分钟后提醒我喝水，每隔3分钟提醒，总共提醒5次', border: InputBorder.none, filled: false)))),
+        decoration: InputDecoration(hintText: flow.taskMode == VoiceTaskMode.single
+          ? '例如：20分钟后提醒我喝水，每隔3分钟提醒，总共提醒5次'
+          : '例如：明天九点起床十点学习。每件事说清时间，可不加标点。', border: InputBorder.none, filled: false)))),
     const SizedBox(height: 16),
     FilledButton(onPressed: text.text.trim().isEmpty || flow.busy || flow.capturing ? null : () { FocusScope.of(context).unfocus(); flow.reviewText(text.text); },
-      child: const Text('确认并设置提醒')),
+      child: Text(flow.taskMode == VoiceTaskMode.single ? '确认并设置提醒' : '核对多条提醒')),
     const SizedBox(height: 12),
     OutlinedButton(onPressed: flow.phase == VoicePhase.saving ? null : flow.busy ? flow.cancel : flow.phase == VoicePhase.recording ? flow.finish : flow.startRecording,
       child: Text(flow.busy ? '取消录音' : flow.phase == VoicePhase.recording ? '结束录音' : '重新录音')),
     const SizedBox(height: 20),
-    const MemoHint('说完后安静片刻，会自动进入确认。也可以说“开启语音播报”“提醒间隔三分钟”“总共提醒五次”。单次录音最长45秒，切到后台会关闭麦克风。',
+    MemoHint(flow.taskMode == VoiceTaskMode.single
+      ? '单任务沿用原有解析规则。首页可连续说“开始录音，多任务模式，明天九点起床十点学习”。单次录音最长45秒，切到后台会关闭麦克风。'
+      : '每件事说清时间，最多10条；省略日期时沿用前一条日期。说完后逐条核对，不会自动保存。录音中可说“开启语音播报”“提醒间隔三分钟”“总共提醒五次”。',
       align: TextAlign.center),
   ]);
 }
