@@ -271,7 +271,9 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
           ticket == _entryEpoch && _canStartHandsFree) {
         _entryPending = false;
         setState(() => tab = 0);
-        await voice.startCommands();
+        // Entry authorization ends here; microphone readiness belongs to the
+        // cancellable voice session, not to the next foreground-entry check.
+        unawaited(voice.startCommands().catchError((Object e) { if (mounted) toast(niceError(e), error: true); }));
       }
     } catch (e) { toast(niceError(e), error: true); }
     finally {

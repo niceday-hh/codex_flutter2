@@ -25,6 +25,14 @@ public class ReminderEngineTest {
             assertEquals(seconds, state.getJSONObject("defaults").getInt("asrBackgroundRetentionSeconds"));
         }
     }
+    @Test public void batchReservationIsUniqueAndDoesNotCreateRows() throws Exception {
+        int first = engine.reserveReminderId(), second = new ReminderEngine(context).reserveReminderId();
+        assertTrue(first > 1); assertEquals(first + 1, second);
+        assertEquals(1, new JSONObject(engine.state()).getJSONArray("reminders").length());
+        JSONObject draft = row(); draft.put("id", first).put("repeat", "daily");
+        engine.save(draft.toString()); engine.save(draft.toString());
+        assertEquals(2, new JSONObject(engine.state()).getJSONArray("reminders").length());
+    }
     @Before public void setup() throws Exception {
         context = RuntimeEnvironment.getApplication();
         org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofDays(21000));

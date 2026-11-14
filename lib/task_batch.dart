@@ -48,6 +48,11 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
       await native.invokeMethod('requestNotifications');
       for (final i in selection) {
         if (error(i) != null) throw StateError('确认期间时间已到，请修改剩余提醒');
+        if (rows[i].id == 0) {
+          final id = await native.invokeMethod<int>('reserveReminderId');
+          if (id == null || id <= 0) throw StateError('无法准备提醒，请重试');
+          rows[i].id = id;
+        }
         await native.invokeMethod('save', jsonEncode(rows[i].toJson()));
         // Mark committed before any refresh/TTS call can fail. Retry only unsaved rows.
         if (mounted) setState(() => done.add(i));

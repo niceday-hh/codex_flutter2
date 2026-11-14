@@ -54,11 +54,14 @@ void main() {
     }
   }
   testWidgets('partial save retries only remaining rows and never saves when merely editing', (tester) async {
-    final counts = <String, int>{}; var fail = true;
+    final counts = <String, int>{}; var fail = true; var nextId = 1;
+    final ids = <String, List<int>>{};
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
       if (call.method == 'getState') return '{"reminders":[],"defaults":{},"status":{}}';
+      if (call.method == 'reserveReminderId') return nextId++;
       if (call.method == 'save') {
         final name = jsonDecode(call.arguments as String)['text'] as String;
+        (ids[name] ??= []).add(jsonDecode(call.arguments as String)['id'] as int);
         counts[name] = (counts[name] ?? 0) + 1;
         if (name == '第二条' && fail) throw PlatformException(code: 'TEST', message: '临时失败');
       }
@@ -77,6 +80,7 @@ void main() {
     fail = false;
     await tester.ensureVisible(find.text('创建 1 条提醒')); await tester.tap(find.text('创建 1 条提醒')); await tester.pumpAndSettle();
     expect(counts, {'第一条': 1, '第二条': 2});
+    expect(ids['第二条'], [2, 2]); expect(nextId, 3);
     expect(find.text('核对 2 条提醒'), findsNothing);
     await tester.pumpWidget(const SizedBox()); await tester.pump();
   });

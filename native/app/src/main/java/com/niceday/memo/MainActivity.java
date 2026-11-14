@@ -228,6 +228,7 @@ public final class MainActivity extends FlutterActivity {
                         if (!getSharedPreferences("memo-scenes", MODE_PRIVATE).edit().putString("items", raw).commit()) throw new IllegalStateException("模板未能保存，请重试");
                         result.success(null);
                     }
+                    case "reserveReminderId" -> result.success(store.reserveReminderId());
                     case "save" -> { store.save((String) call.arguments); result.success(null); }
                     case "saveDefaults" -> { store.defaults((String) call.arguments); result.success(null); }
                     case "delete" -> { store.delete((Integer) call.arguments); result.success(null); }
