@@ -47,6 +47,7 @@ void main() {
         await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('备忘录'))); await tester.pumpAndSettle();
         await tester.tap(find.text('场景模板')); await tester.pumpAndSettle();
         expect(find.text('晚间学习'), findsOneWidget);
+        expect(find.text('返回修改原话'), findsNothing);
         final sceneContext = tester.element(find.text('晚间学习'));
         expect(MemoTokens.of(sceneContext).colors.brand700,
           MemoTokens.forAccent(accent, mode == ThemeMode.dark ? Brightness.dark : Brightness.light).colors.brand700);
@@ -55,7 +56,7 @@ void main() {
         final at = DateTime.now().add(const Duration(days: 1));
         Navigator.of(sceneContext).push(MaterialPageRoute<void>(builder: (_) => TaskBatchPage(
           drafts: [for (var i = 0; i < 3; i++) ParsedVoice(Reminder(text: ['起床', '出门', '读书'][i], date: at.add(Duration(hours: i))), true, null, at)],
-          source: '明天七点起床，八点出门，晚上九点读书', store: MemoStore(), edit: (_, r) async => r)));
+          source: '明天七点起床，八点出门，晚上九点读书', voiceSource: true, store: MemoStore(), edit: (_, r) async => r)));
         await tester.pumpAndSettle();
         expect(find.text('核对 3 条提醒'), findsOneWidget);
         expect(tester.takeException(), isNull);

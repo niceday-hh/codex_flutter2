@@ -14,7 +14,8 @@ class TaskBatchPage extends StatefulWidget {
   final String source;
   final MemoStore store;
   final EditBatchDraft edit;
-  const TaskBatchPage({super.key, required this.drafts, required this.source, required this.store, required this.edit});
+  final bool voiceSource;
+  const TaskBatchPage({super.key, required this.drafts, required this.source, required this.store, required this.edit, this.voiceSource = false});
   @override State<TaskBatchPage> createState() => _TaskBatchPageState();
 }
 class _TaskBatchPageState extends State<TaskBatchPage> {
@@ -69,9 +70,9 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
   @override Widget build(BuildContext context) => PopScope(canPop: !saving, child: Scaffold(
     appBar: AppBar(title: Text('核对 ${rows.length} 条提醒')),
     body: ListView(padding: const EdgeInsets.all(20), children: [
-      Text(rows.length == 1 ? '仅识别到 1 条，请核对' : '逐条核对后，再一起创建', style: context.text.title),
+      Text(widget.voiceSource && rows.length == 1 ? '仅识别到 1 条，请核对' : '逐条核对后，再一起创建', style: context.text.title),
       const SizedBox(height: 8),
-      Text(rows.length == 1 ? '如需多条，请返回修改原话，为每件事补充时间。' : '点铅笔单独调整时间、正文和提醒方式；取消勾选即可跳过。',
+      Text(widget.voiceSource && rows.length == 1 ? '如需多条，请返回修改原话，为每件事补充时间。' : '点铅笔单独调整时间、正文和提醒方式；取消勾选即可跳过。',
         style: context.text.caption.copyWith(color: context.colors.muted)),
       const SizedBox(height: 12),
       ExpansionTile(key: const ValueKey('batch-source'), tilePadding: EdgeInsets.zero,
@@ -104,7 +105,7 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
       if (feedback != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(feedback!, style: context.text.caption.copyWith(color: context.colors.danger))),
       FilledButton(onPressed: saving || selected.isEmpty ? null : save,
         child: Text(saving ? '正在创建…' : '创建 ${selected.length} 条提醒')),
-      if (done.isEmpty) TextButton(onPressed: saving ? null : () => Navigator.pop(context, false), child: const Text('返回修改原话')),
+      if (widget.voiceSource && done.isEmpty) TextButton(onPressed: saving ? null : () => Navigator.pop(context, false), child: const Text('返回修改原话')),
       TextButton(onPressed: saving ? null : () => Navigator.pop(context, done.isNotEmpty), child: Text(done.isEmpty ? '取消' : '返回，保留已创建的提醒')),
     ]))),
   ));

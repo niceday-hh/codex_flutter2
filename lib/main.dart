@@ -366,7 +366,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
         isDismissible: false, enableDrag: false, clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MemoRadius.xxl)),
         builder: (_) => SizedBox(height: MediaQuery.sizeOf(context).height * .94, child: TaskBatchPage(
-          drafts: drafts, source: source, store: store, edit: _editBatchDraft)));
+          drafts: drafts, source: source, store: store, edit: _editBatchDraft, voiceSource: true)));
       if (created == true && mounted) {
         voice.text = ''; voice.reference = null;
         await voice.pause(keepDraft: false, notice: '提醒已创建');
