@@ -9,6 +9,7 @@ import 'package:timed_memo/design_tokens.dart';
 import 'package:timed_memo/reminder.dart';
 import 'package:timed_memo/task_batch.dart';
 import 'package:timed_memo/voice_parser.dart';
+import 'package:timed_memo/widgets/memo_tab_bar.dart';
 import 'ui_preview_test.dart' show capture, previewKey, previewsEnabled;
 
 void main() {
@@ -53,6 +54,30 @@ void main() {
       });
     }
   }
+  testWidgets('creating a voice batch clears its source and prevents accidental resubmission', (tester) async {
+    var nextId = 1, saves = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
+      if (call.method == 'getState') return '{"reminders":[],"defaults":{},"status":{}}';
+      if (call.method == 'reserveReminderId') return nextId++;
+      if (call.method == 'save') saves++;
+      return null;
+    });
+    await tester.binding.setSurfaceSize(const Size(393, 852));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('语音'))); await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '明天七点起床，八点出门');
+    await tester.ensureVisible(find.text('确认并设置提醒'));
+    await tester.tap(find.text('确认并设置提醒')); await tester.pumpAndSettle();
+    expect(find.text('核对 2 条提醒'), findsOneWidget); expect(saves, 0);
+    await tester.tap(find.text('创建 2 条提醒')); await tester.pumpAndSettle();
+    expect(saves, 2); expect(find.text('核对 2 条提醒'), findsNothing);
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, isEmpty);
+    final confirm = tester.widget<FilledButton>(find.widgetWithText(FilledButton, '确认并设置提醒'));
+    expect(confirm.onPressed, isNull);
+    expect(find.text('提醒已创建'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  });
   testWidgets('partial save retries only remaining rows and never saves when merely editing', (tester) async {
     final counts = <String, int>{}; var fail = true; var nextId = 1;
     final ids = <String, List<int>>{};
