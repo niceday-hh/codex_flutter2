@@ -67,6 +67,7 @@ void main() {
     await tester.pumpWidget(const MemoApp()); await tester.pumpAndSettle();
     await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('语音'))); await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '明天七点起床，八点出门');
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('确认并设置提醒'));
     await tester.tap(find.text('确认并设置提醒')); await tester.pumpAndSettle();
     expect(find.text('核对 2 条提醒'), findsOneWidget); expect(saves, 0);
