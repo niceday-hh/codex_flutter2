@@ -17,7 +17,7 @@ class TaskBatchPage extends StatefulWidget {
   final bool voiceSource;
   final String? sceneName;
   final List<int>? sceneOffsets;
-  TaskBatchPage({super.key, required this.drafts, required this.source, required this.store, required this.edit,
+  const TaskBatchPage({super.key, required this.drafts, required this.source, required this.store, required this.edit,
     this.voiceSource = false, this.sceneName, this.sceneOffsets})
     : assert((sceneName == null) == (sceneOffsets == null)),
       assert(sceneOffsets == null || sceneOffsets.length == drafts.length);
@@ -51,10 +51,12 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
     final copy = Reminder.fromJson(rows[i].toJson())
       ..dateConfirmed = rows[i].dateConfirmed ..timeConfirmed = rows[i].timeConfirmed;
     final updated = await widget.edit(context, copy);
-    if (updated != null && mounted) setState(() {
-      if (isScene && updated.date.millisecondsSinceEpoch != rows[i].date.millisecondsSinceEpoch) customTimes.add(i);
-      rows[i] = updated; warnings[i] = null; feedback = null;
-    });
+    if (updated != null && mounted) {
+      setState(() {
+        if (isScene && updated.date.millisecondsSinceEpoch != rows[i].date.millisecondsSinceEpoch) { customTimes.add(i); }
+        rows[i] = updated; warnings[i] = null; feedback = null;
+      });
+    }
   }
   Future<void> chooseStart() async {
     if (!isScene || saving || choosingStart || done.isNotEmpty) return;
@@ -69,7 +71,7 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
       setState(() {
         sceneStart = start; feedback = null;
         for (var i = 0; i < rows.length; i++) {
-          if (customTimes.contains(i) || done.contains(i)) continue;
+          if (customTimes.contains(i) || done.contains(i)) { continue; }
           rows[i].date = start.add(Duration(minutes: widget.sceneOffsets![i]));
           rows[i].dateConfirmed = true; rows[i].timeConfirmed = true;
         }
