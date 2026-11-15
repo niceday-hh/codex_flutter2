@@ -80,7 +80,7 @@ public final class SpeechSettings {
             if (!(value instanceof Integer || value instanceof Long) || ((Number)value).longValue() < 0 || ((Number)value).longValue() > Integer.MAX_VALUE)
                 throw new IllegalArgumentException("语音版本无效");
         }
-        for (String field : Arrays.asList("speechHideLocked", "speechRepeat", "speechRandom"))
+        for (String field : Arrays.asList("speechHideLocked", "speechRepeat", "speechRandom", "speechAnnounceRetry"))
             if (r.has(field) && !(r.get(field) instanceof Boolean)) throw new IllegalArgumentException("语音隐私开关无效");
         for(String field: Arrays.asList("speechRandomLanguage","speechRandomGender","speechRandomGroup"))
             if(r.has(field) && !(r.get(field) instanceof String)) throw new IllegalArgumentException("音色分组类型无效");
@@ -94,6 +94,28 @@ public final class SpeechSettings {
         r.put("speechMode", mode).put("speechVoice", voice).put("speechRate", rate).put("speechModel","voine-vits-mnn-v1");
         if (!r.has("speechHideLocked")) r.put("speechHideLocked", true);
         if (!r.has("speechRepeat")) r.put("speechRepeat", true);
+    }
+    /** Counts refer to this occurrence, including the initial alert. Never synthesize at alarm time. */
+    static String retryAnnouncement(JSONObject row, int attempt) {
+        if (!row.optBoolean("speechAnnounceRetry", false) || !row.optBoolean("speechRepeat", true) ||
+            attempt < 2 || attempt > Math.min(20, row.optInt("totalCount", 3))) return "";
+        return "当前为第" + chineseCount(attempt) + "次提醒，提醒间隔" + chineseCount(row.optInt("intervalMinutes", 5)) + "分钟。";
+    }
+    private static String chineseCount(int n) {
+        if (n < 1 || n > 1440) return Integer.toString(n);
+        String[] digit = {"零", "一", "二", "三", "四", "五", "六", "七", "八", "九"};
+        StringBuilder value = new StringBuilder();
+        int[] units = {1000, 100, 10, 1}; String[] names = {"千", "百", "十", ""};
+        boolean zero = false;
+        for (int i = 0; i < units.length; i++) {
+            int d = n / units[i]; n %= units[i];
+            if (d > 0) {
+                if (zero) value.append("零");
+                if (!(d == 1 && units[i] == 10 && value.length() == 0)) value.append(digit[d]);
+                value.append(names[i]); zero = false;
+            } else if (value.length() > 0 && n > 0) zero = true;
+        }
+        return value.toString();
     }
     public static String cacheKey(String text, String voice, double rate) { return cacheKey(text, voice, rate, .6, .668, 0); }
     public static String cacheKey(String text, String voice, double rate, double noise, double noiseW, long seed) {

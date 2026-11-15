@@ -791,6 +791,7 @@ public final class ReminderEngine {
             .put("speechRate", defaults.optDouble("speechRate", 1))
             .put("speechNoiseScale", defaults.optDouble("speechNoiseScale", .6)).put("speechNoiseScaleW", defaults.optDouble("speechNoiseScaleW", .668)).put("speechHideLocked", defaults.optBoolean("speechHideLocked", true))
             .put("speechRepeat", defaults.optBoolean("speechRepeat", true))
+            .put("speechAnnounceRetry", defaults.optBoolean("speechAnnounceRetry", false))
             .put("intervalMinutes", 5).put("totalCount", Math.max(1, Math.min(20, totalCount)));
         save(config.toString());
         int id = prefs.getInt("nextId", 1) - 1;

@@ -69,6 +69,7 @@ const settingsEntries = [
   SettingsEntry('speechGender', SettingsCategory.speech, '角色性别', '在随机音色中按角色性别筛选；未知性别仅参与不限性别随机。', '性别 男 女', target: '离线语音播报'),
   SettingsEntry('speechLock', SettingsCategory.speech, '锁屏时隐藏播报正文', '选择锁屏时隐藏播报正文，或允许朗读。', '隐私 正文 朗读 锁屏播报', target: '离线语音播报'),
   SettingsEntry('speechRepeat', SettingsCategory.speech, '重提醒时再次朗读', '选择再次提醒时是否继续朗读。', '重复 次数 播报', target: '离线语音播报'),
+  SettingsEntry('speechAnnounceRetry', SettingsCategory.speech, '重提醒追加次数与间隔', '首次不追加；第二次起播报当前次数和任务实际间隔，用于新建任务。', '重提醒 第二次 次数 间隔 追加 话术', target: '离线语音播报'),
   SettingsEntry('speechPreview', SettingsCategory.speech, '试听当前音色', '用固定短句试听，实际播放受手机媒体音量控制。', '试听 随机音色 媒体 声音', target: '离线语音播报'),
   SettingsEntry('speechStatus', SettingsCategory.speech, '语音准备状态', '查看提醒音频的本机准备进度。', '音频 状态'),
   SettingsEntry('prepareSpeech', SettingsCategory.speech, '重新准备提醒语音', '补齐未完成的音频，不改变提醒时间。', '重试 音频 失败'),

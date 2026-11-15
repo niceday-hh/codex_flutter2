@@ -25,6 +25,8 @@ int? chineseNumber(String source) {
   return value + pending;
 }
 
+enum VoiceIssue { boundary, relativeReference, dependency, limit, scope }
+
 class ParsedVoice {
   final Reminder reminder;
   final bool hasTime;
@@ -32,7 +34,12 @@ class ParsedVoice {
   final Duration? relativeDelay;
   final DateTime reference;
   final List<String> settings;
-  const ParsedVoice(this.reminder, this.hasTime, this.warning, this.reference, {this.relativeDelay, this.settings = const []});
+  final VoiceIssue? issue;
+  final String? original, evidence;
+  final List<ParsedVoice> alternatives;
+  final DateTime? previousTime;
+  const ParsedVoice(this.reminder, this.hasTime, this.warning, this.reference, {this.relativeDelay, this.settings = const [], this.issue, this.original, this.evidence,
+    this.alternatives = const [], this.previousTime});
 }
 
 // Only the instruction before “提醒我” controls scheduling. The reminder body
@@ -221,53 +228,143 @@ VoiceControls extractVoiceControls(String source, Reminder r) {
   return VoiceControls(body, settings.reversed.toList(), warning);
 }
 
-/// Used only after an explicit choice of multi-task mode. ASR output often has
-/// no punctuation: scheduling expressions, not commas, delimit candidates.
-/// Quoted text is masked without changing offsets; the single-task parser stays
-/// untouched. All candidates are reviewed by the user before any native save.
+/// Multi-task boundaries are decisions, not every time entity found in a body.
+/// Matching uses a compact, quote-masked view with offsets back to the original.
+class _BatchText {
+  final String original;
+  final List<int> offsets = [];
+  late final String text, mask;
+  _BatchText(this.original) {
+    final compact = StringBuffer(), hidden = StringBuffer(), quotes = <String>[];
+    const pairs = {'“': '”', '「': '」', '『': '』', '《': '》', '"': '"'};
+    for (var i = 0; i < original.length; i++) {
+      var c = original[i];
+      if (RegExp(r'\s').hasMatch(c)) continue;
+      final code = c.codeUnitAt(0);
+      if (code >= 0xff10 && code <= 0xff19) c = String.fromCharCode(code - 0xfee0);
+      offsets.add(i); compact.write(c);
+      if (quotes.isNotEmpty && c == quotes.last) { quotes.removeLast(); hidden.write(' '); }
+      else if (pairs.containsKey(c)) { quotes.add(pairs[c]!); hidden.write(' '); }
+      else { hidden.write(quotes.isEmpty ? c : ' '); }
+    }
+    text = compact.toString(); mask = hidden.toString(); offsets.add(original.length);
+  }
+  String slice(int start, int end) => original.substring(offsets[start], offsets[end]).trim();
+}
+
+const _batchNumber = r'[零〇一二两三四五六七八九十百千\d]+';
+final _batchTime = RegExp('(?:(明早|明晚|今晚|今天|明天|后天|每天|每日|工作日|(?:每周|每星期|周|星期)[一二三四五六日天1-7]|(?:$_batchNumber年)?(?:$_batchNumber月)?$_batchNumber[日号])?'
+  '(?:凌晨|午夜|早上|上午|中午|下午|傍晚|晚上)?(?:$_batchNumber[点时](?:半|一刻|三刻|$_batchNumber分?)?|\\d{1,2}[:：]\\d{1,2}(?:[:：]\\d{1,2})?)'
+  '|(?:(?:$_batchNumber个半|一个半|$_batchNumber|半)(?:个)?(?:天|小时|分钟|分|秒钟|秒))+[以之]?后'
+  '|再过(?:(?:$_batchNumber|半)(?:个)?(?:天|小时|分钟|分|秒钟|秒))+)');
+final _batchJoin = RegExp(r'[，,；;。、]*(?:然后|另外|接着|还有|再)[，,；;。、]*$');
+String _trimBatch(String value) => value.replaceAll(RegExp(r'^[，,；;。、：:\s]+|[，,；;。、\s]+$'), '').trim();
+
 List<ParsedVoice> parseVoiceBatch(String source, {DateTime? now, required Reminder Function() defaults}) {
   final current = now ?? DateTime.now();
-  List<ParsedVoice> fallback([String? warning]) {
-    final p = parseVoice(source, now: current, defaults: defaults());
-    return [warning == null ? p : ParsedVoice(p.reminder, p.hasTime, warning, p.reference,
-      relativeDelay: p.relativeDelay, settings: p.settings)];
+  ParsedVoice annotate(ParsedVoice p, {String? original, VoiceIssue? issue, String? warning,
+    String? evidence, List<ParsedVoice> alternatives = const [], DateTime? previousTime}) => ParsedVoice(
+      p.reminder, p.hasTime, warning ?? p.warning, p.reference, relativeDelay: p.relativeDelay, settings: p.settings,
+      original: original, issue: issue, evidence: evidence, alternatives: alternatives, previousTime: previousTime);
+  final view = _BatchText(source);
+  // Explicit separators are recognised only in a command/list position. An
+  // ordinary mention such as “阅读下一条通知” never becomes a separator.
+  final separators = <RegExpMatch>[];
+  final separator = RegExp(r'下一条|第[一二三四五六七八九十\d]+条');
+  var numbered = false;
+  for (final m in separator.allMatches(view.mask)) {
+    final tail = view.mask.substring(m.end).replaceFirst(RegExp(r'^[，,；;。、：:]+'), '');
+    final leading = m.start == 0 || RegExp(r'^[，,；;。、]*(?:请)?$').hasMatch(view.mask.substring(0, m.start));
+    if (leading && m.group(0) != '下一条') numbered = true;
+    final nextCommand = _batchTime.matchAsPrefix(tail) != null || tail.startsWith('提醒我') || tail.startsWith('提醒');
+    if ((leading || nextCommand || tail.isEmpty) && (m.group(0) == '下一条' || numbered)) separators.add(m);
   }
-  const n = r'[零〇一二两三四五六七八九十百千\d]+';
-  final text = source.trim()
-    .replaceAllMapped(RegExp(r'([\u3400-\u9fff\d])\s+(?=[\u3400-\u9fff\d])'), (m) => m.group(1)!)
-    .replaceFirst(RegExp(r'^(?:请)?(?:帮我|给我)?(?:设置|创建)?(?:提醒我|提醒)[，,：:\s]*'), '');
-  // Same-length mask keeps every match aligned with the original reminder body.
-  final mask = StringBuffer();
-  final quotes = <String>[];
-  const pairs = {'“': '”', '「': '」', '『': '』', '《': '》', '"': '"'};
-  for (var i = 0; i < text.length; i++) {
-    final c = text[i];
-    if (quotes.isNotEmpty && c == quotes.last) { quotes.removeLast(); mask.write(' '); }
-    else if (pairs.containsKey(c)) { quotes.add(pairs[c]!); mask.write(' '); }
-    else { mask.write(quotes.isEmpty ? c : ' '); }
+  final ranges = <(int, int)>[];
+  var begin = 0;
+  for (final m in separators) {
+    if (_trimBatch(view.slice(begin, m.start)).isNotEmpty) ranges.add((begin, m.start));
+    begin = m.end;
   }
-  final timing = RegExp('(?:(明早|明晚|今晚|今天|明天|后天|每天|每日|工作日|(?:每周|每星期|周|星期)[一二三四五六日天1-7]|(?:$n年)?(?:$n月)?$n[日号])?'
-    '(?:凌晨|午夜|早上|上午|中午|下午|傍晚|晚上)?(?:$n[点时](?:半|一刻|三刻|$n分?)?|\\d{1,2}[:：]\\d{1,2}(?:[:：]\\d{1,2})?)'
-    '|(?:(?:$n个半|一个半|$n|半)(?:个)?(?:天|小时|分钟|分|秒钟|秒))+[以之]?后)');
-  final matches = timing.allMatches(mask.toString()).toList();
-  if (matches.isEmpty) return fallback();
-  // A leading non-scheduling passage must not turn time references into tasks.
-  if (!RegExp(r'^[\s，,；;。]*(?:先|首先)?[\s，,；;。]*$').hasMatch(text.substring(0, matches.first.start))) return fallback();
-  if (matches.length > 10) return fallback('一次最多核对10条提醒，请减少条数后重新录入。');
+  if (_trimBatch(view.slice(begin, view.text.length)).isNotEmpty || separators.isNotEmpty) ranges.add((begin, view.text.length));
+  if (ranges.isEmpty) ranges.add((0, view.text.length));
   var inheritedDate = '';
   final rows = <ParsedVoice>[];
-  for (var i = 0; i < matches.length; i++) {
-    final match = matches[i];
-    final explicitDate = match.group(1);
-    if (explicitDate != null) inheritedDate = switch (explicitDate) { '明早' || '明晚' => '明天', '今晚' => '今天', _ => explicitDate };
-    final schedule = match.group(0)!.replaceFirst(RegExp(r'^明早'), '明天早上')
-      .replaceFirst(RegExp(r'^明晚'), '明天晚上').replaceFirst(RegExp(r'^今晚'), '今天晚上');
-    final instruction = '${explicitDate == null && !schedule.endsWith('后') ? inheritedDate : ''}$schedule';
-    var body = text.substring(match.end, i + 1 < matches.length ? matches[i + 1].start : text.length)
-      .replaceFirst(RegExp(r'^[\s，,：:]*(?:提醒我|提醒)?\s*'), '');
-    body = body.replaceFirst(RegExp(r'[\s，,；;。]*(?:然后|另外|接着|再|还有)[\s，,；;。]*$'), '')
-      .replaceFirst(RegExp(r'[\s，,；;。、]+$'), '');
-    rows.add(parseVoice('$instruction提醒我$body', now: current, defaults: defaults()));
+  for (final range in ranges) {
+    final raw = _trimBatch(view.slice(range.$1, range.$2));
+    final v = _BatchText(raw);
+    final prefix = RegExp(r'^[，,；;。、]*(?:先|首先)?(?:请)?(?:帮我|给我)?(?:设置|创建)?(?:提醒我|提醒)?[，,：:]*').firstMatch(v.mask)!;
+    final times = _batchTime.allMatches(v.mask).where((m) => m.start >= prefix.end).toList();
+    if (times.isEmpty || times.first.start != prefix.end || RegExp(r'(?:完成|结束|做完)后').hasMatch(v.mask)) {
+      final p = parseVoice('提醒我$raw', now: current, defaults: defaults());
+      p.reminder.text = raw.replaceFirst(RegExp(r'^提醒我|^提醒'), '');
+      p.reminder.timeConfirmed = false;
+      final dependent = RegExp(r'(?:完成|结束|做完)后').hasMatch(v.mask);
+      rows.add(annotate(p, original: raw, issue: dependent ? VoiceIssue.dependency : null,
+        warning: dependent ? '完成后计时需要任务依赖，请改为具体提醒时间。' : '这条尚未确定时间或内容，请编辑补全。'));
+      continue;
+    }
+    final accepted = <RegExpMatch>[times.first];
+    final starts = <int>[0];
+    final weak = <int, RegExpMatch>{};
+    var explicitBody = RegExp(r'^[，,：:]*(?:提醒我|提醒)').hasMatch(v.mask.substring(times.first.end));
+    for (final t in times.skip(1)) {
+      final before = v.mask.substring(accepted.last.end, t.start);
+      final after = v.mask.substring(t.end);
+      // Degree/quantity uses and attributive time references remain body text.
+      final notSchedule = RegExp(r'^(?:点|的|钟的)').hasMatch(after) ||
+        RegExp(r'(?:小|大|快|慢|早|晚|好|少|多|加|放|倒|有|剩|差)$').hasMatch(before) && t.group(0) == '一点' ||
+        t.group(0) == '一点' && RegExp(r'^(?:盐|水|糖|油|儿|问题|事情)').hasMatch(after);
+      if (notSchedule) continue;
+      final join = _batchJoin.firstMatch(before);
+      final reminder = RegExp(r'^[，,：:]*(?:提醒我|提醒)').hasMatch(after);
+      final separated = RegExp(r'[，,；;。、]$').hasMatch(before);
+      final referential = RegExp(r'(?:查看|阅读|整理|讨论|记录|学习|研究|关于|有关|在|到|从|等到|直到|持续|需要|提前)$').hasMatch(before);
+      final body = before.replaceFirst(_batchJoin, '').replaceAll(RegExp(r'[，,；;。、]'), '');
+      final strong = reminder && (join != null || separated) && !referential;
+      final compactList = !explicitBody && !referential && (body.isNotEmpty || separated);
+      if (strong || compactList || t.group(0)!.startsWith('再过')) {
+        starts.add(join == null ? t.start : accepted.last.end + join.start);
+        accepted.add(t); explicitBody = reminder;
+      } else if (explicitBody && !referential && body.isNotEmpty && weak.isEmpty) {
+        weak[accepted.length - 1] = t;
+      }
+    }
+    ParsedVoice make(int start, int end, RegExpMatch t, String date, {bool inherit = true}) {
+      final explicitDate = t.group(1);
+      final schedule = t.group(0)!.replaceFirst(RegExp(r'^明早'), '明天早上')
+        .replaceFirst(RegExp(r'^明晚'), '明天晚上').replaceFirst(RegExp(r'^今晚'), '今天晚上')
+        .replaceFirst(RegExp(r'^再过'), '');
+      final relative = t.group(0)!.startsWith('再过');
+      final instruction = '${inherit && explicitDate == null && !schedule.endsWith('后') && !relative ? date : ''}$schedule${relative ? '后' : ''}';
+      var body = v.slice(t.end, end).replaceFirst(RegExp(r'^[，,：:\s]*(?:提醒我|提醒)?[，,：:\s]*'), '');
+      body = _trimBatch(body);
+      final p = parseVoice('${instruction}提醒我$body', now: current, defaults: defaults());
+      // Parsing the schedule cannot consume or reinterpret a body time.
+      return annotate(p, original: _trimBatch(v.slice(start, end)));
+    }
+    for (var i = 0; i < accepted.length; i++) {
+      final t = accepted[i], end = i + 1 < starts.length ? starts[i + 1] : v.text.length;
+      final date = t.group(1);
+      if (date != null) inheritedDate = switch (date) { '明早' || '明晚' => '明天', '今晚' => '今天', _ => date };
+      var p = make(starts[i], end, t, inheritedDate);
+      if (t.group(0)!.startsWith('再过')) {
+        p = annotate(p, original: p.original, issue: VoiceIssue.relativeReference,
+          warning: '“再过”从录音时刻还是上一条计划时间起算？请选择。', previousTime: rows.isEmpty ? null : rows.last.reminder.date);
+      } else if (weak.containsKey(i) && weak[i]!.start < end) {
+        final w = weak[i]!;
+        p = annotate(p, original: p.original, issue: VoiceIssue.boundary, evidence: v.slice(w.start, end),
+          warning: '正文中发现另一处时间，尚未自动拆分。请确认是一条还是两条。',
+          alternatives: [make(starts[i], w.start, t, inheritedDate), make(w.start, end, w, inheritedDate)]);
+      }
+      if (RegExp(r'(?:这些|这[两几]|全部|所有).*(?:开启|关闭)语音播报').hasMatch(p.reminder.text)) {
+        p = annotate(p, original: p.original, issue: VoiceIssue.scope, warning: '检测到批量设置，请逐条确认语音播报开关。');
+      }
+      rows.add(p);
+    }
+  }
+  if (rows.length > 10) {
+    final r = defaults()..text = source..timeConfirmed = false;
+    return [ParsedVoice(r, false, '一次最多核对10条提醒，请减少条数后重新录入；原文完整保留。', current, issue: VoiceIssue.limit, original: source)];
   }
   return rows;
 }

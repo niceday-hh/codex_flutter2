@@ -24,6 +24,7 @@ class TaskBatchPage extends StatefulWidget {
   @override State<TaskBatchPage> createState() => _TaskBatchPageState();
 }
 class _TaskBatchPageState extends State<TaskBatchPage> {
+  late final metadata = List<ParsedVoice>.of(widget.drafts);
   late final rows = widget.drafts.map((p) => p.reminder).toList();
   late final warnings = widget.drafts.map((p) => p.warning).toList();
   final done = <int>{}, excluded = <int>{};
@@ -40,6 +41,7 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
   List<int> get selected => [for (var i = 0; i < rows.length; i++) if (!done.contains(i) && !excluded.contains(i)) i];
   String? error(int i) {
     if (needsStart) return '请先选择开始时间';
+    if (metadata[i].issue != null && warnings[i] != null) return warnings[i];
     final r = rows[i];
     if (!r.dateConfirmed || !r.timeConfirmed) return '请确认日期与时间';
     if (r.text.trim().isEmpty) return '请填写提醒内容';
@@ -54,9 +56,49 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
     if (updated != null && mounted) {
       setState(() {
         if (isScene && updated.date.millisecondsSinceEpoch != rows[i].date.millisecondsSinceEpoch) { customTimes.add(i); }
-        rows[i] = updated; warnings[i] = null; feedback = null;
+        rows[i] = updated; warnings[i] = null;
+        metadata[i] = ParsedVoice(updated, updated.timeConfirmed, null, metadata[i].reference, original: metadata[i].original);
+        feedback = null;
       });
     }
+  }
+  void resolve(int i, {bool split = false, bool previous = false}) {
+    if (saving || done.isNotEmpty) return;
+    final p = metadata[i];
+    setState(() {
+      if (split && p.alternatives.isNotEmpty) {
+        final skipped = excluded.contains(i);
+        final shifted = <int>{for (final n in excluded) if (n != i) n > i ? n + p.alternatives.length - 1 : n};
+        excluded..clear()..addAll(shifted);
+        rows.replaceRange(i, i + 1, p.alternatives.map((p) => p.reminder));
+        warnings.replaceRange(i, i + 1, p.alternatives.map((p) => p.warning));
+        metadata.replaceRange(i, i + 1, p.alternatives);
+        if (skipped) excluded.addAll(List.generate(p.alternatives.length, (n) => i + n));
+        if (rows.length > 10) feedback = '最多创建10条，请返回减少条数。';
+      } else {
+        if (p.issue == VoiceIssue.relativeReference && p.relativeDelay != null) {
+          rows[i].date = (previous ? p.previousTime! : p.reference).add(p.relativeDelay!);
+        }
+        warnings[i] = null;
+        metadata[i] = ParsedVoice(rows[i], rows[i].timeConfirmed, null, p.reference, original: p.original);
+      }
+    });
+  }
+  Future<void> merge(int i) async {
+    if (saving || done.isNotEmpty || i == 0) return;
+    final copy = Reminder.fromJson(rows[i - 1].toJson())
+      ..dateConfirmed = rows[i - 1].dateConfirmed ..timeConfirmed = rows[i - 1].timeConfirmed;
+    copy.text = '${rows[i - 1].text}，${metadata[i].original ?? rows[i].text}';
+    final updated = await widget.edit(context, copy);
+    if (!mounted || updated == null) return;
+    setState(() {
+      final original = '${metadata[i - 1].original ?? rows[i - 1].text}，${metadata[i].original ?? rows[i].text}';
+      rows[i - 1] = updated; rows.removeAt(i); warnings[i - 1] = null; warnings.removeAt(i);
+      metadata[i - 1] = ParsedVoice(updated, updated.timeConfirmed, null, metadata[i - 1].reference, original: original);
+      metadata.removeAt(i);
+      final shifted = <int>{for (final n in excluded) if (n != i) n > i ? n - 1 : n};
+      excluded..clear()..addAll(shifted); feedback = null;
+    });
   }
   Future<void> chooseStart() async {
     if (!isScene || saving || choosingStart || done.isNotEmpty) return;
@@ -80,6 +122,7 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
   }
   Future<void> save() async {
     if (saving || choosingStart || needsStart || selected.isEmpty) return;
+    if (rows.length > 10) { setState(() => feedback = '最多核对10条，请返回减少条数。'); return; }
     final selection = selected;
     if (selection.any((i) => error(i) != null)) {
       setState(() => feedback = '请先编辑标注的提醒，或取消勾选。'); return;
@@ -114,7 +157,7 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
         : widget.voiceSource && rows.length == 1 ? '仅识别到 1 条，请核对' : '逐条核对后，再一起创建', style: context.text.title),
       const SizedBox(height: 8),
       Text(needsStart ? '共 ${rows.length} 条提醒。先预览相对安排，选择开始时间后可逐条编辑。'
-        : widget.voiceSource && rows.length == 1 ? '如需多条，请返回修改原话，为每件事补充时间。' : '点铅笔单独调整时间、正文和提醒方式；取消勾选即可跳过。',
+        : widget.voiceSource && rows.length == 1 ? '可说“下一条”分开任务；正文中的时间会保留，请核对。' : '点铅笔单独调整时间、正文和提醒方式；取消勾选即可跳过。',
         style: context.text.caption.copyWith(color: context.colors.muted)),
       const SizedBox(height: 12),
       if (isScene) ...[
@@ -144,7 +187,7 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
           })),
             IconButton(tooltip: '编辑第 ${i + 1} 条', onPressed: saving || choosingStart || needsStart || done.contains(i) ? null : () => edit(i), icon: const Icon(Icons.edit_outlined))]),
           if (isScene && !needsStart) Text(customTimes.contains(i) ? '单独安排' : relativeLabel(i), style: context.text.caption.copyWith(color: context.colors.muted)),
-          Text(needsStart ? relativeLabel(i) : '${rows[i].date.year}/${rows[i].date.month}/${rows[i].date.day}  ${rows[i].time}',
+          Text(needsStart ? relativeLabel(i) : !rows[i].timeConfirmed || !rows[i].dateConfirmed ? '待补时间' : '${rows[i].date.year}/${rows[i].date.month}/${rows[i].date.day}  ${rows[i].time}',
             style: context.text.label.copyWith(color: context.colors.brand700)),
           const SizedBox(height: 8),
           Text(rows[i].text, style: context.text.title),
@@ -153,6 +196,20 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
             MemoTag(rows[i].speechMode == 'on' ? '语音开启' : rows[i].speechMode == 'off' ? '语音关闭' : '语音跟随默认'),
             if (customTimes.contains(i)) const MemoTag('时间已单独调整'),
             if (done.contains(i)) const MemoTag('已创建')]),
+          if (widget.voiceSource && !saving && done.isEmpty) ...[
+            if (metadata[i].issue == VoiceIssue.boundary && warnings[i] != null) ...[
+              Text('疑似下一条：${metadata[i].evidence ?? ""}', style: context.text.caption.copyWith(color: context.colors.brand700)),
+              Wrap(spacing: 8, children: [
+                TextButton(onPressed: () => resolve(i), child: const Text('保留一条')),
+                OutlinedButton(onPressed: rows.length >= 10 ? null : () => resolve(i, split: true), child: const Text('拆成两条')),
+              ]),
+            ],
+            if (metadata[i].issue == VoiceIssue.relativeReference && warnings[i] != null) Wrap(spacing: 8, children: [
+              TextButton(onPressed: () => resolve(i), child: const Text('从录音时刻起算')),
+              if (metadata[i].previousTime != null) OutlinedButton(onPressed: () => resolve(i, previous: true), child: const Text('从上一条计划时间起算')),
+            ]),
+            if (i > 0) TextButton.icon(onPressed: () => merge(i), icon: const Icon(Icons.merge_outlined), label: const Text('与上一条合并并编辑')),
+          ],
           if (!needsStart && !done.contains(i) && error(i) != null) Padding(padding: const EdgeInsets.only(top: 8),
             child: Text(error(i)!, style: context.text.caption.copyWith(color: context.colors.danger))),
         ]))),

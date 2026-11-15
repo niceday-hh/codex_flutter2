@@ -139,6 +139,11 @@ class _SpeechOptionsState extends State<SpeechOptions> {
     SwitchListTile(title: const Text('重提醒时再次朗读'),
       subtitle: const Text('关闭后仅首次朗读；后续仍显示通知和振动，播放结束不算已读'),
       value: r.speechRepeat, onChanged: (v) async { r.speechRepeat = v; await changed(); }),
+    SwitchListTile(title: const Text('重提醒追加次数与间隔'),
+      subtitle: Text(!r.speechRepeat ? '请先开启“重提醒时再次朗读”；首次始终不追加。'
+        : widget.defaultSettings ? '用于新建任务；第二次起在正文后追加当前次数及实际间隔，首次不追加。'
+        : '首次不追加；第二次起追加“当前为第n次提醒，提醒间隔${r.intervalMinutes}分钟”。保存后提前准备音频。'),
+      value: r.speechAnnounceRetry, onChanged: !r.speechRepeat ? null : (v) async { r.speechAnnounceRetry = v; await changed(); }),
     Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: OutlinedButton.icon(
       onPressed: previewing ? null : () async {
         setState(() => previewing = true);

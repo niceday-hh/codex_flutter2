@@ -1249,6 +1249,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       'speechVariation' => '声音 ${d['speechNoiseScale'] ?? .6} · 节奏 ${d['speechNoiseScaleW'] ?? .668}',
       'speechLock' => d['speechHideLocked'] == false ? '允许播报正文' : '隐藏播报正文',
       'speechRepeat' => toggle(d['speechRepeat'] as bool? ?? true),
+      'speechAnnounceRetry' => toggle(d['speechAnnounceRetry'] as bool? ?? false),
       'speechStatus' || 'prepareSpeech' => speech.status.value,
       'reliable' => toggle(s['reliableMode'] as bool? ?? true),
       'service' => s['guardianRunning'] == true ? '正在维护提醒' : '当前未运行',
@@ -1536,6 +1537,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       speechNoiseScaleW: (store.defaults['speechNoiseScaleW'] as num?)?.toDouble() ?? .668,
       speechHideLocked: store.defaults['speechHideLocked'] as bool? ?? true,
       speechRepeat: store.defaults['speechRepeat'] as bool? ?? true,
+      speechAnnounceRetry: store.defaults['speechAnnounceRetry'] as bool? ?? false,
       speechRandom: store.defaults['speechRandom'] as bool? ?? false,
       speechRandomLanguage: store.defaults['speechRandomLanguage'] as String? ?? 'all',
       speechRandomGender: store.defaults['speechRandomGender'] as String? ?? 'all',
@@ -1543,7 +1545,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     return SpeechOptions(groups: store.voiceGroups, defaultSettings: true, reminder: config, defaults: store.defaults, onChanged: () async {
       store.defaults.addAll({'speechMode': config.speechMode, 'speechVoice': config.speechVoice,
         'speechNoiseScale': config.speechNoiseScale, 'speechNoiseScaleW': config.speechNoiseScaleW,
-        'speechRate': config.speechRate, 'speechHideLocked': config.speechHideLocked, 'speechRepeat': config.speechRepeat,
+        'speechRate': config.speechRate, 'speechHideLocked': config.speechHideLocked, 'speechRepeat': config.speechRepeat, 'speechAnnounceRetry': config.speechAnnounceRetry,
         'speechRandom': config.speechRandom, 'speechRandomLanguage': config.speechRandomLanguage, 'speechRandomGender': config.speechRandomGender, 'speechRandomGroup': config.speechRandomGroup});
       await persistDefaults();
     });
