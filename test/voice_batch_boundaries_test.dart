@@ -15,7 +15,7 @@ void main() {
       });
     }
   }
-  for (final body in ['加一点盐，再加一点水', '把火调小一点', '查看十点的会议资料', '阅读三分钟后再决定是否继续', '阅读下一条通知', '检查第二条合同内容', '阅读“十点开门”', '一点问题都没有']) {
+  for (final body in ['加一点盐，再加一点水', '把火调小一点', '查看十点的会议资料', '阅读三分钟后再决定是否继续', '阅读下一条通知', '检查第二条合同内容', '工作完成后检查门窗', '阅读“十点开门”', '一点问题都没有']) {
     test('body time or separator mention is protected: $body', () {
       final rows = parse('明天九点提醒我$body');
       expect(rows.length, 1); expect(rows.single.reminder.text, body); expect(rows.single.warning, isNull);

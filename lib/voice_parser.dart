@@ -298,11 +298,11 @@ List<ParsedVoice> parseVoiceBatch(String source, {DateTime? now, required Remind
     final v = _BatchText(raw);
     final prefix = RegExp(r'^[，,；;。、]*(?:先|首先)?(?:请)?(?:帮我|给我)?(?:设置|创建)?(?:提醒我|提醒)?[，,：:]*').firstMatch(v.mask)!;
     final times = _batchTime.allMatches(v.mask).where((m) => m.start >= prefix.end).toList();
-    if (times.isEmpty || times.first.start != prefix.end || RegExp(r'(?:完成|结束|做完)后').hasMatch(v.mask)) {
+    final dependent = RegExp(r'^(?:(?:第[一二三四五六七八九十\d]+条|上一条)(?:任务)?)?(?:完成|结束|做完)后').hasMatch(v.mask.substring(prefix.end));
+    if (times.isEmpty || times.first.start != prefix.end || dependent) {
       final p = parseVoice('提醒我$raw', now: current, defaults: defaults());
       p.reminder.text = raw.replaceFirst(RegExp(r'^提醒我|^提醒'), '');
       p.reminder.timeConfirmed = false;
-      final dependent = RegExp(r'(?:完成|结束|做完)后').hasMatch(v.mask);
       rows.add(annotate(p, original: raw, issue: dependent ? VoiceIssue.dependency : null,
         warning: dependent ? '完成后计时需要任务依赖，请改为具体提醒时间。' : '这条尚未确定时间或内容，请编辑补全。'));
       continue;
