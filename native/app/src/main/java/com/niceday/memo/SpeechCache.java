@@ -53,8 +53,12 @@ final class SpeechCache {
             String token = UUID.randomUUID().toString(), name = "reminder-" + id + "-voice-" + job.getInt("sid") + ".wav";
             Lease held = new Lease(job.getString("key"), name, id, SpeechSettings.seed(snapshot), expected);
             if (candidate) {
-                JSONObject generic = textJob(c, SpeechSettings.GENERIC, snapshot);
-                if (held.keys.add(generic.getString("key"))) job.put("companions", new JSONArray().put(generic));
+                JSONArray companions = new JSONArray();
+                for (String companion : preparedTexts(snapshot)) {
+                    JSONObject extra = textJob(c, companion, snapshot);
+                    if (held.keys.add(extra.getString("key"))) companions.put(extra);
+                }
+                if (companions.length() > 0) job.put("companions", companions);
             }
             leases.put(token, held);
             return job.put("lease", token).put("filename", name).put("reminderId", id);
@@ -97,8 +101,16 @@ final class SpeechCache {
     }
     static String state(Context c, JSONObject row, JSONObject defaults) {
         if (!SpeechSettings.enabled(row, defaults)) return "off";
-        String key = file(c, row.optString("text"), row, defaults).getName();
-        return ready(new File(directory(c), key)) ? "ready" : pending.contains(key) ? "preparing" : errors.containsKey(key) ? "error" : "missing";
+        String result = "ready";
+        // Body first; suffixes use the same voice/rate/seed and must be ready too.
+        List<String> required = new ArrayList<>(preparedTexts(row)); required.remove(0);
+        for (String text : required) {
+            String key = file(c, text, row, defaults).getName();
+            if (ready(new File(directory(c), key))) continue;
+            if (errors.containsKey(key)) return "error";
+            result = pending.contains(key) ? "preparing" : result.equals("preparing") ? result : "missing";
+        }
+        return result;
     }
     static JSONArray jobs(Context c, boolean retry) throws Exception {
         if (!directory(c).isDirectory() && !directory(c).mkdirs()) throw new IOException("无法建立语音目录");
@@ -111,13 +123,21 @@ final class SpeechCache {
             JSONObject row = rows.getJSONObject(i);
             if (!row.optBoolean("enabled", true) || !SpeechSettings.enabled(row, defaults)) continue;
             // Generic audio is always available before the private body is synthesized.
-            for (String text : Arrays.asList(SpeechSettings.GENERIC, row.optString("text"))) {
+            for (String text : preparedTexts(row)) {
                 File target = file(c, text, row, defaults);
                 if (ready(target) || !seen.add(target.getName()) || errors.containsKey(target.getName())) continue;
                 jobs.put(textJob(c, text, row));
             }
         }
         return jobs;
+    }
+    static List<String> preparedTexts(JSONObject row) {
+        List<String> texts = new ArrayList<>(Arrays.asList(SpeechSettings.GENERIC, row.optString("text")));
+        for (int attempt = 2; attempt <= Math.min(20, row.optInt("totalCount", 3)); attempt++) {
+            String suffix = SpeechSettings.retryAnnouncement(row, attempt);
+            if (!suffix.isEmpty()) texts.add(suffix);
+        }
+        return texts;
     }
     static JSONObject previewJob(Context c, JSONObject config) throws Exception {
         return textJob(c, "这是备忘录语音试听，请记得按时完成待办事项。", new JSONObject(config.toString()).put("speechSeed", SpeechSettings.newSeed()));
@@ -166,7 +186,7 @@ final class SpeechCache {
                 JSONObject row = rows.getJSONObject(i);
                 // Saved selections remain available for history preview/export too.
                 keep.add(file(c, row.optString("text"), row, defaults).getName());
-                keep.add(file(c, SpeechSettings.GENERIC, row, defaults).getName());
+                for (String text : preparedTexts(row)) keep.add(file(c, text, row, defaults).getName());
             }
             File[] files = directory(c).listFiles();
             if (files != null) for (File file : files) {

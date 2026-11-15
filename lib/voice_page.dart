@@ -81,7 +81,7 @@ class _VoicePageState extends State<VoicePage> {
         onChanged: (v) { flow.text = v; flow.reference = v.trim().isEmpty ? null : flow.reference ?? DateTime.now(); setState(() {}); },
         decoration: InputDecoration(hintText: flow.taskMode == VoiceTaskMode.single
           ? '例如：20分钟后提醒我喝水，每隔3分钟提醒，总共提醒5次'
-          : '例如：明天九点起床十点学习。每件事说清时间，可不加标点。', border: InputBorder.none, filled: false)))),
+          : '例如：五分钟后提醒我调小火，下一条十分钟后提醒我关火。', border: InputBorder.none, filled: false)))),
     const SizedBox(height: 16),
     FilledButton(onPressed: text.text.trim().isEmpty || flow.busy || flow.capturing ? null : () { FocusScope.of(context).unfocus(); flow.reviewText(text.text); },
       child: Text(flow.taskMode == VoiceTaskMode.single ? '确认并设置提醒' : '核对多条提醒')),
@@ -91,7 +91,7 @@ class _VoicePageState extends State<VoicePage> {
     const SizedBox(height: 20),
     MemoHint(flow.taskMode == VoiceTaskMode.single
       ? '单任务沿用原有解析规则。首页可连续说“开始录音，多任务模式，明天九点起床十点学习”。单次录音最长45秒，切到后台会关闭麦克风。'
-      : '每件事说清时间，最多10条；省略日期时沿用前一条日期。说完后逐条核对，不会自动保存。录音中可说“开启语音播报”“提醒间隔三分钟”“总共提醒五次”。',
+      : '推荐说“下一条”分开任务，或说“然后＋时间＋提醒我”。正文中的时间保留；有歧义时可选择拆分或合并。最多10条，省略日期时沿用前一条日期。逐条核对后才创建。录音中可说“开启语音播报”“提醒间隔三分钟”“总共提醒五次”。',
       align: TextAlign.center),
   ]);
 }

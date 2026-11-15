@@ -22,7 +22,7 @@ class Reminder {
   bool? resolvedSpeechEnabled;
   double speechRate, speechNoiseScale, speechNoiseScaleW;
   int speechSeed;
-  bool speechHideLocked, speechRepeat, speechRandom;
+  bool speechHideLocked, speechRepeat, speechRandom, speechAnnounceRetry;
   String speechRandomLanguage, speechRandomGender, speechRandomGroup;
   int intervalMinutes, totalCount;
   int attempts, activeOccurrence, nextTrigger;
@@ -38,7 +38,7 @@ class Reminder {
     this.presentation = 'banner', this.lockscreen = 'private',
     this.speechMode = 'off', this.speechVoice = '', this.speechRate = 0,
     this.speechNoiseScale = 0, this.speechNoiseScaleW = 0, this.speechSeed = 0,
-    this.speechHideLocked = true, this.speechRepeat = true, this.speechState = 'off', this.resolvedSpeechVoice, this.resolvedSpeechEnabled,
+    this.speechHideLocked = true, this.speechRepeat = true, this.speechAnnounceRetry = false, this.speechState = 'off', this.resolvedSpeechVoice, this.resolvedSpeechEnabled,
     this.speechRandom = false, this.speechRandomLanguage = 'all', this.speechRandomGender = 'all', this.speechRandomGroup = '',
     this.attempts = 0, this.activeOccurrence = 0, this.nextTrigger = 0,
     this.acknowledged = false, this.completed = false, this.archived = false,
@@ -67,6 +67,7 @@ class Reminder {
     speechSeed: (j['speechSeed'] as num?)?.toInt() ?? 0,
     speechHideLocked: j['speechHideLocked'] as bool? ?? true,
     speechRepeat: j['speechRepeat'] as bool? ?? true,
+    speechAnnounceRetry: j['speechAnnounceRetry'] as bool? ?? false,
     speechState: j['speechState'] as String? ?? 'off',
     resolvedSpeechVoice: j['resolvedSpeechVoice'] as String?,
     resolvedSpeechEnabled: j['resolvedSpeechEnabled'] as bool?,
@@ -97,7 +98,7 @@ class Reminder {
     'speechMode': speechMode, 'speechVoice': speechVoice, 'speechRate': speechRate,
     'speechNoiseScale': speechNoiseScale, 'speechNoiseScaleW': speechNoiseScaleW, 'speechSeed': speechSeed,
     'speechRandom': speechRandom, 'speechRandomLanguage': speechRandomLanguage, 'speechRandomGender': speechRandomGender, 'speechRandomGroup': speechRandomGroup,
-    'speechHideLocked': speechHideLocked, 'speechRepeat': speechRepeat,
+    'speechHideLocked': speechHideLocked, 'speechRepeat': speechRepeat, 'speechAnnounceRetry': speechAnnounceRetry,
     'speechModel': 'voine-vits-mnn-v1',
     'archived': archived, 'archivedAt': archivedAt,
   };
@@ -107,7 +108,7 @@ class Reminder {
     'speechMode': speechMode, 'speechVoice': speechVoice, 'speechRate': speechRate,
     'speechNoiseScale': speechNoiseScale, 'speechNoiseScaleW': speechNoiseScaleW, 'speechSeed': speechSeed,
     'speechRandom': speechRandom, 'speechRandomLanguage': speechRandomLanguage, 'speechRandomGender': speechRandomGender, 'speechRandomGroup': speechRandomGroup,
-    'speechHideLocked': speechHideLocked, 'speechRepeat': speechRepeat,
+    'speechHideLocked': speechHideLocked, 'speechRepeat': speechRepeat, 'speechAnnounceRetry': speechAnnounceRetry,
   };
   String get time => '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
   String get displayTime => '${displayDate.hour.toString().padLeft(2, '0')}:${displayDate.minute.toString().padLeft(2, '0')}';
@@ -145,6 +146,7 @@ class MemoStore extends ChangeNotifier {
     speechRandomGroup: defaults['speechRandomGroup'] as String? ?? '',
     speechHideLocked: defaults['speechHideLocked'] as bool? ?? true,
     speechRepeat: defaults['speechRepeat'] as bool? ?? true,
+    speechAnnounceRetry: defaults['speechAnnounceRetry'] as bool? ?? false,
     intervalMinutes: defaults['intervalMinutes'] as int? ?? 5,
     totalCount: defaults['totalCount'] as int? ?? 3,
     vibration: defaults['vibration'] as String? ?? 'three',

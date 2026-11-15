@@ -22,7 +22,8 @@ public final class SpeechPlaybackService extends Service {
     private PowerManager.WakeLock wake;
     private Intent current;
     private boolean readingBody;
-    private boolean registered;
+    private File retryAudio;
+    private boolean registered, watchingCall, playingRetrySuffix;
     private int playbackGeneration;
     private final BroadcastReceiver screen = new BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent i) {
@@ -103,7 +104,14 @@ public final class SpeechPlaybackService extends Service {
             focus = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT).setAudioAttributes(attributes)
                 .setOnAudioFocusChangeListener(change -> { if (change < 0 && ticket == playbackGeneration) finishCurrent(); }).build();
             player = new MediaPlayer(); player.setAudioAttributes(attributes);
-            if (SpeechCache.ready(audio)) player.setDataSource(audio.getPath());
+            if (SpeechCache.ready(audio)) {
+                player.setDataSource(audio.getPath());
+                String suffix = SpeechSettings.retryAnnouncement(row, row.optInt("attempts"));
+                File extra = suffix.isEmpty() ? null : SpeechCache.file(this, suffix, row, defaults);
+                retryAudio = extra != null && SpeechCache.ready(extra) ? extra : null;
+                if (!suffix.isEmpty() && retryAudio == null)
+                    engine.event("speech_retry_suffix_missing", row.getInt("id"), current.getLongExtra("token", 0), "追加话术尚未就绪，本轮仅播放已缓存提醒");
+            }
             else {
                 // No synthesis at the deadline. Respect the configured fallback, including silence.
                 if (!row.optBoolean("sound", true)) { finishCurrent(); return; }
@@ -111,7 +119,15 @@ public final class SpeechPlaybackService extends Service {
                 player.setDataSource(this, uri); readingBody = false;
                 engine.event("speech_fallback", row.getInt("id"), current.getLongExtra("token", 0), "使用铃声备用提醒");
             }
-            player.setOnCompletionListener(p -> finishCurrent());
+            player.setOnCompletionListener(p -> {
+                if (ticket != playbackGeneration || current == null || p != player) return;
+                if (retryAudio == null) { finishCurrent(); return; }
+                try {
+                    // Reuse this alert's player/focus and its cancellation/privacy guards.
+                    File extra = retryAudio; retryAudio = null; playingRetrySuffix = true;
+                    p.reset(); p.setAudioAttributes(attributes); p.setDataSource(extra.getPath()); p.prepareAsync();
+                } catch (Exception e) { finishCurrent(); }
+            });
             player.setOnErrorListener((p, what, extra) -> { finishCurrent(); return true; });
             player.setOnPreparedListener(p -> {
                 if (ticket != playbackGeneration || current == null || p != player) return;
@@ -128,8 +144,9 @@ public final class SpeechPlaybackService extends Service {
                     if (manager.requestAudioFocus(focus) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
                         new ReminderEngine(this).event("speech_focus_limited", fresh.getInt("id"), current.getLongExtra("token", 0), "系统未授予音频焦点，保留闹钟播放");
                     p.start();
-                    watchCallMode(ticket);
-                    new ReminderEngine(this).event("speech_played", fresh.getInt("id"), current.getLongExtra("token", 0), readingBody ? "正文" : "通用提示或备用铃声");
+                    if (!watchingCall) { watchingCall = true; watchCallMode(ticket); }
+                    new ReminderEngine(this).event(playingRetrySuffix ? "speech_retry_suffix_played" : "speech_played", fresh.getInt("id"), current.getLongExtra("token", 0),
+                        playingRetrySuffix ? "第" + fresh.optInt("attempts") + "次 · 间隔" + fresh.optInt("intervalMinutes") + "分钟" : readingBody ? "正文" : "通用提示或备用铃声");
                 } catch (Exception e) { finishCurrent(); }
             });
             wake = getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "memo:speech");
@@ -150,7 +167,7 @@ public final class SpeechPlaybackService extends Service {
         if (player != null) { player.setOnCompletionListener(null); player.setOnPreparedListener(null); player.setOnErrorListener(null); player.release(); player = null; }
         if (focus != null) { getSystemService(AudioManager.class).abandonAudioFocusRequest(focus); focus = null; }
         if (wake != null && wake.isHeld()) wake.release(); wake = null;
-        readingBody = false;
+        readingBody = false; retryAudio = null; watchingCall = false; playingRetrySuffix = false;
     }
     private void finishCurrent() { releasePlayer(); current = null; next(); }
     @Override public void onDestroy() {

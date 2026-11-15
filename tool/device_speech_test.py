@@ -61,12 +61,12 @@ def wave_stats():
     assert len(values)>=2, 'Generic and body audio must both be synthesized'
     return values
 
-def prepare(hide):
+def prepare(hide, announce=False):
     probe('CLEAR')
     shell('input', 'keyevent', 'KEYCODE_WAKEUP')
     shell('wm', 'dismiss-keyguard', check=False)
     shell('am', 'start', '-n', ACTIVITY)
-    row = await_created(probe('SPEECH_SEED', '--ez', 'hide', str(hide).lower()), runtime)
+    row = await_created(probe('SPEECH_SEED', '--ez', 'hide', str(hide).lower(), '--ez', 'announce', str(announce).lower()), runtime)
     wait(lambda: 'preparing=true' in probe('PREPARE_SPEECH'), 45, 'Flutter speech bridge did not resume')
     wait(lambda: next(r for r in state()['reminders'] if r['id'] == row['id'])['speechState'] == 'ready', 120, 'On-device speech synthesis failed')
     probe('RETIME_SPEECH', '--ei', 'id', str(row['id']))
@@ -84,7 +84,7 @@ shell('settings', 'put', 'system', 'screen_off_timeout', '600000')
 result = {'sdk': int(sdk), 'reboot_tests_run': False, 'physical_audio_verified': False}
 path.write_text(json.dumps(result, indent=2))
 try:
-    id, token = prepare(True)
+    id, token = prepare(True, announce=True)
     assert state()['status']['speech']['speakerCount'] == 804
     result['generated_waveforms']=wave_stats()
     result['on_device_synthesis'] = True
@@ -92,9 +92,14 @@ try:
     first = wait(lambda: next((e for e in events() if e['type'] == 'speech_played' and e['id'] == id), None), 90, 'Locked generic speech did not start')
     assert first['detail'] == '通用提示或备用铃声', first
     assert not current(id).get('acknowledged'), 'Playback must not mark read'
+    assert not any(e['type'] == 'speech_retry_suffix_played' and e['id'] == id for e in events()), 'First alert must not append count narration'
     result['locked_hidden_body'] = True
     wait(lambda: current(id).get('attempts') == 2 and len([e for e in events() if e['type'] == 'speech_played' and e['id'] == id]) == 2,
          120, 'Unread retry did not reuse cached audio')
+    suffix = wait(lambda: next((e for e in events() if e['type'] == 'speech_retry_suffix_played' and e['id'] == id), None),
+                  45, 'Second alert did not append the prepared count/interval audio')
+    assert suffix['detail'] == '第2次 · 间隔1分钟', suffix
+    result['retry_announcement_first_omitted_second_appended'] = True
     result['unread_retry_cached_audio'] = True
 
     id, token = prepare(False)
