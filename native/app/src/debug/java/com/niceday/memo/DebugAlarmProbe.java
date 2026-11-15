@@ -38,11 +38,13 @@ public final class DebugAlarmProbe extends BroadcastReceiver {
                 engine.reliableMode(false);
                 engine.defaults(new JSONObject().put("sound", false).put("vibration", "off").put("wakeScreen", false)
                     .put("presentation", "drawer").put("speechMode", "on").put("speechVoice", "33").put("speechRate", 1).put("speechNoiseScale", .45).put("speechNoiseScaleW", .55)
-                    .put("speechHideLocked", intent.getBooleanExtra("hide", true)).toString());
+                    .put("speechHideLocked", intent.getBooleanExtra("hide", true))
+                    .put("speechAnnounceRetry", intent.getBooleanExtra("announce", false)).toString());
                 int id = engine.createTest(180, 2);
                 JSONArray all = new JSONObject(engine.state()).getJSONArray("reminders");
                 for (int i = 0; i < all.length(); i++) if (all.getJSONObject(i).getInt("id") == id) {
-                    JSONObject row = all.getJSONObject(i).put("text", "请按时完成这条备忘录，记得喝水、整理桌面并准备明天需要的物品。");
+                    JSONObject row = all.getJSONObject(i).put("text", "请按时完成这条备忘录，记得喝水、整理桌面并准备明天需要的物品。")
+                        .put("intervalMinutes", 1);
                     engine.save(row.toString());
                 }
                 setResultCode(id);

@@ -23,7 +23,7 @@ public final class SpeechPlaybackService extends Service {
     private Intent current;
     private boolean readingBody;
     private File retryAudio;
-    private boolean registered, watchingCall;
+    private boolean registered, watchingCall, playingRetrySuffix;
     private int playbackGeneration;
     private final BroadcastReceiver screen = new BroadcastReceiver() {
         @Override public void onReceive(Context c, Intent i) {
@@ -124,7 +124,7 @@ public final class SpeechPlaybackService extends Service {
                 if (retryAudio == null) { finishCurrent(); return; }
                 try {
                     // Reuse this alert's player/focus and its cancellation/privacy guards.
-                    File extra = retryAudio; retryAudio = null;
+                    File extra = retryAudio; retryAudio = null; playingRetrySuffix = true;
                     p.reset(); p.setAudioAttributes(attributes); p.setDataSource(extra.getPath()); p.prepareAsync();
                 } catch (Exception e) { finishCurrent(); }
             });
@@ -145,7 +145,8 @@ public final class SpeechPlaybackService extends Service {
                         new ReminderEngine(this).event("speech_focus_limited", fresh.getInt("id"), current.getLongExtra("token", 0), "系统未授予音频焦点，保留闹钟播放");
                     p.start();
                     if (!watchingCall) { watchingCall = true; watchCallMode(ticket); }
-                    new ReminderEngine(this).event("speech_played", fresh.getInt("id"), current.getLongExtra("token", 0), readingBody ? "正文" : "通用提示或备用铃声");
+                    new ReminderEngine(this).event(playingRetrySuffix ? "speech_retry_suffix_played" : "speech_played", fresh.getInt("id"), current.getLongExtra("token", 0),
+                        playingRetrySuffix ? "第" + fresh.optInt("attempts") + "次 · 间隔" + fresh.optInt("intervalMinutes") + "分钟" : readingBody ? "正文" : "通用提示或备用铃声");
                 } catch (Exception e) { finishCurrent(); }
             });
             wake = getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "memo:speech");
@@ -166,7 +167,7 @@ public final class SpeechPlaybackService extends Service {
         if (player != null) { player.setOnCompletionListener(null); player.setOnPreparedListener(null); player.setOnErrorListener(null); player.release(); player = null; }
         if (focus != null) { getSystemService(AudioManager.class).abandonAudioFocusRequest(focus); focus = null; }
         if (wake != null && wake.isHeld()) wake.release(); wake = null;
-        readingBody = false; retryAudio = null; watchingCall = false;
+        readingBody = false; retryAudio = null; watchingCall = false; playingRetrySuffix = false;
     }
     private void finishCurrent() { releasePlayer(); current = null; next(); }
     @Override public void onDestroy() {

@@ -8,7 +8,7 @@ void main() {
   for (final join in ['，然后', '然后', '，下一条，', '下一条']) {
     for (final numbers in [('五', '十'), ('5', '10'), ('５', '１０')]) {
       test('degree body survives $join $numbers', () {
-        final rows = parse('${numbers.$1}分钟后提醒我把火调小一点${join}${numbers.$2}分钟后提醒我关火');
+        final rows = parse('${numbers.$1}分钟后提醒我把火调小一点$join${numbers.$2}分钟后提醒我关火');
         expect(rows.map((p) => p.reminder.text), ['把火调小一点', '关火']);
         expect(rows.map((p) => p.reminder.date), [at.add(const Duration(minutes: 5)), at.add(const Duration(minutes: 10))]);
         expect(rows.every((p) => p.warning == null), isTrue);

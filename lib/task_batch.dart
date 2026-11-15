@@ -77,7 +77,7 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
         if (rows.length > 10) feedback = '最多创建10条，请返回减少条数。';
       } else {
         if (p.issue == VoiceIssue.relativeReference && p.relativeDelay != null) {
-          rows[i].date = (previous ? p.previousTime! : p.reference).add(p.relativeDelay!);
+          rows[i].date = (previous && i > 0 ? rows[i - 1].date : p.reference).add(p.relativeDelay!);
         }
         warnings[i] = null;
         metadata[i] = ParsedVoice(rows[i], rows[i].timeConfirmed, null, p.reference, original: p.original);

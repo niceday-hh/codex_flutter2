@@ -338,7 +338,7 @@ List<ParsedVoice> parseVoiceBatch(String source, {DateTime? now, required Remind
       final instruction = '${inherit && explicitDate == null && !schedule.endsWith('后') && !relative ? date : ''}$schedule${relative ? '后' : ''}';
       var body = v.slice(t.end, end).replaceFirst(RegExp(r'^[，,：:\s]*(?:提醒我|提醒)?[，,：:\s]*'), '');
       body = _trimBatch(body);
-      final p = parseVoice('${instruction}提醒我$body', now: current, defaults: defaults());
+      final p = parseVoice('$instruction提醒我$body', now: current, defaults: defaults());
       // Parsing the schedule cannot consume or reinterpret a body time.
       return annotate(p, original: _trimBatch(v.slice(start, end)));
     }
@@ -356,7 +356,7 @@ List<ParsedVoice> parseVoiceBatch(String source, {DateTime? now, required Remind
           warning: '正文中发现另一处时间，尚未自动拆分。请确认是一条还是两条。',
           alternatives: [make(starts[i], w.start, t, inheritedDate), make(w.start, end, w, inheritedDate)]);
       }
-      if (RegExp(r'(?:这些|这[两几]|全部|所有).*(?:开启|关闭)语音播报').hasMatch(p.reminder.text)) {
+      if (RegExp(r'(?:这些|这[两几]条|全部|所有).*(?:开启|关闭)语音播报').hasMatch(v.slice(t.end, end))) {
         p = annotate(p, original: p.original, issue: VoiceIssue.scope, warning: '检测到批量设置，请逐条确认语音播报开关。');
       }
       rows.add(p);

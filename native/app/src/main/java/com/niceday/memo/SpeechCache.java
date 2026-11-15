@@ -58,7 +58,7 @@ final class SpeechCache {
                     JSONObject extra = textJob(c, companion, snapshot);
                     if (held.keys.add(extra.getString("key"))) companions.put(extra);
                 }
-                job.put("companions", companions);
+                if (companions.length() > 0) job.put("companions", companions);
             }
             leases.put(token, held);
             return job.put("lease", token).put("filename", name).put("reminderId", id);
