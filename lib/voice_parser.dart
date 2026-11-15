@@ -277,7 +277,8 @@ List<ParsedVoice> parseVoiceBatch(String source, {DateTime? now, required Remind
     final leading = m.start == 0 || RegExp(r'^[，,；;。、]*(?:请)?$').hasMatch(view.mask.substring(0, m.start));
     if (leading && m.group(0) != '下一条') numbered = true;
     final nextCommand = _batchTime.matchAsPrefix(tail) != null || tail.startsWith('提醒我') || tail.startsWith('提醒');
-    final precededByBreak = m.start > 0 && RegExp(r'[，,；;。、]$').hasMatch(view.mask.substring(0, m.start));
+    final head = view.mask.substring(0, m.start);
+    final precededByBreak = m.start > 0 && (RegExp(r'[，,；;。、]$').hasMatch(head) || _batchJoin.hasMatch(head));
     if ((leading || nextCommand || tail.isEmpty || precededByBreak) && (m.group(0) == '下一条' || numbered)) separators.add(m);
   }
   final ranges = <(int, int)>[];
