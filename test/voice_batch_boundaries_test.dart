@@ -48,6 +48,16 @@ void main() {
     final dependent = parse('第一条完成后十分钟提醒我关火').single;
     expect(dependent.issue, VoiceIssue.dependency); expect(dependent.reminder.timeConfirmed, isFalse);
   });
+  test('explicit separator with no schedule keeps the missing-time body', () {
+    final rows = parse('五分钟后关火，然后下一条，买菜');
+    expect(rows.map((p) => p.reminder.text), ['关火', '买菜']);
+    expect(rows.last.reminder.timeConfirmed, isFalse);
+  });
+  test('relative wording with optional after keeps a clean body', () {
+    final rows = parse('五分钟后提醒我调小火，再过十分钟后提醒我关火');
+    expect(rows.last.reminder.text, '关火'); expect(rows.last.relativeDelay, const Duration(minutes: 10));
+    expect(rows.last.issue, VoiceIssue.relativeReference);
+  });
   test('row settings do not leak and legacy single parser remains untouched', () {
     final rows = parse('五分钟后提醒我喝水，开启语音播报，总共提醒五次，下一条十分钟后提醒我关火');
     expect(rows.length, 2); expect(rows.first.reminder.speechMode, 'on'); expect(rows.first.reminder.totalCount, 5);

@@ -256,7 +256,7 @@ const _batchNumber = r'[零〇一二两三四五六七八九十百千\d]+';
 final _batchTime = RegExp('(?:(明早|明晚|今晚|今天|明天|后天|每天|每日|工作日|(?:每周|每星期|周|星期)[一二三四五六日天1-7]|(?:$_batchNumber年)?(?:$_batchNumber月)?$_batchNumber[日号])?'
   '(?:凌晨|午夜|早上|上午|中午|下午|傍晚|晚上)?(?:$_batchNumber[点时](?:半|一刻|三刻|$_batchNumber分?)?|\\d{1,2}[:：]\\d{1,2}(?:[:：]\\d{1,2})?)'
   '|(?:(?:$_batchNumber个半|一个半|$_batchNumber|半)(?:个)?(?:天|小时|分钟|分|秒钟|秒))+[以之]?后'
-  '|再过(?:(?:$_batchNumber|半)(?:个)?(?:天|小时|分钟|分|秒钟|秒))+)');
+  '|再过(?:(?:$_batchNumber|半)(?:个)?(?:天|小时|分钟|分|秒钟|秒))+(?:[以之]?后)?)');
 final _batchJoin = RegExp(r'[，,；;。、]*(?:然后|另外|接着|还有|再)[，,；;。、]*$');
 String _trimBatch(String value) => value.replaceAll(RegExp(r'^[，,；;。、：:\s]+|[，,；;。、\s]+$'), '').trim();
 
@@ -277,12 +277,16 @@ List<ParsedVoice> parseVoiceBatch(String source, {DateTime? now, required Remind
     final leading = m.start == 0 || RegExp(r'^[，,；;。、]*(?:请)?$').hasMatch(view.mask.substring(0, m.start));
     if (leading && m.group(0) != '下一条') numbered = true;
     final nextCommand = _batchTime.matchAsPrefix(tail) != null || tail.startsWith('提醒我') || tail.startsWith('提醒');
-    if ((leading || nextCommand || tail.isEmpty) && (m.group(0) == '下一条' || numbered)) separators.add(m);
+    final precededByBreak = m.start > 0 && RegExp(r'[，,；;。、]$').hasMatch(view.mask.substring(0, m.start));
+    if ((leading || nextCommand || tail.isEmpty || precededByBreak) && (m.group(0) == '下一条' || numbered)) separators.add(m);
   }
   final ranges = <(int, int)>[];
   var begin = 0;
   for (final m in separators) {
-    if (_trimBatch(view.slice(begin, m.start)).isNotEmpty) ranges.add((begin, m.start));
+    final before = view.mask.substring(begin, m.start);
+    final join = _batchJoin.firstMatch(before);
+    final end = join == null ? m.start : begin + join.start;
+    if (_trimBatch(view.slice(begin, end)).isNotEmpty) ranges.add((begin, end));
     begin = m.end;
   }
   if (_trimBatch(view.slice(begin, view.text.length)).isNotEmpty || separators.isNotEmpty) ranges.add((begin, view.text.length));
@@ -325,17 +329,17 @@ List<ParsedVoice> parseVoiceBatch(String source, {DateTime? now, required Remind
       if (strong || compactList || t.group(0)!.startsWith('再过')) {
         starts.add(join == null ? t.start : accepted.last.end + join.start);
         accepted.add(t); explicitBody = reminder;
-      } else if (explicitBody && !referential && body.isNotEmpty && weak.isEmpty) {
+      } else if (explicitBody && !referential && body.isNotEmpty && !weak.containsKey(accepted.length - 1)) {
         weak[accepted.length - 1] = t;
       }
     }
-    ParsedVoice make(int start, int end, RegExpMatch t, String date, {bool inherit = true}) {
+    ParsedVoice make(int start, int end, RegExpMatch t, String date) {
       final explicitDate = t.group(1);
       final schedule = t.group(0)!.replaceFirst(RegExp(r'^明早'), '明天早上')
         .replaceFirst(RegExp(r'^明晚'), '明天晚上').replaceFirst(RegExp(r'^今晚'), '今天晚上')
         .replaceFirst(RegExp(r'^再过'), '');
       final relative = t.group(0)!.startsWith('再过');
-      final instruction = '${inherit && explicitDate == null && !schedule.endsWith('后') && !relative ? date : ''}$schedule${relative ? '后' : ''}';
+      final instruction = '${explicitDate == null && !schedule.endsWith('后') && !relative ? date : ''}$schedule${relative && !schedule.endsWith('后') ? '后' : ''}';
       var body = v.slice(t.end, end).replaceFirst(RegExp(r'^[，,：:\s]*(?:提醒我|提醒)?[，,：:\s]*'), '');
       body = _trimBatch(body);
       final p = parseVoice('$instruction提醒我$body', now: current, defaults: defaults());
