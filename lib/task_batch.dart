@@ -28,6 +28,9 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
   late final rows = widget.drafts.map((p) => p.reminder).toList();
   late final warnings = widget.drafts.map((p) => p.warning).toList();
   final done = <int>{}, excluded = <int>{};
+  final listKey = GlobalKey<AnimatedListState>();
+  late final rowKeys = List.generate(rows.length, (_) => GlobalKey());
+  Duration get motion => MediaQuery.disableAnimationsOf(context) ? Duration.zero : MemoMotion.base;
   final customTimes = <int>{};
   DateTime? sceneStart;
   bool saving = false, choosingStart = false;
@@ -70,6 +73,10 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
         final skipped = excluded.contains(i);
         final shifted = <int>{for (final n in excluded) if (n != i) n > i ? n + p.alternatives.length - 1 : n};
         excluded..clear()..addAll(shifted);
+        for (var offset = 1; offset < p.alternatives.length; offset++) {
+          rowKeys.insert(i + offset, GlobalKey());
+          listKey.currentState!.insertItem(i + offset, duration: motion);
+        }
         rows.replaceRange(i, i + 1, p.alternatives.map((p) => p.reminder));
         warnings.replaceRange(i, i + 1, p.alternatives.map((p) => p.warning));
         metadata.replaceRange(i, i + 1, p.alternatives);
@@ -93,6 +100,10 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
     if (!mounted || updated == null) return;
     setState(() {
       final original = '${metadata[i - 1].original ?? rows[i - 1].text}，${metadata[i].original ?? rows[i].text}';
+      final removed = rows[i].text;
+      rowKeys.removeAt(i);
+      listKey.currentState!.removeItem(i, (context, animation) => SizeTransition(
+        sizeFactor: animation, axisAlignment: -1, child: ListTile(title: Text(removed))), duration: motion);
       rows[i - 1] = updated; rows.removeAt(i); warnings[i - 1] = null; warnings.removeAt(i);
       metadata[i - 1] = ParsedVoice(updated, updated.timeConfirmed, null, metadata[i - 1].reference, original: original);
       metadata.removeAt(i);
@@ -150,9 +161,77 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
     }
   }
   void unawaitedPrepare() { speech.preparePending().catchError((Object _) {}); }
-  @override Widget build(BuildContext context) => PopScope(canPop: !saving, child: Scaffold(
+  Widget draftRow(BuildContext context, int i, Animation<double> animation) {
+    final row = rows[i];
+    final committed = done.contains(i);
+    final skipped = excluded.contains(i);
+    final issue = needsStart || committed || skipped ? null : error(i);
+    final previous = i == 0 ? null : rows[i - 1];
+    final showDate = !needsStart && row.dateConfirmed &&
+        (previous == null || !previous.dateConfirmed || !DateUtils.isSameDay(previous.date, row.date));
+    final editing = !saving && !choosingStart && !needsStart && !committed;
+    final canMerge = widget.voiceSource && i > 0 && done.isEmpty && !saving;
+    final time = needsStart ? relativeLabel(i) : row.timeConfirmed && row.dateConfirmed ? row.time : '待补时间';
+    final notes = [
+      if (committed) '已创建' else if (skipped) '已跳过',
+      if (row.repeat != 'none') row.repeatLabel,
+      if (row.speechMode == 'on') '语音开启',
+      if (row.speechMode == 'off' && widget.store.defaults['speechMode'] == 'on') '语音关闭',
+      if (isScene && !needsStart && !customTimes.contains(i)) relativeLabel(i),
+      if (customTimes.contains(i)) '时间已单独调整',
+    ];
+    final repair = widget.voiceSource && issue != null && !saving && done.isEmpty;
+    return SizeTransition(sizeFactor: animation, axisAlignment: -1,
+      child: Column(key: rowKeys[i], crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        if (showDate) Padding(padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
+          child: Text('${row.date.year}年${row.date.month}月${row.date.day}日', style: context.text.caption)),
+        Material(color: issue == null ? context.colors.surface : context.colors.warningSurface,
+          child: Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Checkbox(semanticLabel: '创建第 ${i + 1} 条', value: !skipped,
+                onChanged: saving || committed ? null : (v) => setState(() {
+                  if (v == true) { excluded.remove(i); } else { excluded.add(i); }
+                })),
+              Expanded(child: Wrap(spacing: 10, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center,
+                children: [Text(time, style: context.text.label.copyWith(color: context.colors.brand700)),
+                  Text(row.text, style: context.text.subtitle)])),
+              IconButton(tooltip: '编辑第 ${i + 1} 条', onPressed: editing ? () => edit(i) : null,
+                icon: const Icon(Icons.edit_outlined)),
+              if (canMerge) PopupMenuButton<String>(tooltip: '第 ${i + 1} 条更多操作',
+                onSelected: (_) => merge(i), itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'merge', child: Text('与上一条合并并编辑'))]),
+            ]),
+            if (notes.isNotEmpty) Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+              child: Wrap(spacing: 8, children: [for (final note in notes) Text(note, style: context.text.caption)])),
+            if (issue != null) Padding(padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(issue, style: context.text.label.copyWith(color: context.colors.danger)),
+                if (repair && metadata[i].issue == VoiceIssue.boundary) ...[
+                  Text('疑似下一条：${metadata[i].evidence ?? ""}', style: context.text.body),
+                  Wrap(children: [
+                    TextButton(onPressed: () => resolve(i), child: const Text('保留一条')),
+                    OutlinedButton(onPressed: rows.length - 1 + metadata[i].alternatives.length > 10
+                      ? null : () => resolve(i, split: true), child: const Text('拆成两条')),
+                  ]),
+                ],
+                if (repair && metadata[i].issue == VoiceIssue.relativeReference) Wrap(children: [
+                  TextButton(onPressed: () => resolve(i), child: const Text('从录音时刻起算')),
+                  if (metadata[i].previousTime != null) OutlinedButton(onPressed: () => resolve(i, previous: true),
+                    child: const Text('从上一条计划时间起算')),
+                ]),
+              ])),
+          ]))),
+        Divider(height: 1, color: context.colors.line),
+      ]));
+  }
+
+  @override Widget build(BuildContext context) {
+    final selection = selected;
+    final unresolved = needsStart ? <int>[] : selection.where((i) => error(i) != null).toList();
+    return PopScope(canPop: !saving, child: Scaffold(
     appBar: AppBar(title: Text(widget.sceneName ?? '核对 ${rows.length} 条提醒', maxLines: 1, overflow: TextOverflow.ellipsis)),
-    body: ListView(padding: const EdgeInsets.all(20), children: [
+    body: SingleChildScrollView(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Text(needsStart ? '先看安排，再选择开始时间'
         : widget.voiceSource && rows.length == 1 ? '仅识别到 1 条，请核对' : '逐条核对后，再一起创建', style: context.text.title),
       const SizedBox(height: 8),
@@ -178,49 +257,28 @@ class _TaskBatchPageState extends State<TaskBatchPage> {
         children: [Padding(padding: const EdgeInsets.only(bottom: 12), child: Align(alignment: Alignment.centerLeft,
           child: Text(widget.source, style: context.text.body)))]),
       const SizedBox(height: 16),
-      for (var i = 0; i < rows.length; i++) Padding(padding: const EdgeInsets.only(bottom: 12), child: MemoCard(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [Text('${i + 1}'.padLeft(2, '0'), style: context.text.label.copyWith(color: context.colors.muted)),
-            const SizedBox(width: 8), Expanded(child: Text(done.contains(i) ? '已创建' : excluded.contains(i) ? '已跳过' : needsStart ? '待设时间' : '待创建', style: context.text.caption)),
-            Checkbox(semanticLabel: '创建第 ${i + 1} 条', value: !excluded.contains(i), onChanged: saving || done.contains(i) ? null : (value) => setState(() {
-            if (value == true) { excluded.remove(i); } else { excluded.add(i); }
-          })),
-            IconButton(tooltip: '编辑第 ${i + 1} 条', onPressed: saving || choosingStart || needsStart || done.contains(i) ? null : () => edit(i), icon: const Icon(Icons.edit_outlined))]),
-          if (isScene && !needsStart) Text(customTimes.contains(i) ? '单独安排' : relativeLabel(i), style: context.text.caption.copyWith(color: context.colors.muted)),
-          Text(needsStart ? relativeLabel(i) : !rows[i].timeConfirmed || !rows[i].dateConfirmed ? '待补时间' : '${rows[i].date.year}/${rows[i].date.month}/${rows[i].date.day}  ${rows[i].time}',
-            style: context.text.label.copyWith(color: context.colors.brand700)),
-          const SizedBox(height: 8),
-          Text(rows[i].text, style: context.text.title),
-          const SizedBox(height: 8),
-          Wrap(spacing: 8, runSpacing: 6, children: [MemoTag(rows[i].repeatLabel),
-            MemoTag(rows[i].speechMode == 'on' ? '语音开启' : rows[i].speechMode == 'off' ? '语音关闭' : '语音跟随默认'),
-            if (customTimes.contains(i)) const MemoTag('时间已单独调整'),
-            if (done.contains(i)) const MemoTag('已创建')]),
-          if (widget.voiceSource && !saving && done.isEmpty) ...[
-            if (metadata[i].issue == VoiceIssue.boundary && warnings[i] != null) ...[
-              Text('疑似下一条：${metadata[i].evidence ?? ""}', style: context.text.caption.copyWith(color: context.colors.brand700)),
-              Wrap(spacing: 8, children: [
-                TextButton(onPressed: () => resolve(i), child: const Text('保留一条')),
-                OutlinedButton(onPressed: rows.length >= 10 ? null : () => resolve(i, split: true), child: const Text('拆成两条')),
-              ]),
-            ],
-            if (metadata[i].issue == VoiceIssue.relativeReference && warnings[i] != null) Wrap(spacing: 8, children: [
-              TextButton(onPressed: () => resolve(i), child: const Text('从录音时刻起算')),
-              if (metadata[i].previousTime != null) OutlinedButton(onPressed: () => resolve(i, previous: true), child: const Text('从上一条计划时间起算')),
-            ]),
-            if (i > 0) TextButton.icon(onPressed: () => merge(i), icon: const Icon(Icons.merge_outlined), label: const Text('与上一条合并并编辑')),
-          ],
-          if (!needsStart && !done.contains(i) && error(i) != null) Padding(padding: const EdgeInsets.only(top: 8),
-            child: Text(error(i)!, style: context.text.caption.copyWith(color: context.colors.danger))),
-        ]))),
-    ]),
+      AnimatedList(key: listKey, primary: false, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.zero, initialItemCount: rows.length, itemBuilder: draftRow),
+    ])),
     bottomNavigationBar: SafeArea(child: Padding(padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       if (feedback != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(feedback!, style: context.text.caption.copyWith(color: context.colors.danger))),
-      FilledButton(onPressed: saving || choosingStart || needsStart || selected.isEmpty ? null : save,
-        child: Text(saving ? '正在创建…' : needsStart ? '请先选择开始时间' : '创建 ${selected.length} 条提醒')),
-      if (widget.voiceSource && done.isEmpty) TextButton(onPressed: saving ? null : () => Navigator.pop(context, false), child: const Text('返回修改原话')),
-      TextButton(onPressed: saving ? null : () => Navigator.pop(context, done.isNotEmpty), child: Text(done.isEmpty ? '取消' : '返回，保留已创建的提醒')),
+      if (unresolved.isNotEmpty) TextButton.icon(icon: const Icon(Icons.rule_rounded),
+        label: Text('${selection.length} 条已选，${unresolved.length} 条待核对'),
+        onPressed: saving ? null : () {
+          final target = rowKeys[unresolved.first].currentContext;
+          if (target != null) Scrollable.ensureVisible(target, alignment: .2, duration: motion);
+        }),
+      FilledButton(onPressed: saving || choosingStart ? null : needsStart ? chooseStart
+        : selection.isEmpty || unresolved.isNotEmpty ? null : save,
+        child: Text(saving ? '正在创建…' : needsStart ? '选择开始时间' : '创建 ${selection.length} 条提醒')),
+      Wrap(alignment: WrapAlignment.center, spacing: 16, children: [
+        if (widget.voiceSource && done.isEmpty) TextButton(onPressed: saving ? null : () => Navigator.pop(context, false),
+          child: const Text('返回修改原话')),
+        TextButton(onPressed: saving ? null : () => Navigator.pop(context, done.isNotEmpty),
+          child: Text(done.isEmpty ? '取消' : '返回，保留已创建的提醒')),
+      ]),
     ]))),
   ));
+  }
 }

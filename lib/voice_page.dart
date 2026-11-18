@@ -65,33 +65,38 @@ class _VoicePageState extends State<VoicePage> {
           : Icon(flow.phase == VoicePhase.recording ? Icons.stop_rounded : Icons.mic_rounded, color: Colors.white, size: 54))))))),
     const SizedBox(height: 18),
     Text(flow.message.isEmpty ? '点击开始说话' : flow.message, textAlign: TextAlign.center, style: context.text.headline),
-    ValueListenableBuilder<String>(valueListenable: asr.status, builder: (_, status, _) =>
-      Text(flow.capturing && status.contains('模型') && !status.contains('就绪')
-        ? '识别准备中，声音已暂存' : status, textAlign: TextAlign.center,
-        style: context.text.caption.copyWith(color: context.colors.muted))),
-    if (flow.capturing) ValueListenableBuilder<int>(valueListenable: flow.countdown,
-      builder: (_, seconds, __) => Text('剩余 $seconds 秒', textAlign: TextAlign.center,
-        style: context.text.caption.copyWith(fontFeatures: MemoText.tabular))),
-    const SizedBox(height: 18), RecordingWaveform(meter: flow.meter),
+    if (flow.capturing) ...[
+      RecordingWaveform(meter: flow.meter),
+      ValueListenableBuilder<int>(valueListenable: flow.countdown,
+        builder: (_, seconds, __) => Text('剩余 $seconds 秒', textAlign: TextAlign.center,
+          style: context.text.caption.copyWith(fontFeatures: MemoText.tabular))),
+      ValueListenableBuilder<String>(valueListenable: asr.status, builder: (_, status, _) =>
+        Text(status.startsWith('正在准备') || status.startsWith('正在加载')
+          ? '已开始收音，识别模型准备中' : status, textAlign: TextAlign.center, style: context.text.caption)),
+    ] else if (!flow.busy && text.text.trim().isEmpty) ...[
+      const SizedBox(height: 8),
+      Text(flow.taskMode == VoiceTaskMode.single ? '试着说“二十分钟后提醒我喝水”'
+        : '试着说“明天九点提醒我起床，下一条十点提醒我出门”',
+        textAlign: TextAlign.center, style: context.text.body),
+    ],
     const SizedBox(height: 24),
     Card(elevation: 0, color: context.colors.surface, shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(MemoRadius.xl), side:  BorderSide(color: context.colors.line)),
       child: Padding(padding: const EdgeInsets.all(16), child:
       TextField(controller: text, enabled: !flow.busy && !flow.capturing, minLines: 3, maxLines: 6,
         onChanged: (v) { flow.text = v; flow.reference = v.trim().isEmpty ? null : flow.reference ?? DateTime.now(); setState(() {}); },
-        decoration: InputDecoration(hintText: flow.taskMode == VoiceTaskMode.single
-          ? '例如：20分钟后提醒我喝水，每隔3分钟提醒，总共提醒5次'
-          : '例如：五分钟后提醒我调小火，下一条十分钟后提醒我关火。', border: InputBorder.none, filled: false)))),
+        decoration: const InputDecoration(hintText: '也可以直接输入时间和事情', border: InputBorder.none, filled: false)))),
     const SizedBox(height: 16),
     FilledButton(onPressed: text.text.trim().isEmpty || flow.busy || flow.capturing ? null : () { FocusScope.of(context).unfocus(); flow.reviewText(text.text); },
       child: Text(flow.taskMode == VoiceTaskMode.single ? '确认并设置提醒' : '核对多条提醒')),
     const SizedBox(height: 12),
-    OutlinedButton(onPressed: flow.phase == VoicePhase.saving ? null : flow.busy ? flow.cancel : flow.phase == VoicePhase.recording ? flow.finish : flow.startRecording,
+    if (flow.active || (flow.hasRecordedDraft && text.text.trim().isNotEmpty)) OutlinedButton(onPressed: flow.phase == VoicePhase.saving ? null : flow.busy ? flow.cancel : flow.phase == VoicePhase.recording ? flow.finish : flow.startRecording,
       child: Text(flow.busy ? '取消录音' : flow.phase == VoicePhase.recording ? '结束录音' : '重新录音')),
     const SizedBox(height: 20),
-    MemoHint(flow.taskMode == VoiceTaskMode.single
-      ? '单任务沿用原有解析规则。首页可连续说“开始录音，多任务模式，明天九点起床十点学习”。单次录音最长45秒，切到后台会关闭麦克风。'
-      : '推荐说“下一条”分开任务，或说“然后＋时间＋提醒我”。正文中的时间保留；有歧义时可选择拆分或合并。最多10条，省略日期时沿用前一条日期。逐条核对后才创建。录音中可说“开启语音播报”“提醒间隔三分钟”“总共提醒五次”。',
-      align: TextAlign.center),
+    ExpansionTile(title: const Text('语音用法'), children: [
+      MemoHint(flow.taskMode == VoiceTaskMode.single
+        ? '单次录音最长45秒，切到后台会关闭麦克风。首页可说“开始录音，多任务模式”再说多件事。'
+        : '说“下一条”分开任务，最多10条。省略日期时沿用前一条日期。还可说“开启语音播报”“提醒间隔三分钟”“总共提醒五次”。'),
+    ]),
   ]);
 }

@@ -45,9 +45,9 @@ void main() {
     expect(find.byType(MemoTimeSheet), findsNothing);
     expect(find.text('开始时'), findsOneWidget); expect(find.text('30 分钟后'), findsOneWidget);
     expect(find.text('40 分钟后'), findsOneWidget); expect(find.text('未设置 · 选择时间'), findsOneWidget);
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '请先选择开始时间')).onPressed, isNull);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '选择开始时间')).onPressed, isNotNull);
     expect(saved, isEmpty);
-    await tap(tester, find.byKey(const ValueKey('scene-start-time')));
+    await tap(tester, find.text('选择开始时间'));
     await tap(tester, find.descendant(of: find.byType(MemoTimeSheet), matching: find.text('取消')));
     expect(find.byType(TaskBatchPage), findsOneWidget);
     expect(find.text('未设置 · 选择时间'), findsOneWidget); expect(saved, isEmpty);

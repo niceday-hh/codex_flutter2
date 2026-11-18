@@ -5,6 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:timed_memo/main.dart';
 import 'package:timed_memo/appearance.dart';
+import 'package:timed_memo/recording_waveform.dart';
+import 'package:timed_memo/voice_page.dart';
+import 'package:timed_memo/asr.dart';
+import 'voice_flow_test.dart' show FakeCapture, FakeStore;
 import 'package:timed_memo/design_tokens.dart';
 import 'package:timed_memo/reminder.dart';
 import 'package:timed_memo/task_batch.dart';
@@ -37,8 +41,15 @@ void main() {
           return null;
         });
         await tester.pumpWidget(const RepaintBoundary(key: previewKey, child: MemoApp())); await tester.pumpAndSettle();
+        await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('日历'))); await tester.pumpAndSettle();
+        final day = tester.widget<Text>(find.text('${DateTime.now().day}').first);
+        final calendar = tester.element(find.text('${DateTime.now().day}').first);
+        expect(day.style!.color, inkOn(calendar.colors.brand500));
         await tester.tap(find.descendant(of: find.byType(MemoTabBar), matching: find.text('语音'))); await tester.pumpAndSettle();
         expect(tester.widget<SegmentedButton<VoiceTaskMode>>(find.byKey(const ValueKey('voice-task-mode'))).selected, {VoiceTaskMode.single});
+        expect(find.text('重新录音'), findsNothing);
+        expect(find.byType(RecordingWaveform), findsNothing);
+        expect(find.textContaining('试着说'), findsOneWidget);
         if (previewsEnabled) await capture(tester, 'voice-single-${accent.name}-${mode.name}');
         await tester.tap(find.text('多任务')); await tester.pumpAndSettle();
         expect(tester.widget<SegmentedButton<VoiceTaskMode>>(find.byKey(const ValueKey('voice-task-mode'))).selected, {VoiceTaskMode.multiple});
@@ -80,6 +91,24 @@ void main() {
       });
     }
   }
+  testWidgets('waveform and model preparation are visible during actual capture', (tester) async {
+    final previous = asr.status.value;
+    addTearDown(() => asr.status.value = previous);
+    final capture = FakeCapture();
+    final flow = VoiceFlow(capture: capture, store: FakeStore(), openVoicePage: () {}, onSaved: () async {});
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: VoicePage(flow: flow))));
+    expect(find.byType(RecordingWaveform), findsNothing);
+    asr.status.value = '正在加载识别模型…';
+    await flow.startRecording(); await tester.pump();
+    expect(find.byType(RecordingWaveform), findsOneWidget);
+    expect(find.text('已开始收音，识别模型准备中'), findsOneWidget);
+    asr.status.value = '离线模型已就绪'; await tester.pump();
+    expect(find.text('已开始收音，识别模型准备中'), findsNothing);
+    expect(find.byType(RecordingWaveform), findsOneWidget);
+    await flow.cancel(); await tester.pump();
+    expect(find.byType(RecordingWaveform), findsNothing);
+    await tester.pumpWidget(const SizedBox()); flow.dispose(); await tester.pump();
+  });
   testWidgets('creating a voice batch clears its source and prevents accidental resubmission', (tester) async {
     var nextId = 1, saves = 0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {

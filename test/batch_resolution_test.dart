@@ -32,7 +32,9 @@ void main() {
   for (final split in [false, true]) {
     testWidgets('ambiguous boundaries block save until explicit ${split ? "split" : "keep"}', (tester) async {
       await open(tester, '明天九点提醒我起床十点学习');
-      await tester.tap(find.text('创建 1 条提醒')); await tester.pumpAndSettle(); expect(saved, isEmpty);
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, '创建 1 条提醒')).onPressed, isNull);
+      await tester.tap(find.text('1 条已选，1 条待核对')); await tester.pumpAndSettle();
+      expect(find.text('拆成两条').hitTestable(), findsOneWidget); expect(saved, isEmpty);
       await tester.ensureVisible(find.text(split ? '拆成两条' : '保留一条'));
       await tester.tap(find.text(split ? '拆成两条' : '保留一条')); await tester.pumpAndSettle();
       await tester.tap(find.text('创建 ${split ? 2 : 1} 条提醒')); await tester.pumpAndSettle();
@@ -40,10 +42,26 @@ void main() {
       await tester.pumpWidget(const SizedBox()); await tester.pump();
     });
   }
+  testWidgets('review shortcut locates an offscreen ambiguity and respects reduced motion', (tester) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    await open(tester, '明天九点提醒我起床，下一条十点提醒我读书，下一条十一点提醒我出门十二点吃饭');
+    await tester.binding.setSurfaceSize(const Size(320, 480));
+    await tester.pumpAndSettle();
+    final shortcut = find.text('3 条已选，1 条待核对');
+    await tester.tap(shortcut); await tester.pumpAndSettle();
+    expect(find.text('拆成两条').hitTestable(), findsOneWidget);
+    await tester.tap(find.text('拆成两条')); await tester.pump();
+    expect(find.text('核对 4 条提醒'), findsOneWidget);
+    expect(find.text('3 条已选，1 条待核对'), findsNothing);
+    expect(saved, isEmpty);
+    await tester.pumpWidget(const SizedBox()); await tester.pump();
+  });
   testWidgets('relative reference and merge retain the original second schedule text', (tester) async {
     String? merged;
     await open(tester, '五分钟后提醒我调小火，再过十分钟提醒我关火', edit: (_, r) async { merged = r.text; return r; });
     await tester.ensureVisible(find.text('从上一条计划时间起算')); await tester.tap(find.text('从上一条计划时间起算')); await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('第 2 条更多操作')); await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('与上一条合并并编辑')); await tester.tap(find.text('与上一条合并并编辑')); await tester.pumpAndSettle();
     expect(merged, contains('再过十分钟提醒我关火')); expect(find.text('核对 1 条提醒'), findsOneWidget); expect(saved, isEmpty);
     await tester.pumpWidget(const SizedBox()); await tester.pump();

@@ -40,7 +40,7 @@ void main() {
     expect(opened, 1); expect(flow.phase, VoicePhase.recording); expect(c.silences.last, 5);
     c.results.add(CapturedVoice('二十分钟后提醒我做饭，开启语音提醒', at));
     await flow.finish(endSample: 16000);
-    expect(flow.pending?.reminder.text, '做饭');
+    expect(flow.pending?.reminder.text, '做饭'); expect(flow.hasRecordedDraft, isTrue);
     expect(flow.pending?.reminder.date, at.add(const Duration(minutes: 20)));
     expect(flow.pending?.reminder.speechMode, 'on');
     expect(flow.phase, VoicePhase.confirming); expect(store.saved, isEmpty);
@@ -51,7 +51,7 @@ void main() {
     await flow.finish();
     await flow.confirm();
     expect(store.saved.length, 1); expect(flow.pending, isNull);
-    expect(flow.text, isEmpty); expect(flow.reference, isNull);
+    expect(flow.text, isEmpty); expect(flow.reference, isNull); expect(flow.hasRecordedDraft, isFalse);
     flow.dispose(); await tester.pump();
   });
   testWidgets('a start command may contain its memo in the same utterance', (tester) async {

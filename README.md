@@ -1,3 +1,7 @@
+## v0.9.29 · 语音核对和界面优化
+
+录音页按状态显示示例、波形与重录，多任务按日核对并可定位歧义。场景预览底部可直接选时，详情长文可展开，首页与日历同步优化。详见[版本说明](docs/releases/v0.9.29.md)。
+
 ## v0.9.28 · 多任务正文保护与重提醒次数播报
 
 按任务句式与“下一条”判断边界，保护正文时间；确认页支持歧义拆分、保留及合并。可选第二次起追加次数和实际间隔，话术提前缓存。详见[版本说明](docs/releases/v0.9.28.md)。
@@ -172,7 +176,7 @@ Silero VAD v5为固定校验的本地模型，复用现有麦克风与识别线�
 
 面向荣耀100等 arm64 安卓手机的 Flutter 离线语音定时备忘录。四个 Tab：备忘录、日历、语音、设置。
 
-当前工程版本 v0.9.8。源码、GitHub Actions 构建与已发布 APK 位于本仓库；下载见 [Releases](https://github.com/niceday-hh/codex_flutter2/releases)。未经验证的 unsigned 构建不作为安装包发布。
+当前工程版本 v0.9.29。源码、GitHub Actions 构建与已发布 APK 位于本仓库；下载见 [Releases](https://github.com/niceday-hh/codex_flutter2/releases)。未经验证的 unsigned 构建不作为安装包发布。
 
 ## 本版修复与功能
 

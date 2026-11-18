@@ -187,6 +187,7 @@ class VoiceFlow extends ChangeNotifier {
   }
   ParsedVoice? pending;
   String text = '', message = '';
+  bool hasRecordedDraft = false;
   DateTime? reference;
   int elapsed = 0;
   /// Countdown seconds, exposed as its own listenable.
@@ -249,7 +250,7 @@ class VoiceFlow extends ChangeNotifier {
         if (!_current(ticket)) return;
         await capture.open(waitForModel: false);
         if (!_current(ticket)) return;
-        if (mode == VoicePhase.recording) { text = ''; reference = null; openVoicePage(); }
+        if (mode == VoicePhase.recording) { text = ''; hasRecordedDraft = false; reference = null; openVoicePage(); }
         await _listen(mode, ticket);
       } catch (e) { await _failure(e, ticket); }
     });
@@ -307,18 +308,18 @@ class VoiceFlow extends ChangeNotifier {
           openVoicePage();
           final remainder = _takeModePrefix(utterance.substring(start.end));
           if (remainder.isNotEmpty) {
-            text = remainder; reference = result.reference;
+            text = remainder; hasRecordedDraft = true; reference = result.reference;
             await _prepareConfirmation(ticket);
-          } else { text = ''; reference = null; await _listen(VoicePhase.recording, ticket); }
+          } else { text = ''; hasRecordedDraft = false; reference = null; await _listen(VoicePhase.recording, ticket); }
         } else if (mode == VoicePhase.confirming) {
           if (isVoiceConfirm(utterance)) { await _saveInside(ticket); }
           else if (isVoiceAgain(utterance)) {
-            pending = null; text = ''; reference = null; _confirmDeadline = null;
+            pending = null; text = ''; hasRecordedDraft = false; reference = null; _confirmDeadline = null;
             await _listen(VoicePhase.recording, ticket);
           } else if (isVoiceCancel(utterance)) { pending = null; await _closeInside('已取消创建'); }
           else { message = '请说“确认”“重新录音”或“取消”'; await _listen(VoicePhase.confirming, ticket); }
         } else {
-          text = _takeModePrefix(utterance); reference = result.reference;
+          text = _takeModePrefix(utterance); hasRecordedDraft = text.isNotEmpty; reference = result.reference;
           if (text.isEmpty) {
             if (utterance.isNotEmpty) { await _listen(VoicePhase.recording, ticket); return; }
             await _closeInside('没有听清，请重新录音'); return;
@@ -384,7 +385,7 @@ class VoiceFlow extends ChangeNotifier {
     try {
       await store.save(draft);
       // The save itself has completed: never retry it automatically on UI reload failure.
-      pending = null; text = ''; reference = null; phase = VoicePhase.idle; message = '提醒已创建';
+      pending = null; text = ''; hasRecordedDraft = false; reference = null; phase = VoicePhase.idle; message = '提醒已创建';
       _confirmDeadline = null; _notify();
       try { await onSaved(); } catch (_) {}
     } catch (e) {

@@ -167,6 +167,11 @@ void main() {
         reminder: Reminder(id: 7, text: List.filled(20, '这是一条很长的提醒正文。').join()),
         onAck: () async {}, onSkip: () async {}, onPostpone: (_) async => null, onEdit: () {})))));
     await tester.pump();
+    await tester.ensureVisible(find.text('展开全文'));
+    await tester.tap(find.text('展开全文')); await tester.pumpAndSettle();
+    expect(find.text('收起全文'), findsOneWidget);
+    expect(find.descendant(of: find.byType(ReminderDetail), matching: find.byType(SingleChildScrollView)), findsOneWidget);
+    await tester.ensureVisible(find.text('收起全文')); await tester.tap(find.text('收起全文')); await tester.pumpAndSettle();
     await revealDetailAction(tester, find.text('保存音频')); await tester.pumpAndSettle();
     expect(find.text('保存音频').hitTestable(), findsOneWidget); expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox()); await tester.pump();

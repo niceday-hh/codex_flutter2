@@ -368,7 +368,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
         builder: (_) => SizedBox(height: MediaQuery.sizeOf(context).height * .94, child: TaskBatchPage(
           drafts: drafts, source: source, store: store, edit: _editBatchDraft, voiceSource: true)));
       if (created == true && mounted) {
-        voice.text = ''; voice.reference = null;
+        voice.text = ''; voice.hasRecordedDraft = false; voice.reference = null;
         await voice.pause(keepDraft: false, notice: '提醒已创建');
       }
       if (mounted) await reload();
@@ -777,27 +777,24 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     return RefreshIndicator(onRefresh: reload, child: CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(), slivers: [
       SliverList.list(children: [
-        header('备忘录', '把重要的事，交给提醒', trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-          MemoIconButton(icon: Icons.search_rounded, tooltip: '搜索提醒', onTap: _openSearch),
-          const SizedBox(width: MemoSpace.sm),
-          MemoIconButton(icon: Icons.inventory_2_outlined, tooltip: '历史任务', onTap: taskLibrary),
-        ])),
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 24), child: Align(alignment: Alignment.centerLeft,
-          child: TextButton.icon(onPressed: _openScenes, icon: const Icon(Icons.auto_awesome_outlined, size: 18), label: const Text('场景模板')))),
-        // The kicker line. It used to be a lone label with nothing on the
-        // right; the count gives it a second edge, which is what makes the
-        // header read as a masthead rather than a stray date.
-        // Expanded on the date, not Spacer: at 320dp and 1.6× type the two
-        // ends measure wider than the line, and the date is the half that can
-        // give. The count never truncates — it is the number people read.
-        Padding(padding: const EdgeInsets.fromLTRB(24, 0, 24, 16), child: Row(children: [
-          Expanded(child: Text('${now.month}月${now.day}日 · 周${weekdays[now.weekday - 1]}',
-            maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: context.text.caption.copyWith(letterSpacing: .4))),
-          if (active.isNotEmpty) Padding(padding: const EdgeInsets.only(left: 10),
-            child: Text('${active.length} 条待办',
-              style: context.text.caption.copyWith(color: context.colors.muted))),
-        ])),
+        Padding(padding: const EdgeInsets.fromLTRB(24, 28, 24, 8),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(child: Text('备忘录', style: context.text.display)),
+              MemoIconButton(icon: Icons.search_rounded, tooltip: '搜索提醒', onTap: _openSearch),
+              const SizedBox(width: MemoSpace.sm),
+              MemoIconButton(icon: Icons.inventory_2_outlined, tooltip: '历史任务', onTap: taskLibrary),
+            ]),
+            SizedBox(width: double.infinity, child: Wrap(alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
+              Wrap(spacing: 8, children: [
+                Text('${now.month}月${now.day}日 · 周${weekdays[now.weekday - 1]}', style: context.text.caption),
+                if (active.isNotEmpty) Text('${active.length} 条待办', style: context.text.caption),
+              ]),
+              TextButton.icon(onPressed: _openScenes, icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+                label: const Text('场景模板')),
+            ])),
+          ])),
         if (hero != null) _reveal(0, heroCard(hero, now, todayLeft)),
         if (store.status['notifications'] != true || store.status['exact'] != true) permissionBanner(),
         if (active.isEmpty) MemoEmptyState(art: const MemoEmptyArt(), icon: Icons.edit_note_rounded,
@@ -1144,6 +1141,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
             final selected = sameDay(date, selectedDate);
             final today = sameDay(date, DateTime.now());
             final has = marks.contains(d);
+            final selectedInk = inkOn(context.colors.brand500);
             // The selected day is a disc, not a rounded square: at 44dp a
             // 14dp radius still reads as a tile, and a tile inside a 28dp card
             // is a second corner language on the same screen.
@@ -1160,12 +1158,12 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text('$d', style: TextStyle(
-                      color: selected ? Colors.white : today ? context.colors.brand700 : context.colors.ink,
+                      color: selected ? selectedInk : today ? context.colors.brand700 : context.colors.ink,
                       fontWeight: selected ? FontWeight.w600 : today ? FontWeight.w500 : FontWeight.w400,
                       fontSize: 14, fontFeatures: MemoText.tabular)),
                     const SizedBox(height: 3),
                     Container(width: 4, height: 4, decoration: BoxDecoration(shape: BoxShape.circle,
-                      color: has ? selected ? Colors.white : context.colors.brand500 : Colors.transparent)),
+                      color: has ? selected ? selectedInk : context.colors.brand500 : Colors.transparent)),
                   ],
                 ),
               ),
@@ -1751,27 +1749,7 @@ class _ReminderDetailState extends State<ReminderDetail> {
           key: const ValueKey('reminder-detail-scroll'),
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            ConstrainedBox(constraints: BoxConstraints(minHeight: art == null ? 0 : 228),
-              child: Align(alignment: Alignment.topLeft, child: FractionallySizedBox(
-                widthFactor: art == null ? 1 : .58,
-                child: Padding(padding: const EdgeInsets.fromLTRB(4, 8, 0, 20),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(r.displayTime, style: context.text.detailTime),
-                    const SizedBox(height: 6),
-                    Text('${dateLabel(r.displayDate)} · ${r.repeatLabel}',
-                      style: context.text.body.copyWith(color: context.colors.muted)),
-                    const SizedBox(height: MemoSpace.lg),
-                    ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .28),
-                      child: SingleChildScrollView(child: Text(r.text, style: context.text.detailTitle))),
-                    if (voiceName != null) ...[
-                      const SizedBox(height: 12),
-                      Row(children: [Icon(Icons.graphic_eq_rounded, size: 16, color: context.colors.brand700),
-                        const SizedBox(width: 6), Expanded(child: Text('播报音色 · $voiceName',
-                          maxLines: 2, overflow: TextOverflow.ellipsis,
-                          style: context.text.caption.copyWith(color: context.colors.brand700)))]),
-                    ],
-                  ])),
-              ))),
+            _DetailHeading(reminder: r, hasArt: art != null, voiceName: voiceName),
             MemoCard(shadow: false, padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
               child: r.unread ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('已提醒 ${r.attempts}/${r.totalCount} 次', style: context.text.caption),
@@ -1811,6 +1789,59 @@ class _ReminderDetailState extends State<ReminderDetail> {
             icon: const Icon(Icons.edit_outlined, size: 20), label: const Text('编辑提醒'))),
       ]))));
   }
+}
+
+class _DetailHeading extends StatefulWidget {
+  final Reminder reminder;
+  final bool hasArt;
+  final String? voiceName;
+
+  const _DetailHeading({required this.reminder, required this.hasArt, required this.voiceName});
+
+  @override State<_DetailHeading> createState() => _DetailHeadingState();
+}
+
+class _DetailHeadingState extends State<_DetailHeading> {
+  bool expanded = false;
+
+  bool exceedsLines(BuildContext context, double width, int lines) {
+    final painter = TextPainter(text: TextSpan(text: widget.reminder.text, style: context.text.detailTitle),
+      textScaler: MediaQuery.textScalerOf(context), textDirection: Directionality.of(context), maxLines: lines)
+      ..layout(maxWidth: width);
+    final exceeds = painter.didExceedMaxLines;
+    painter.dispose();
+    return exceeds;
+  }
+
+  @override Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
+    final r = widget.reminder;
+    final sideWidth = widget.hasArt ? box.maxWidth * .58 : box.maxWidth;
+    final belowArt = widget.hasArt && exceedsLines(context, sideWidth - 4, 1);
+    // Long copy gets a solid reading surface below the portrait and shares the sheet's scroll.
+    final textWidth = belowArt ? box.maxWidth - 32 : sideWidth - 4;
+    final collapsible = exceedsLines(context, textWidth, 4);
+    final body = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(r.text, style: context.text.detailTitle, maxLines: collapsible && !expanded ? 4 : null,
+        overflow: collapsible && !expanded ? TextOverflow.ellipsis : null),
+      if (collapsible) TextButton(onPressed: () => setState(() => expanded = !expanded),
+        child: Text(expanded ? '收起全文' : '展开全文')),
+    ]);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      ConstrainedBox(constraints: BoxConstraints(minHeight: widget.hasArt ? (belowArt ? 158 : 228) : 0),
+        child: Align(alignment: Alignment.topLeft, child: SizedBox(width: sideWidth,
+          child: Padding(padding: const EdgeInsets.fromLTRB(4, 8, 0, 16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(r.displayTime, style: context.text.detailTime),
+              const SizedBox(height: 6),
+              Text('${dateLabel(r.displayDate)} · ${r.repeatLabel}', style: context.text.body.copyWith(color: context.colors.muted)),
+              if (!belowArt) ...[const SizedBox(height: MemoSpace.lg), body],
+              if (widget.voiceName != null) ...[const SizedBox(height: 12),
+                Text('播报音色 · ${widget.voiceName}', style: context.text.caption.copyWith(color: context.colors.brand700))],
+            ]))))),
+      if (belowArt) Padding(padding: const EdgeInsets.only(bottom: 12),
+        child: MemoCard(shadow: false, padding: const EdgeInsets.all(16), child: body)),
+    ]);
+  });
 }
 
 class ReminderEditor extends StatefulWidget {
