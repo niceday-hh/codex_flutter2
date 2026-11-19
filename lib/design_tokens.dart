@@ -539,16 +539,11 @@ class MemoType {
   TextStyle get heroTitle => const TextStyle(fontFamily: MemoType.serif, fontSize: 19, height: 1.45,
     fontWeight: FontWeight.w400, color: Color(0xFFFFFFFF));
 
-  /// The detail sheet's clock. 34px in brand colour made the *time* the
-  /// headline and pushed the reminder itself down to a subtitle; the time is an
-  /// attribute of the thing, not the thing. It keeps tabular figures and the
-  /// 600 weight (so it still scans as a clock) but drops to 24px and [muted].
-  TextStyle get detailTime => TextStyle(fontSize: 24, height: 1.15, letterSpacing: -.3, fontWeight: FontWeight.w600, color: c.muted, fontFeatures: MemoText.tabular);
+  TextStyle get detailTime => TextStyle(fontSize: 18, height: 1.2,
+    fontWeight: FontWeight.w600, color: c.muted, fontFeatures: MemoText.tabular);
 
-  /// What the reminder actually says, at 28px serif — one step above the list's
-  /// 15.5px and clearly above [detailTime], which is the order the eye needs.
-  TextStyle get detailTitle => TextStyle(fontFamily: MemoType.serif, fontSize: 28, height: 1.4,
-    fontWeight: FontWeight.w400, color: c.ink);
+  TextStyle get detailTitle => TextStyle(fontSize: 23, height: 1.35,
+    fontWeight: FontWeight.w500, color: c.ink);
 }
 
 /// Theme extension so a future dark theme can swap the whole palette without

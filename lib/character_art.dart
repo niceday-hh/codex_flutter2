@@ -31,6 +31,7 @@ class CharacterArt {
   const CharacterArt({required this.asset, required this.layout, required this.width, required this.height,
     required this.bounds, required this.focus, this.light, this.dark});
   bool get isPortrait => layout == 'portrait_contain';
+  bool get isWide => layout == 'wide_contain';
 
   /// Position the subject rather than its transparent source canvas. The face
   /// landmark stays at the top right while unimportant body/weapon edges crop.
@@ -188,15 +189,19 @@ class CharacterBackdropCache {
   String? _prewarmToken;
   int get length => _recent.length;
 
-  static String keyFor(String speaker, Size size, Brightness brightness, MemoPalette palette) =>
-    '$speaker|${size.width.round()}x${size.height.round()}|${brightness.index}|'
+  static String keyFor(String asset, Size size, Brightness brightness, MemoPalette palette) =>
+    '$asset|${size.width.round()}x${size.height.round()}|${brightness.index}|'
     '${Object.hash(palette.surfaceAlt, palette.brand500, palette.brand200)}';
 
-  CharacterBackdropBake? peek(String key) => _recent[key];
+  CharacterBackdropBake? peek(String key) {
+    final hit = _recent.remove(key);
+    if (hit != null) _recent[key] = hit;
+    return hit;
+  }
 
   Future<CharacterBackdropBake?> obtain(String key, Future<CharacterBackdropBake> Function() build) {
-    final hit = _recent.remove(key);
-    if (hit != null) { _recent[key] = hit; return Future.value(hit); }
+    final hit = peek(key);
+    if (hit != null) return Future.value(hit);
     return _pending[key] ??= _start(key, build);
   }
 
@@ -229,20 +234,25 @@ class CharacterBackdropCache {
   void prewarm({required Iterable<String> speakers, required Size size,
       required MemoPalette palette, required Brightness brightness}) {
     final wanted = speakers.toSet().take(2).toList();
-    if (wanted.isEmpty) return;
-    final token = '${wanted.join(',')}|${size.width.round()}x${size.height.round()}|${brightness.index}';
+    if (wanted.isEmpty) {
+      _prewarmToken = null;
+      return;
+    }
+    final token = '${wanted.join(',')}|${keyFor('', size, brightness, palette)}';
     if (_prewarmToken == token) return;
     _prewarmToken = token;
     Future<void>.delayed(const Duration(milliseconds: 600), () async {
-      if (_prewarmToken != token) return; // a newer home state superseded this pass
+      if (_prewarmToken != token) return;
       final catalog = await CharacterArtCatalog.load();
       for (final speaker in wanted) {
         if (_prewarmToken != token) return;
         final art = catalog.entries[speaker];
-        if (art == null) continue;
-        final key = keyFor(speaker, size, brightness, palette);
+        if (art == null || art.isWide) continue;
+        final roles = brightness == Brightness.dark ? art.dark : art.light;
+        final local = roles == null ? palette : palette.withArtRoles(roles);
+        final key = keyFor(art.asset, size, brightness, local);
         if (_recent.containsKey(key) || _pending.containsKey(key)) continue;
-        await obtain(key, () => bakeCharacterBackdrop(art, size, palette, maxPixelRatio));
+        await obtain(key, () => bakeCharacterBackdrop(art, size, local, maxPixelRatio));
       }
     });
   }
@@ -311,43 +321,77 @@ class _CharacterDetailBackdropState extends State<CharacterDetailBackdrop> {
       }));
   }
 
-  @override Widget build(BuildContext context) {
-    if (widget.speaker == null) return ColoredBox(color: context.colors.surfaceAlt, child: widget.builder(context, null));
-    return FutureBuilder<CharacterArtCatalog>(future: CharacterArtCatalog.load(), initialData: CharacterArtCatalog._cached,
-      builder: (context, snapshot) {
-        final art = snapshot.data?.entries[widget.speaker];
-        if (art == null) return ColoredBox(color: context.colors.surfaceAlt, child: widget.builder(context, null));
-        final roles = Theme.of(context).brightness == Brightness.dark ? art.dark : art.light;
-        return Theme(data: roles == null ? Theme.of(context) : characterDetailTheme(Theme.of(context), roles),
-          child: Builder(builder: (context) => ColoredBox(color: context.colors.surfaceAlt,
-            child: ClipRect(child: Stack(children: [
-              Positioned.fill(child: IgnorePointer(child: ExcludeSemantics(child: RepaintBoundary(
-                child: LayoutBuilder(builder: (context, box) {
-                  final base = context.colors.surfaceAlt;
-                  final size = box.biggest;
-                  final palette = context.colors;
-                  final key = CharacterBackdropCache.keyFor(widget.speaker!, size,
-                    Theme.of(context).brightness, palette);
-                  _resolve(key, size, art, palette, Theme.of(context).brightness);
-                  final bake = _bake;
-                  final fade = characterBackdropFade(art, size);
-                  return Stack(children: [
-                    // The two baked layers replace four full-screen gradients.
-                    // Until the first bake lands the painters draw the same
-                    // ramps, so the entrance never shows a different colour.
-                    Positioned.fill(child: bake == null
-                      ? CustomPaint(painter: _BackdropUnderlayPainter(base, palette.brand500, palette.brand200))
-                      : RawImage(image: bake.underlay, fit: BoxFit.fill, filterQuality: FilterQuality.low)),
-                    Positioned.fromRect(rect: art.placement(size), child: _DecodedCharacterArt(art: art)),
-                    Positioned.fill(child: bake == null
-                      ? CustomPaint(painter: _BackdropOverlayPainter(base, fade.start, fade.end))
-                      : RawImage(image: bake.overlay, fit: BoxFit.fill, filterQuality: FilterQuality.low)),
-                  ]);
-                }))))),
-              widget.builder(context, art),
-            ])))));
-      });
-  }
+  @override
+  Widget build(BuildContext context) => FutureBuilder<CharacterArtCatalog>(
+    future: widget.speaker == null ? null : CharacterArtCatalog.load(),
+    initialData: CharacterArtCatalog._cached,
+    builder: (context, snapshot) {
+      final art = snapshot.data?.entries[widget.speaker];
+      final parent = Theme.of(context);
+      final roles = parent.brightness == Brightness.dark ? art?.dark : art?.light;
+      return Theme(
+        data: roles == null ? parent : characterDetailTheme(parent, roles),
+        child: Builder(builder: (context) => ColoredBox(
+          color: context.colors.surfaceAlt,
+          child: Stack(clipBehavior: Clip.hardEdge, children: [
+            // The key preserves the content when an image layer arrives late,
+            // including the scroll position and audio controls.
+            if (art != null && !art.isWide) _background(art),
+            KeyedSubtree(key: const ValueKey('detail-content'), child: widget.builder(context, art)),
+          ]),
+        )),
+      );
+    },
+  );
+
+  Widget _background(CharacterArt art) => Positioned.fill(
+    child: IgnorePointer(child: ExcludeSemantics(child: RepaintBoundary(
+      child: LayoutBuilder(builder: (context, box) {
+        final size = box.biggest;
+        final palette = context.colors;
+        final brightness = Theme.of(context).brightness;
+        final key = CharacterBackdropCache.keyFor(art.asset, size, brightness, palette);
+        _resolve(key, size, art, palette, brightness);
+        final bake = _bake;
+        final fade = characterBackdropFade(art, size);
+        return Stack(children: [
+          Positioned.fill(child: bake == null
+            ? CustomPaint(painter: _BackdropUnderlayPainter(palette.surfaceAlt, palette.brand500, palette.brand200))
+            : RawImage(image: bake.underlay, fit: BoxFit.fill, filterQuality: FilterQuality.low)),
+          Positioned.fromRect(rect: art.placement(size), child: _DecodedCharacterArt(art: art)),
+          Positioned.fill(child: bake == null
+            ? CustomPaint(painter: _BackdropOverlayPainter(palette.surfaceAlt, fade.start, fade.end))
+            : RawImage(image: bake.overlay, fit: BoxFit.fill, filterQuality: FilterQuality.low)),
+        ]);
+      }),
+    ))),
+  );
+}
+
+/// A panoramic artwork has its own rectangle above the reading area. It can
+/// use the decoded image directly since there is no text or art behind it.
+class CharacterWideHeader extends StatelessWidget {
+  final CharacterArt art;
+  const CharacterWideHeader({super.key, required this.art});
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(child: ExcludeSemantics(child: LayoutBuilder(
+    builder: (context, box) {
+      final width = box.maxWidth;
+      final scale = width / art.bounds.width;
+      final height = math.min(art.bounds.height * scale, (width * .40).clamp(96.0, 152.0));
+      final left = -art.bounds.left * scale;
+      final top = (height * .44 - art.focus.dy * scale)
+        .clamp(-art.bounds.top * scale - (art.bounds.height * scale - height), -art.bounds.top * scale);
+      return SizedBox(height: height, child: ClipRRect(
+        borderRadius: BorderRadius.circular(MemoRadius.lg),
+        child: ColoredBox(color: context.colors.surface, child: Stack(children: [
+          Positioned(left: left, top: top, width: art.width * scale, height: art.height * scale,
+            child: _DecodedCharacterArt(art: art)),
+        ])),
+      ));
+    },
+  )));
 }
 
 /// Keep a small working set across sheet visits instead of decoding on every

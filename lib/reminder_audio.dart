@@ -17,7 +17,7 @@ class _ReminderAudioPanelState extends State<ReminderAudioPanel> {
   String? _busy;
   Map<String, dynamic>? _candidate;
   String _playingMessage = '正在试听本条提醒。';
-  String _message = '使用本条提醒的正文、音色和语速，可保存为 WAV 音频。';
+  String? _message;
   bool _failed = false;
   int _operation = 0;
   @override void dispose() {
@@ -111,11 +111,11 @@ class _ReminderAudioPanelState extends State<ReminderAudioPanel> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [Icon(Icons.graphic_eq_rounded, size: 20, color: context.colors.brand700),
             const SizedBox(width: 8), Text('提醒音频', style: context.text.subtitle)]),
-          const SizedBox(height: 8),
-          Semantics(liveRegion: true, child: Text(message, key: const ValueKey('reminder-audio-feedback'),
-            style: TextStyle(color: _failed || failure ? context.colors.danger : context.colors.muted, fontSize: 13, height: 1.5))),
-          if (widget.reminder.speechState == 'off')  Padding(padding: EdgeInsets.only(top: 8), child: Text(
-            '到点语音播报当前关闭；试听和保存不会开启它。', style: TextStyle(color: context.colors.muted, fontSize: 12))),
+          if (message != null) Padding(padding: const EdgeInsets.only(top: 8),
+            child: Semantics(liveRegion: true, child: Text(message, key: const ValueKey('reminder-audio-feedback'),
+              style: context.text.caption.copyWith(color: _failed || failure ? context.colors.danger : context.colors.muted)))),
+          if (widget.reminder.speechState == 'off') Padding(padding: const EdgeInsets.only(top: 8),
+            child: Text('到点播报已关闭，试听和保存不会开启。', style: context.text.caption)),
           const SizedBox(height: 14),
           // One primary, two secondaries. Three equal outlined buttons wrapped
           // into 2 + 1 on a 400dp screen, leaving 保存音频 alone on its own
@@ -123,7 +123,9 @@ class _ReminderAudioPanelState extends State<ReminderAudioPanel> {
           // matters. Auditioning is the reason this panel exists.
           SizedBox(width: double.infinity, child: FilledButton.icon(
             key: const ValueKey('preview-reminder-audio'),
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(46)),
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(46),
+              backgroundColor: Color.alphaBlend(context.colors.brand500.withValues(alpha: .12), context.colors.surface),
+              foregroundColor: context.colors.brand700),
             onPressed: _busy != null && _busy != 'play' ? null : playing || _busy == 'play' ? _stop : () => _listen(),
             icon: Icon(playing || _busy == 'play' ? Icons.stop_rounded : Icons.play_arrow_rounded),
             label: Text(playing ? '停止试听' : _busy == 'play' ? '取消试听' : '试听提醒'))),

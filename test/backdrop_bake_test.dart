@@ -56,11 +56,11 @@ void main() {
     // The prewarm pass waits for the home entrance to settle, then bakes; the
     // delay has to live in the real zone to fire.
     await tester.runAsync(() async {
-      cache.prewarm(speakers: const ['228'], size: target, palette: palette, brightness: Brightness.light);
+      cache.prewarm(speakers: const ['131', '228'], size: target, palette: MemoPalette.light, brightness: Brightness.light);
       await Future<void>.delayed(const Duration(milliseconds: 1500));
     });
     expect(cache.length, 1);
-    expect(cache.peek(CharacterBackdropCache.keyFor('228', target, Brightness.light, palette)), isNotNull);
+    expect(cache.peek(CharacterBackdropCache.keyFor(art.asset, target, Brightness.light, palette)), isNotNull);
     cache.clear();
   });
 
@@ -70,12 +70,10 @@ void main() {
     addTearDown(tester.view.reset);
     final cache = CharacterBackdropCache.instance;
     cache.clear();
-    final catalog = (await tester.runAsync(() => CharacterArtCatalog.load()))!;
-    final art = catalog.entries['228']!;
-    final palette = MemoPalette.light.withArtRoles(art.light!);
+    await tester.runAsync(() => CharacterArtCatalog.load());
     const target = Size(393, 714);
     await tester.runAsync(() async {
-      cache.prewarm(speakers: const ['228'], size: target, palette: palette, brightness: Brightness.light);
+      cache.prewarm(speakers: const ['131', '228'], size: target, palette: MemoPalette.light, brightness: Brightness.light);
       await Future<void>.delayed(const Duration(milliseconds: 1500));
     });
     expect(cache.length, 1);
@@ -96,6 +94,11 @@ void main() {
     expect(find.byType(RawImage), findsWidgets);
     Navigator.of(tester.element(find.byType(ReminderDetail))).pop();
     await tester.pumpAndSettle();
+    await tester.tap(find.text('打开'));
+    await tester.pump(); await tester.pump(const Duration(milliseconds: 32));
+    expect(find.byType(RawImage), findsWidgets);
+    expect(cache.length, 1);
+    await tester.pumpWidget(const SizedBox()); await tester.pumpAndSettle();
     cache.clear();
   });
 

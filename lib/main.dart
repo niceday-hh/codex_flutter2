@@ -748,10 +748,10 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     // Warm the two backdrop layers for the next couple of taps while the home
     // page is idle. Opening a detail then starts on baked textures instead of
     // painting four full-screen gradients during the entrance animation.
-    final media = MediaQuery.sizeOf(context);
+    final media = MediaQuery.of(context);
     CharacterBackdropCache.instance.prewarm(
       speakers: active.take(2).map((r) => reminderArtSpeaker(r, store.defaults)).whereType<String>(),
-      size: Size(media.width, media.height * .94),
+      size: Size(media.size.width, (media.size.height * .94 - media.padding.bottom).clamp(1.0, double.infinity)),
       palette: context.colors, brightness: Theme.of(context).brightness);
     final rest = active;
     final historyCount = store.reminders.where((r) => r.archived || r.completed).length;
@@ -1733,11 +1733,14 @@ class _ReminderDetailState extends State<ReminderDetail> {
   }
   @override Widget build(BuildContext context) {
     final r = widget.reminder;
-    // A task that has not rung yet can be pushed back without editing it. A
-    // ringing one cannot: its exit is acknowledge or snooze, both of which
-    // already exist on the notification.
-    final canPostpone = !r.unread && !r.archived && !r.completed && r.enabled
-        && r.displayDate.isAfter(DateTime.now());
+    final ended = r.archived || r.completed;
+    final needsAck = !ended && r.unread;
+    final canSkip = !ended && !needsAck && r.enabled;
+    final canPostpone = canSkip && r.displayDate.isAfter(DateTime.now());
+    final status = r.archived ? '已归档 · 可编辑后重新开启'
+      : r.completed ? '已完成 · 可编辑后重新开启'
+      : !r.enabled ? '已暂停 · 可编辑后重新启用'
+      : '待提醒 · 到时通过系统通知';
     final speaker = reminderArtSpeaker(r, widget.defaults);
     final speakerIndex = int.tryParse(speaker ?? '');
     final voiceName = speakerIndex == null ? null : speechVoiceNames[speakerIndex];
@@ -1749,22 +1752,30 @@ class _ReminderDetailState extends State<ReminderDetail> {
           key: const ValueKey('reminder-detail-scroll'),
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            _DetailHeading(reminder: r, hasArt: art != null, voiceName: voiceName),
-            MemoCard(shadow: false, padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
-              child: r.unread ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('已提醒 ${r.attempts}/${r.totalCount} 次', style: context.text.caption),
-                const SizedBox(height: MemoSpace.sm),
-                MemoSlideToConfirm(label: '向右滑动，确认已读', icon: Icons.done_all_rounded,
-                  enabled: !busy, onConfirm: _ack),
-              ]) : Row(children: [
-                Icon(Icons.notifications_none_rounded, size: 18, color: context.colors.brand700),
-                const SizedBox(width: 8),
-                Expanded(child: Text(r.archived || r.completed ? '已结束 · 可编辑后重新开启'
-                  : !r.enabled ? '已暂停 · 可编辑后重新启用' : '到时会通过系统通知提醒你',
-                  style: context.text.label)),
-                if (!r.archived && !r.completed && r.enabled) TextButton(
-                  onPressed: busy ? null : _skip, child: const Text('完成本次')),
-              ])),
+            _DetailHeading(reminder: r, art: art, voiceName: voiceName,
+              scheduledAt: ended ? historyCalendarDate(r) : r.displayDate),
+            if (needsAck)
+              MemoCard(shadow: false, padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('已提醒 ${r.attempts}/${r.totalCount} 次', style: context.text.caption),
+                  const SizedBox(height: MemoSpace.sm),
+                  MemoSlideToConfirm(label: '向右滑动，确认已读', icon: Icons.done_all_rounded,
+                    enabled: !busy, onConfirm: _ack),
+                ]))
+            else
+              Align(alignment: Alignment.centerLeft,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(color: context.colors.surfaceAlt,
+                    borderRadius: BorderRadius.circular(MemoRadius.md)),
+                  child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                    child: Row(mainAxisSize: canSkip ? MainAxisSize.max : MainAxisSize.min, children: [
+                      Icon(ended ? Icons.history_rounded : Icons.notifications_none_rounded,
+                        size: 18, color: context.colors.brand700),
+                      const SizedBox(width: 8),
+                      Flexible(fit: canSkip ? FlexFit.tight : FlexFit.loose,
+                        child: Text(status, style: context.text.label)),
+                      if (canSkip) TextButton(onPressed: busy ? null : _skip, child: const Text('完成本次')),
+                    ])))),
             if (canPostpone) ...[
               const SizedBox(height: 12),
               MemoCard(shadow: false, padding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
@@ -1783,8 +1794,8 @@ class _ReminderDetailState extends State<ReminderDetail> {
         // push the exit below the screen or intercept its hit target.
         Padding(padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
           child: FilledButton.icon(onPressed: busy ? null : widget.onEdit,
-            style: FilledButton.styleFrom(backgroundColor: context.colors.brand200,
-              foregroundColor: context.colors.brand800, minimumSize: const Size.fromHeight(52),
+            style: FilledButton.styleFrom(backgroundColor: context.colors.brand500,
+              foregroundColor: context.colors.onBrand, minimumSize: const Size.fromHeight(52),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MemoRadius.lg))),
             icon: const Icon(Icons.edit_outlined, size: 20), label: const Text('编辑提醒'))),
       ]))));
@@ -1793,53 +1804,107 @@ class _ReminderDetailState extends State<ReminderDetail> {
 
 class _DetailHeading extends StatefulWidget {
   final Reminder reminder;
-  final bool hasArt;
+  final CharacterArt? art;
   final String? voiceName;
+  final DateTime scheduledAt;
 
-  const _DetailHeading({required this.reminder, required this.hasArt, required this.voiceName});
+  const _DetailHeading({required this.reminder, required this.art, required this.voiceName,
+    required this.scheduledAt});
 
-  @override State<_DetailHeading> createState() => _DetailHeadingState();
+  @override
+  State<_DetailHeading> createState() => _DetailHeadingState();
 }
+
+typedef _DetailTextLayout = ({String text, bool besideArt, bool collapsible});
 
 class _DetailHeadingState extends State<_DetailHeading> {
   bool expanded = false;
+  Object? _measurementKey;
+  late _DetailTextLayout _measurement;
+  static final _shortHan = RegExp(r'^[\u3400-\u9fff]{5,24}[。！？!?]?$');
 
-  bool exceedsLines(BuildContext context, double width, int lines) {
-    final painter = TextPainter(text: TextSpan(text: widget.reminder.text, style: context.text.detailTitle),
-      textScaler: MediaQuery.textScalerOf(context), textDirection: Directionality.of(context), maxLines: lines)
-      ..layout(maxWidth: width);
-    final exceeds = painter.didExceedMaxLines;
+  _DetailTextLayout _measure(BuildContext context, double fullWidth, double? leftWidth) {
+    final text = widget.reminder.text;
+    final direction = Directionality.of(context);
+    final scaler = MediaQuery.textScalerOf(context);
+    final locale = Localizations.maybeLocaleOf(context);
+    final style = DefaultTextStyle.of(context).style.merge(context.text.detailTitle);
+    final key = (text, fullWidth, leftWidth, style, scaler, direction, locale);
+    if (key == _measurementKey) return _measurement;
+
+    final painter = TextPainter(textDirection: direction, textScaler: scaler, locale: locale);
+    void layout(String value, double width, int maxLines) {
+      painter.text = TextSpan(text: value, style: style);
+      painter.maxLines = maxLines;
+      painter.layout(maxWidth: width);
+    }
+
+    String balance(double width) {
+      if (!_shortHan.hasMatch(text)) return text;
+      final lines = painter.computeLineMetrics();
+      if (lines.length != 2 || lines.last.width >= lines.first.width * .43) return text;
+      final split = (text.length * .62).round();
+      final balanced = '${text.substring(0, split)}\n${text.substring(split)}';
+      layout(balanced, width, 2);
+      return painter.didExceedMaxLines ? text : balanced;
+    }
+
+    late final _DetailTextLayout result;
+    if (leftWidth != null) {
+      layout(text, leftWidth, 2);
+    }
+    if (leftWidth != null && !painter.didExceedMaxLines) {
+      result = (text: balance(leftWidth), besideArt: true, collapsible: false);
+    } else {
+      layout(text, fullWidth, 4);
+      final collapsible = painter.didExceedMaxLines;
+      result = (text: collapsible ? text : balance(fullWidth), besideArt: false, collapsible: collapsible);
+    }
     painter.dispose();
-    return exceeds;
+    _measurementKey = key;
+    return _measurement = result;
   }
 
-  @override Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
-    final r = widget.reminder;
-    final sideWidth = widget.hasArt ? box.maxWidth * .58 : box.maxWidth;
-    final belowArt = widget.hasArt && exceedsLines(context, sideWidth - 4, 1);
-    // Long copy gets a solid reading surface below the portrait and shares the sheet's scroll.
-    final textWidth = belowArt ? box.maxWidth - 32 : sideWidth - 4;
-    final collapsible = exceedsLines(context, textWidth, 4);
-    final body = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(r.text, style: context.text.detailTitle, maxLines: collapsible && !expanded ? 4 : null,
-        overflow: collapsible && !expanded ? TextOverflow.ellipsis : null),
-      if (collapsible) TextButton(onPressed: () => setState(() => expanded = !expanded),
-        child: Text(expanded ? '收起全文' : '展开全文')),
-    ]);
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
+    final art = widget.art;
+    final fullWidth = (box.maxWidth - 8).clamp(0.0, double.infinity);
+    // The mask stays nearly opaque through 54% of the sheet. Keep extra
+    // breathing room around the closer face of a vertical portrait.
+    final leftWidth = art != null && !art.isWide
+      ? ((box.maxWidth + 40) * (art.isPortrait ? .52 : .55) - 24).clamp(0.0, fullWidth)
+      : null;
+    final layout = _measure(context, fullWidth, leftWidth);
+    final at = widget.scheduledAt;
+    final time = '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
+    final foreground = Padding(padding: const EdgeInsets.fromLTRB(4, 8, 4, 14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          Text(time, style: context.text.detailTime),
+          Text('${dateLabel(at)} · ${widget.reminder.repeatLabel}', style: context.text.caption),
+        ]),
+        const SizedBox(height: 8),
+        Text(layout.text, key: const ValueKey('detail-reminder-text'),
+          semanticsLabel: layout.text == widget.reminder.text ? null : widget.reminder.text,
+          style: context.text.detailTitle, maxLines: layout.collapsible && !expanded ? 4 : null,
+          overflow: layout.collapsible && !expanded ? TextOverflow.ellipsis : null),
+        if (layout.collapsible) TextButton(onPressed: () => setState(() => expanded = !expanded),
+          child: Text(expanded ? '收起全文' : '展开全文')),
+        if (widget.voiceName != null) ...[
+          const SizedBox(height: 8),
+          Text('播报音色 · ${widget.voiceName}', style: context.text.caption.copyWith(color: context.colors.brand700)),
+        ],
+      ]));
+
+    if (layout.besideArt) {
+      return ConstrainedBox(constraints: BoxConstraints(minHeight: art!.isPortrait ? 186 : 168),
+        child: Align(alignment: Alignment.topLeft, child: SizedBox(width: leftWidth! + 8, child: foreground)));
+    }
+    if (art == null) return foreground;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      ConstrainedBox(constraints: BoxConstraints(minHeight: widget.hasArt ? (belowArt ? 158 : 228) : 0),
-        child: Align(alignment: Alignment.topLeft, child: SizedBox(width: sideWidth,
-          child: Padding(padding: const EdgeInsets.fromLTRB(4, 8, 0, 16),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(r.displayTime, style: context.text.detailTime),
-              const SizedBox(height: 6),
-              Text('${dateLabel(r.displayDate)} · ${r.repeatLabel}', style: context.text.body.copyWith(color: context.colors.muted)),
-              if (!belowArt) ...[const SizedBox(height: MemoSpace.lg), body],
-              if (widget.voiceName != null) ...[const SizedBox(height: 12),
-                Text('播报音色 · ${widget.voiceName}', style: context.text.caption.copyWith(color: context.colors.brand700))],
-            ]))))),
-      if (belowArt) Padding(padding: const EdgeInsets.only(bottom: 12),
-        child: MemoCard(shadow: false, padding: const EdgeInsets.all(16), child: body)),
+      if (art.isWide) CharacterWideHeader(art: art)
+      else SizedBox(height: art.isPortrait ? 174 : 156),
+      ColoredBox(color: context.colors.surfaceAlt, child: foreground),
     ]);
   });
 }

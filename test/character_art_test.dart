@@ -42,8 +42,13 @@ void main() {
   });
   setUpAll(() async {
     if (!screenshots) return;
-    final bytes = File('assets/fonts/MemoSerif-Regular.otf').readAsBytesSync();
-    for (final family in ['Roboto', 'Ahem', 'FlutterTest', 'MemoSerif']) {
+    final serif = File('assets/fonts/MemoSerif-Regular.otf').readAsBytesSync();
+    final path = Platform.environment['MEMO_PREVIEW_FONT']
+      ?? '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc';
+    final source = File(path);
+    final bytes = source.existsSync() ? source.readAsBytesSync() : serif;
+    await (FontLoader('MemoSerif')..addFont(Future.value(ByteData.sublistView(serif)))).load();
+    for (final family in ['Roboto', 'Ahem', 'FlutterTest']) {
       await (FontLoader(family)..addFont(Future.value(ByteData.sublistView(bytes)))).load();
     }
     await (FontLoader('MaterialIcons')..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
@@ -107,7 +112,7 @@ void main() {
   });
 
   for (final mode in [ThemeMode.light, ThemeMode.dark]) {
-    for (final sid in [115, 228, 803]) {
+    for (final sid in [103, 115, 131, 228, 803]) {
       testWidgets('detail ${mode.name} speaker $sid keeps edit accessible and art decorative', (tester) async {
         tester.view.devicePixelRatio = 2;
         tester.view.physicalSize = const Size(786, 1704);
@@ -115,11 +120,15 @@ void main() {
         await tester.binding.setSurfaceSize(const Size(393, 852));
         addTearDown(() => tester.binding.setSurfaceSize(null));
         addTearDown(() => appearance.value = Appearance.defaults);
-        final reminder = Reminder(id: 7, text: '喝水，休息一下眼睛', date: DateTime.now().add(const Duration(hours: 2)),
+        final archived = sid == 103 || sid == 228;
+        final reminder = Reminder(id: 7, text: '水果可以洗干净拿出来了',
+          date: DateTime.now().add(const Duration(hours: 2)),
+          archived: archived, historyScheduledAt: DateTime(2026, 11, 2, 19, 42).millisecondsSinceEpoch,
           speechMode: 'on', speechVoice: '$sid', speechState: 'ready');
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(native, (call) async {
           if (call.method == 'getState') {
-            return jsonEncode({'reminders': [{...reminder.toJson(), 'speechState': 'ready'}],
+            return jsonEncode({'reminders': [{...reminder.toJson(), 'speechState': 'ready',
+                'historyScheduledAt': reminder.historyScheduledAt}],
               'defaults': {}, 'status': {'notifications': true, 'exact': true}});
           }
           if (call.method == 'initialReminderId') return 0;
@@ -130,6 +139,10 @@ void main() {
         appearance.value = Appearance(mode: mode);
         await tester.pumpWidget(const RepaintBoundary(key: boundaryKey, child: MemoApp()));
         await tester.pumpAndSettle();
+        if (archived) {
+          await tester.tap(find.byTooltip('历史任务'));
+          await tester.pumpAndSettle();
+        }
         await tester.tap(find.text(reminder.text).first);
         await tester.pumpAndSettle();
         // Asset futures run outside the fake clock used by widget tests.
@@ -148,13 +161,38 @@ void main() {
           expect(find.byKey(const ValueKey('detail-character-image')), findsNothing);
         }
         expect(find.text('编辑提醒').hitTestable(), findsOneWidget);
+        expect(find.text('完成本次'), archived ? findsNothing : findsOneWidget);
+        expect(find.text('延后提醒'), archived ? findsNothing : findsOneWidget);
+        if (archived) {
+          expect(find.descendant(of: find.byType(ReminderDetail), matching: find.text('19:42')), findsOneWidget);
+          expect(find.text('已归档 · 可编辑后重新开启'), findsOneWidget);
+        }
+        final body = find.byKey(const ValueKey('detail-reminder-text'));
+        final renderedText = tester.widget<Text>(body).data!;
+        expect(renderedText.replaceAll('\n', ''), reminder.text);
+        final paragraph = tester.renderObject<RenderParagraph>(find.descendant(of: body, matching: find.byType(RichText)));
+        final letters = paragraph.getBoxesForSelection(TextSelection(
+          baseOffset: renderedText.length - 2, extentOffset: renderedText.length));
+        expect(letters.length, 1, reason: '句尾「来了」应留在同一行');
+        final wide = find.byType(CharacterWideHeader);
+        if (sid == 131) {
+          expect(wide, findsOneWidget);
+          expect(tester.getTopLeft(body).dy, greaterThan(tester.getBottomLeft(wide).dy));
+        } else {
+          expect(wide, findsNothing);
+        }
+        if (sid == 103 || sid == 115 || sid == 228) {
+          // The short sentence stays in the hero instead of dropping below it.
+          final scroll = find.byKey(const ValueKey('reminder-detail-scroll'));
+          expect(tester.getTopLeft(body).dy - tester.getTopLeft(scroll).dy, lessThan(126));
+        }
         if (art != null) {
           final local = tester.element(find.byKey(const ValueKey('reminder-detail-scroll')));
           final roles = mode == ThemeMode.dark ? art.dark! : art.light!;
           expect(Theme.of(local).colorScheme.primary.toARGB32(), int.parse('ff${roles['primary']!.substring(1)}', radix: 16));
           expect(local.colors.brand500, Theme.of(local).colorScheme.primary);
-          expect(Theme.of(tester.element(find.byType(MemoHome))).colorScheme.primary, isNot(Theme.of(local).colorScheme.primary));
-          expect(find.text('到点语音播报当前关闭；试听和保存不会开启它。'), findsNothing);
+          expect(Theme.of(tester.element(find.byType(MemoHome, skipOffstage: false))).colorScheme.primary, isNot(Theme.of(local).colorScheme.primary));
+          expect(find.text('到点播报已关闭，试听和保存不会开启。'), findsNothing);
         }
         if (screenshots) {
           await tester.runAsync(() async {
