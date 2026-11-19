@@ -167,6 +167,10 @@ void main() {
         reminder: Reminder(id: 7, text: List.filled(20, '这是一条很长的提醒正文。').join()),
         onAck: () async {}, onSkip: () async {}, onPostpone: (_) async => null, onEdit: () {})))));
     await tester.pump();
+    final paragraph = tester.widget<Text>(find.byKey(const ValueKey('detail-reminder-text')));
+    expect(paragraph.style!.fontSize, 19);
+    expect(paragraph.style!.height, 1.55);
+    expect(find.text('编辑提醒').hitTestable(), findsOneWidget);
     await tester.ensureVisible(find.text('展开全文'));
     await tester.tap(find.text('展开全文')); await tester.pumpAndSettle();
     expect(find.text('收起全文'), findsOneWidget);

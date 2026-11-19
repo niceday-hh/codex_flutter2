@@ -32,16 +32,17 @@ class CharacterArt {
     required this.bounds, required this.focus, this.light, this.dark});
   bool get isPortrait => layout == 'portrait_contain';
   bool get isWide => layout == 'wide_contain';
+  double get detailHeaderHeight => isPortrait ? 168 : 142;
 
   /// Position the subject rather than its transparent source canvas. The face
   /// landmark stays at the top right while unimportant body/weapon edges crop.
   Rect placement(Size size) {
     final portrait = isPortrait;
-    final wantedHeight = portrait ? math.min(640.0, math.max(500.0, size.height * .82)) : 310.0;
-    final scale = layout == 'wide_contain' ? size.width / bounds.width
-      : math.max(size.width * .78 / bounds.width, wantedHeight / bounds.height);
+    final subjectHeight = size.height * (portrait ? 2.1 : 1.55);
+    final subjectWidth = math.min(size.width, size.height * 3) * .63;
+    final scale = math.max(subjectWidth / bounds.width, subjectHeight / bounds.height);
     final x = size.width * (portrait ? .73 : .79) - focus.dx * scale;
-    final y = (portrait ? 126 : 96) - focus.dy * scale;
+    final y = size.height * (portrait ? .45 : .43) - focus.dy * scale;
     return Rect.fromLTWH(x, y, width * scale, height * scale);
   }
 }
@@ -123,15 +124,12 @@ ThemeData characterDetailTheme(ThemeData parent, Map<String, String> roles) {
 
 /// Vertical span where the artwork dissolves into the sheet surface.
 ({double start, double end}) characterBackdropFade(CharacterArt art, Size size) {
-  final rect = art.placement(size);
-  final bottom = rect.top + art.bounds.bottom * rect.height / art.height;
-  final end = bottom.clamp(math.min(240.0, size.height), size.height).toDouble();
-  return (start: math.max(0.0, end - (art.isPortrait ? 220 : 110)), end: end);
+  return (start: size.height * (art.isPortrait ? .60 : .65), end: size.height);
 }
 
 /// The two gradient stacks that sandwich the artwork, rendered once into
 /// textures. Both are pure colour ramps, so replaying them from a baked image
-/// is pixel-identical to painting four full-screen gradients on every frame.
+/// matches the live gradients drawn in the header.
 class CharacterBackdropBake {
   final ui.Image underlay, overlay;
   const CharacterBackdropBake({required this.underlay, required this.overlay});
@@ -220,7 +218,7 @@ class CharacterBackdropCache {
 
   void _trim() {
     var bytes = _recent.values.fold(0, (sum, value) => sum + value.bytes);
-    // Never evict the only entry: a phone-sized 3× bake can exceed the budget
+    // Never evict the only entry: a large bake can exceed the budget
     // on its own, and dropping it would force a rebake on every open.
     while (_recent.length > maxEntries || (bytes > maxBytes && _recent.length > 1)) {
       bytes -= _recent.remove(_recent.keys.first)!.bytes;
@@ -230,15 +228,15 @@ class CharacterBackdropCache {
   /// Bakes the backdrops for the next couple of taps while the home page is
   /// idle. The work starts after the entrance has settled, so the home frame
   /// keeps its own budget; the modal then opens on textures instead of
-  /// gradients. Two entries at 2× already reach ~18 MiB on a 393dp phone.
-  void prewarm({required Iterable<String> speakers, required Size size,
+  /// gradients. Each entry uses the width and fixed height of the art header.
+  void prewarm({required Iterable<String> speakers, required double width,
       required MemoPalette palette, required Brightness brightness}) {
     final wanted = speakers.toSet().take(2).toList();
     if (wanted.isEmpty) {
       _prewarmToken = null;
       return;
     }
-    final token = '${wanted.join(',')}|${keyFor('', size, brightness, palette)}';
+    final token = '${wanted.join(',')}|${keyFor('', Size(width, 0), brightness, palette)}';
     if (_prewarmToken == token) return;
     _prewarmToken = token;
     Future<void>.delayed(const Duration(milliseconds: 600), () async {
@@ -250,6 +248,7 @@ class CharacterBackdropCache {
         if (art == null || art.isWide) continue;
         final roles = brightness == Brightness.dark ? art.dark : art.light;
         final local = roles == null ? palette : palette.withArtRoles(roles);
+        final size = Size(width, art.detailHeaderHeight);
         final key = keyFor(art.asset, size, brightness, local);
         if (_recent.containsKey(key) || _pending.containsKey(key)) continue;
         await obtain(key, () => bakeCharacterBackdrop(art, size, local, maxPixelRatio));
@@ -296,25 +295,55 @@ class _BackdropOverlayPainter extends CustomPainter {
     old.base != base || old.fadeStart != fadeStart || old.fadeEnd != fadeEnd;
 }
 
-/// All art and colour metadata is local. No image analysis or blur on navigation.
-class CharacterDetailBackdrop extends StatefulWidget {
+/// Retint the sheet when the local artwork catalog resolves. The artwork
+/// itself is confined to the heading so its texture size is stable.
+class CharacterDetailTheme extends StatelessWidget {
   final String? speaker;
   final Widget Function(BuildContext, CharacterArt?) builder;
-  const CharacterDetailBackdrop({super.key, required this.speaker, required this.builder});
-  @override State<CharacterDetailBackdrop> createState() => _CharacterDetailBackdropState();
+
+  const CharacterDetailTheme({super.key, required this.speaker, required this.builder});
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<CharacterArtCatalog>(
+    future: speaker == null ? null : CharacterArtCatalog.load(),
+    initialData: CharacterArtCatalog._cached,
+    builder: (context, snapshot) {
+      final art = snapshot.data?.entries[speaker];
+      final parent = Theme.of(context);
+      final roles = parent.brightness == Brightness.dark ? art?.dark : art?.light;
+      return Theme(
+        data: roles == null ? parent : characterDetailTheme(parent, roles),
+        child: Builder(builder: (context) => ColoredBox(
+          color: context.colors.surfaceAlt,
+          child: builder(context, art),
+        )),
+      );
+    },
+  );
 }
 
-class _CharacterDetailBackdropState extends State<CharacterDetailBackdrop> {
+class CharacterHeaderArt extends StatefulWidget {
+  final CharacterArt art;
+  final Widget? child;
+
+  const CharacterHeaderArt({super.key, required this.art, this.child});
+
+  @override
+  State<CharacterHeaderArt> createState() => _CharacterHeaderArtState();
+}
+
+class _CharacterHeaderArtState extends State<CharacterHeaderArt> {
   CharacterBackdropBake? _bake;
   String? _requested;
 
-  void _resolve(String key, Size size, CharacterArt art, MemoPalette palette, Brightness brightness) {
+  void _resolve(String key, Size size, MemoPalette palette) {
     if (_requested == key) return;
     _requested = key;
-    final hit = CharacterBackdropCache.instance.peek(key);
-    _bake = hit;
-    if (hit != null) return;
-    unawaited(CharacterBackdropCache.instance.obtain(key,
+    final cache = CharacterBackdropCache.instance;
+    _bake = cache.peek(key);
+    if (_bake != null) return;
+    final art = widget.art;
+    unawaited(cache.obtain(key,
       () => bakeCharacterBackdrop(art, size, palette, CharacterBackdropCache.maxPixelRatio)).then((value) {
         if (!mounted || _requested != key || value == null) return;
         setState(() => _bake = value);
@@ -322,49 +351,31 @@ class _CharacterDetailBackdropState extends State<CharacterDetailBackdrop> {
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<CharacterArtCatalog>(
-    future: widget.speaker == null ? null : CharacterArtCatalog.load(),
-    initialData: CharacterArtCatalog._cached,
-    builder: (context, snapshot) {
-      final art = snapshot.data?.entries[widget.speaker];
-      final parent = Theme.of(context);
-      final roles = parent.brightness == Brightness.dark ? art?.dark : art?.light;
-      return Theme(
-        data: roles == null ? parent : characterDetailTheme(parent, roles),
-        child: Builder(builder: (context) => ColoredBox(
-          color: context.colors.surfaceAlt,
-          child: Stack(clipBehavior: Clip.hardEdge, children: [
-            // The key preserves the content when an image layer arrives late,
-            // including the scroll position and audio controls.
-            if (art != null && !art.isWide) _background(art),
-            KeyedSubtree(key: const ValueKey('detail-content'), child: widget.builder(context, art)),
-          ]),
-        )),
-      );
-    },
-  );
-
-  Widget _background(CharacterArt art) => Positioned.fill(
-    child: IgnorePointer(child: ExcludeSemantics(child: RepaintBoundary(
-      child: LayoutBuilder(builder: (context, box) {
-        final size = box.biggest;
-        final palette = context.colors;
-        final brightness = Theme.of(context).brightness;
-        final key = CharacterBackdropCache.keyFor(art.asset, size, brightness, palette);
-        _resolve(key, size, art, palette, brightness);
-        final bake = _bake;
-        final fade = characterBackdropFade(art, size);
-        return Stack(children: [
-          Positioned.fill(child: bake == null
-            ? CustomPaint(painter: _BackdropUnderlayPainter(palette.surfaceAlt, palette.brand500, palette.brand200))
-            : RawImage(image: bake.underlay, fit: BoxFit.fill, filterQuality: FilterQuality.low)),
-          Positioned.fromRect(rect: art.placement(size), child: _DecodedCharacterArt(art: art)),
-          Positioned.fill(child: bake == null
-            ? CustomPaint(painter: _BackdropOverlayPainter(palette.surfaceAlt, fade.start, fade.end))
-            : RawImage(image: bake.overlay, fit: BoxFit.fill, filterQuality: FilterQuality.low)),
-        ]);
-      }),
-    ))),
+  Widget build(BuildContext context) => SizedBox(
+    height: widget.art.detailHeaderHeight,
+    child: Stack(clipBehavior: Clip.hardEdge, children: [
+      Positioned.fill(child: IgnorePointer(child: ExcludeSemantics(child: RepaintBoundary(
+        child: LayoutBuilder(builder: (context, box) {
+          final art = widget.art;
+          final size = box.biggest;
+          final palette = context.colors;
+          final key = CharacterBackdropCache.keyFor(art.asset, size, Theme.of(context).brightness, palette);
+          _resolve(key, size, palette);
+          final bake = _bake;
+          final fade = characterBackdropFade(art, size);
+          return Stack(children: [
+            Positioned.fill(child: bake == null
+              ? CustomPaint(painter: _BackdropUnderlayPainter(palette.surfaceAlt, palette.brand500, palette.brand200))
+              : RawImage(image: bake.underlay, fit: BoxFit.fill, filterQuality: FilterQuality.low)),
+            Positioned.fromRect(rect: art.placement(size), child: _DecodedCharacterArt(art: art)),
+            Positioned.fill(child: bake == null
+              ? CustomPaint(painter: _BackdropOverlayPainter(palette.surfaceAlt, fade.start, fade.end))
+              : RawImage(image: bake.overlay, fit: BoxFit.fill, filterQuality: FilterQuality.low)),
+          ]);
+        }),
+      )))),
+      if (widget.child != null) Positioned.fill(child: widget.child!),
+    ]),
   );
 }
 
@@ -379,7 +390,7 @@ class CharacterWideHeader extends StatelessWidget {
     builder: (context, box) {
       final width = box.maxWidth;
       final scale = width / art.bounds.width;
-      final height = math.min(art.bounds.height * scale, (width * .40).clamp(96.0, 152.0));
+      final height = math.min(art.bounds.height * scale, (width * .35).clamp(88.0, 132.0));
       final left = -art.bounds.left * scale;
       final top = (height * .44 - art.focus.dy * scale)
         .clamp(-art.bounds.top * scale - (art.bounds.height * scale - height), -art.bounds.top * scale);

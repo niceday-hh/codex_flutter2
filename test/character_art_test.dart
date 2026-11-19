@@ -11,6 +11,7 @@ import 'package:timed_memo/character_art.dart';
 import 'package:timed_memo/design_tokens.dart';
 import 'package:timed_memo/main.dart';
 import 'package:timed_memo/reminder.dart';
+import 'package:timed_memo/reminder_audio.dart';
 import 'detail_test_helpers.dart';
 
 final screenshots = Platform.environment['MEMO_CHARACTER_PREVIEWS'] == '1';
@@ -85,11 +86,13 @@ void main() {
           expect(contrast(colour(roles[pair[0]]!), colour(roles[pair[1]]!)), greaterThanOrEqualTo(4.5), reason: art.asset);
         }
       }
-      for (final size in [const Size(393, 740), const Size(320, 480), const Size(700, 280)]) {
+      for (final width in [393.0, 320.0, 640.0]) {
+        final size = Size(width, art.detailHeaderHeight);
         final rect = art.placement(size);
         expect(rect.width.isFinite && rect.width > 0 && rect.height.isFinite && rect.height > 0, isTrue);
         final focus = Offset(rect.left + art.focus.dx * rect.width / art.width, rect.top + art.focus.dy * rect.height / art.height);
-        expect(focus.dx, closeTo(size.width * (art.isPortrait ? .73 : .79), .001)); expect(focus.dy, closeTo(art.isPortrait ? 126 : 96, .001));
+        expect(focus.dx, closeTo(size.width * (art.isPortrait ? .73 : .79), .001));
+        expect(focus.dy, closeTo(size.height * (art.isPortrait ? .45 : .43), .001));
       }
     }
     expect(catalog.entries['115']!.bounds.width, lessThan(640));
@@ -165,7 +168,18 @@ void main() {
         expect(find.text('延后提醒'), archived ? findsNothing : findsOneWidget);
         if (archived) {
           expect(find.descendant(of: find.byType(ReminderDetail), matching: find.text('19:42')), findsOneWidget);
-          expect(find.text('已归档 · 可编辑后重新开启'), findsOneWidget);
+          expect(find.text('已归档'), findsOneWidget);
+        }
+        final audio = find.byType(ReminderAudioPanel);
+        final editButton = find.byKey(const ValueKey('detail-edit-button'));
+        final gap = tester.getTopLeft(editButton).dy - tester.getBottomLeft(audio).dy;
+        expect(gap, inInclusiveRange(0, 20), reason: '音频面板和编辑按钮之间不应留下空页');
+        final header = find.byType(CharacterHeaderArt);
+        if (sid == 103 || sid == 115 || sid == 228) {
+          expect(tester.getSize(header).height, art!.detailHeaderHeight);
+          expect(tester.getBottomLeft(header).dy, lessThan(tester.getTopLeft(audio).dy));
+        } else {
+          expect(header, findsNothing);
         }
         final body = find.byKey(const ValueKey('detail-reminder-text'));
         final renderedText = tester.widget<Text>(body).data!;

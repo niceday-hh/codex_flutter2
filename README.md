@@ -1,3 +1,7 @@
+## v0.9.31 · 自适应提醒详情与播报排版
+
+详情弹层随内容收高，历史时间和待提醒操作分区显示。短句与长文采用不同字号，音频操作在宽度足够时并排。角色背景只在页头绘制并复用缓存。详见[版本说明](docs/releases/v0.9.31.md)。
+
 ## v0.9.30 · 角色详情与提醒状态
 
 详情按横幅、竖立绘、宽图和无图排版，短句可与人物并排，历史日期和待提醒操作更清楚。背景按实际配色预热，同一张配图共用缓存。详见[版本说明](docs/releases/v0.9.30.md)。
@@ -180,7 +184,7 @@ Silero VAD v5为固定校验的本地模型，复用现有麦克风与识别线�
 
 面向荣耀100等 arm64 安卓手机的 Flutter 离线语音定时备忘录。四个 Tab：备忘录、日历、语音、设置。
 
-当前工程版本 v0.9.30。源码、GitHub Actions 构建与已发布 APK 位于本仓库；下载见 [Releases](https://github.com/niceday-hh/codex_flutter2/releases)。未经验证的 unsigned 构建不作为安装包发布。
+当前工程版本 v0.9.31。源码、GitHub Actions 构建与已发布 APK 位于本仓库；下载见 [Releases](https://github.com/niceday-hh/codex_flutter2/releases)。未经验证的 unsigned 构建不作为安装包发布。
 
 ## 本版修复与功能
 

@@ -745,13 +745,10 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     // Selection mode still drops the card: the card has no checkbox, and on a
     // day with a single reminder hiding it left *nothing* to tick.
     final hero = active.isEmpty || _selecting ? null : active.first;
-    // Warm the two backdrop layers for the next couple of taps while the home
-    // page is idle. Opening a detail then starts on baked textures instead of
-    // painting four full-screen gradients during the entrance animation.
-    final media = MediaQuery.of(context);
+    // The next two details can reuse their small, fixed-height header textures.
     CharacterBackdropCache.instance.prewarm(
       speakers: active.take(2).map((r) => reminderArtSpeaker(r, store.defaults)).whereType<String>(),
-      size: Size(media.size.width, (media.size.height * .94 - media.padding.bottom).clamp(1.0, double.infinity)),
+      width: MediaQuery.sizeOf(context).width,
       palette: context.colors, brightness: Theme.of(context).brightness);
     final rest = active;
     final historyCount = store.reminders.where((r) => r.archived || r.completed).length;
@@ -1731,85 +1728,114 @@ class _ReminderDetailState extends State<ReminderDetail> {
     final picked = await showMemoTimeSheet(context, initial: widget.reminder.displayDate);
     if (picked != null) await _postpone(picked);
   }
-  @override Widget build(BuildContext context) {
+  @override
+  Widget build(BuildContext context) {
     final r = widget.reminder;
     final ended = r.archived || r.completed;
     final needsAck = !ended && r.unread;
     final canSkip = !ended && !needsAck && r.enabled;
     final canPostpone = canSkip && r.displayDate.isAfter(DateTime.now());
-    final status = r.archived ? '已归档 · 可编辑后重新开启'
-      : r.completed ? '已完成 · 可编辑后重新开启'
-      : !r.enabled ? '已暂停 · 可编辑后重新启用'
-      : '待提醒 · 到时通过系统通知';
+    final status = r.archived ? '已归档'
+      : r.completed ? '已完成'
+      : !r.enabled ? '已暂停'
+      : '待提醒';
+    final scheduledAt = ended ? historyCalendarDate(r) : r.displayDate;
+    final time = '${scheduledAt.hour.toString().padLeft(2, '0')}:${scheduledAt.minute.toString().padLeft(2, '0')}';
     final speaker = reminderArtSpeaker(r, widget.defaults);
     final speakerIndex = int.tryParse(speaker ?? '');
     final voiceName = speakerIndex == null ? null : speechVoiceNames[speakerIndex];
-    return FractionallySizedBox(heightFactor: .94, child: SafeArea(top: false,
-      child: CharacterDetailBackdrop(speaker: speaker, builder: (context, art) => Column(children: [
-        SizedBox(height: 28, child: Center(child: Container(width: 36, height: 4,
-          decoration: BoxDecoration(color: context.colors.lineStrong, borderRadius: BorderRadius.circular(MemoRadius.pill))))),
-        Expanded(child: SingleChildScrollView(
-          key: const ValueKey('reminder-detail-scroll'),
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            _DetailHeading(reminder: r, art: art, voiceName: voiceName,
-              scheduledAt: ended ? historyCalendarDate(r) : r.displayDate),
-            if (needsAck)
-              MemoCard(shadow: false, padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('已提醒 ${r.attempts}/${r.totalCount} 次', style: context.text.caption),
-                  const SizedBox(height: MemoSpace.sm),
-                  MemoSlideToConfirm(label: '向右滑动，确认已读', icon: Icons.done_all_rounded,
-                    enabled: !busy, onConfirm: _ack),
-                ]))
-            else
-              Align(alignment: Alignment.centerLeft,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(color: context.colors.surfaceAlt,
-                    borderRadius: BorderRadius.circular(MemoRadius.md)),
-                  child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                    child: Row(mainAxisSize: canSkip ? MainAxisSize.max : MainAxisSize.min, children: [
-                      Icon(ended ? Icons.history_rounded : Icons.notifications_none_rounded,
-                        size: 18, color: context.colors.brand700),
-                      const SizedBox(width: 8),
-                      Flexible(fit: canSkip ? FlexFit.tight : FlexFit.loose,
-                        child: Text(status, style: context.text.label)),
-                      if (canSkip) TextButton(onPressed: busy ? null : _skip, child: const Text('完成本次')),
-                    ])))),
-            if (canPostpone) ...[
-              const SizedBox(height: 12),
-              MemoCard(shadow: false, padding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
-                child: Column(children: [
-                  Row(children: [Icon(Icons.schedule_rounded, size: 18, color: context.colors.brand700),
-                    const SizedBox(width: 8), Expanded(child: Text('延后提醒', style: context.text.label)),
-                    TextButton(onPressed: busy ? null : _changeTime,
-                      child: const Text('改到指定时间'))]),
-                  MemoQuickTimeChips(base: r.displayDate, compact: true, enabled: !busy, onPicked: _postpone),
-                ])),
-            ],
-            const SizedBox(height: 12),
-            ReminderAudioPanel(key: ValueKey('audio-${r.id}'), reminder: r),
-          ]))),
-        // This stays outside the scroller: artwork and a long reminder cannot
-        // push the exit below the screen or intercept its hit target.
-        Padding(padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-          child: FilledButton.icon(onPressed: busy ? null : widget.onEdit,
-            style: FilledButton.styleFrom(backgroundColor: context.colors.brand500,
-              foregroundColor: context.colors.onBrand, minimumSize: const Size.fromHeight(52),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MemoRadius.lg))),
-            icon: const Icon(Icons.edit_outlined, size: 20), label: const Text('编辑提醒'))),
-      ]))));
+
+    return LayoutBuilder(builder: (context, constraints) => ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: constraints.maxHeight * .90),
+      child: CharacterDetailTheme(speaker: speaker, builder: (context, art) {
+        Widget when({bool prominent = false}) => Wrap(
+          spacing: 8, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(time, style: prominent ? context.text.detailTime.copyWith(color: context.colors.ink)
+              : context.text.label.copyWith(fontFeatures: MemoText.tabular)),
+            Text('${dateLabel(scheduledAt)} · ${r.repeatLabel}', style: context.text.caption),
+          ],
+        );
+        final complete = TextButton(onPressed: busy ? null : _skip, child: const Text('完成本次'));
+        return SafeArea(top: false, child: Column(
+          mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(height: 24, child: Center(child: Container(width: 36, height: 4,
+              decoration: BoxDecoration(color: context.colors.lineStrong,
+                borderRadius: BorderRadius.circular(MemoRadius.pill))))),
+            Flexible(child: SingleChildScrollView(
+              key: const ValueKey('reminder-detail-scroll'),
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                _DetailHeading(text: r.text, art: art),
+                Padding(padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    if (needsAck)
+                      MemoCard(shadow: false, padding: const EdgeInsets.all(12),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          when(),
+                          const SizedBox(height: 6),
+                          Text('已提醒 ${r.attempts}/${r.totalCount} 次', style: context.text.label),
+                          const SizedBox(height: 6),
+                          MemoSlideToConfirm(label: '向右滑动，确认已读', icon: Icons.done_all_rounded,
+                            enabled: !busy, onConfirm: _ack),
+                        ]))
+                    else if (canPostpone)
+                      MemoCard(shadow: false, padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Row(children: [
+                            Expanded(child: Text(status, style: context.text.label)),
+                            complete,
+                          ]),
+                          Row(children: [
+                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              when(prominent: true),
+                              const SizedBox(height: 2),
+                              Text('延后提醒', style: context.text.caption),
+                            ])),
+                            TextButton(onPressed: busy ? null : _changeTime,
+                              child: const Text('改到指定时间')),
+                          ]),
+                          const SizedBox(height: 4),
+                          MemoQuickTimeChips(base: scheduledAt, compact: true, enabled: !busy, onPicked: _postpone),
+                        ]))
+                    else
+                      Padding(padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+                        child: Row(children: [
+                          Icon(ended ? Icons.history_rounded : Icons.notifications_none_rounded,
+                            size: 18, color: context.colors.brand700),
+                          const SizedBox(width: 8),
+                          Expanded(child: Wrap(spacing: 8, runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center, children: [
+                            Text(status, style: context.text.label),
+                            when(),
+                          ])),
+                          if (canSkip) complete,
+                        ])),
+                    const SizedBox(height: 10),
+                    ReminderAudioPanel(key: ValueKey('audio-${r.id}'), reminder: r, voiceName: voiceName),
+                  ])),
+              ]),
+            )),
+            Padding(padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+              child: FilledButton.icon(key: const ValueKey('detail-edit-button'),
+                onPressed: busy ? null : widget.onEdit,
+                style: FilledButton.styleFrom(backgroundColor: context.colors.brand500,
+                  foregroundColor: context.colors.onBrand, minimumSize: const Size.fromHeight(52),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MemoRadius.lg))),
+                icon: const Icon(Icons.edit_outlined, size: 20), label: const Text('编辑提醒'))),
+          ],
+        ));
+      }),
+    ));
   }
 }
 
 class _DetailHeading extends StatefulWidget {
-  final Reminder reminder;
+  final String text;
   final CharacterArt? art;
-  final String? voiceName;
-  final DateTime scheduledAt;
 
-  const _DetailHeading({required this.reminder, required this.art, required this.voiceName,
-    required this.scheduledAt});
+  const _DetailHeading({required this.text, required this.art});
 
   @override
   State<_DetailHeading> createState() => _DetailHeadingState();
@@ -1823,13 +1849,14 @@ class _DetailHeadingState extends State<_DetailHeading> {
   late _DetailTextLayout _measurement;
   static final _shortHan = RegExp(r'^[\u3400-\u9fff]{5,24}[。！？!?]?$');
 
-  _DetailTextLayout _measure(BuildContext context, double fullWidth, double? leftWidth) {
-    final text = widget.reminder.text;
+  _DetailTextLayout _measure(BuildContext context, TextStyle textStyle, double fullWidth,
+      double? leftWidth, double? headerHeight) {
+    final text = widget.text;
     final direction = Directionality.of(context);
     final scaler = MediaQuery.textScalerOf(context);
     final locale = Localizations.maybeLocaleOf(context);
-    final style = DefaultTextStyle.of(context).style.merge(context.text.detailTitle);
-    final key = (text, fullWidth, leftWidth, style, scaler, direction, locale);
+    final style = DefaultTextStyle.of(context).style.merge(textStyle);
+    final key = (text, fullWidth, leftWidth, headerHeight, style, scaler, direction, locale);
     if (key == _measurementKey) return _measurement;
 
     final painter = TextPainter(textDirection: direction, textScaler: scaler, locale: locale);
@@ -1853,7 +1880,7 @@ class _DetailHeadingState extends State<_DetailHeading> {
     if (leftWidth != null) {
       layout(text, leftWidth, 2);
     }
-    if (leftWidth != null && !painter.didExceedMaxLines) {
+    if (leftWidth != null && !painter.didExceedMaxLines && painter.height <= headerHeight! - 20) {
       result = (text: balance(leftWidth), besideArt: true, collapsible: false);
     } else {
       layout(text, fullWidth, 4);
@@ -1868,43 +1895,37 @@ class _DetailHeadingState extends State<_DetailHeading> {
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
     final art = widget.art;
-    final fullWidth = (box.maxWidth - 8).clamp(0.0, double.infinity);
-    // The mask stays nearly opaque through 54% of the sheet. Keep extra
-    // breathing room around the closer face of a vertical portrait.
-    final leftWidth = art != null && !art.isWide
-      ? ((box.maxWidth + 40) * (art.isPortrait ? .52 : .55) - 24).clamp(0.0, fullWidth)
+    final fullWidth = (box.maxWidth - 48).clamp(0.0, double.infinity);
+    final isParagraph = widget.text.length > 44 || widget.text.contains('\n');
+    final style = isParagraph ? context.text.detailParagraph : context.text.detailTitle;
+    // Keep the foreground within the opaque side of the mask and away from
+    // the closer portrait face. Longer notes use the full reading width.
+    final leftWidth = art != null && !art.isWide && !isParagraph
+      ? (box.maxWidth * (art.isPortrait ? .52 : .55) - 24).clamp(0.0, fullWidth)
       : null;
-    final layout = _measure(context, fullWidth, leftWidth);
-    final at = widget.scheduledAt;
-    final time = '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
-    final foreground = Padding(padding: const EdgeInsets.fromLTRB(4, 8, 4, 14),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
-          Text(time, style: context.text.detailTime),
-          Text('${dateLabel(at)} · ${widget.reminder.repeatLabel}', style: context.text.caption),
-        ]),
-        const SizedBox(height: 8),
+    final layout = _measure(context, style, fullWidth, leftWidth, art?.detailHeaderHeight);
+    final paragraph = Padding(
+      padding: const EdgeInsets.fromLTRB(24, 9, 24, 10),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(layout.text, key: const ValueKey('detail-reminder-text'),
-          semanticsLabel: layout.text == widget.reminder.text ? null : widget.reminder.text,
-          style: context.text.detailTitle, maxLines: layout.collapsible && !expanded ? 4 : null,
+          semanticsLabel: layout.text == widget.text ? null : widget.text,
+          style: style, maxLines: layout.collapsible && !expanded ? 4 : null,
           overflow: layout.collapsible && !expanded ? TextOverflow.ellipsis : null),
         if (layout.collapsible) TextButton(onPressed: () => setState(() => expanded = !expanded),
           child: Text(expanded ? '收起全文' : '展开全文')),
-        if (widget.voiceName != null) ...[
-          const SizedBox(height: 8),
-          Text('播报音色 · ${widget.voiceName}', style: context.text.caption.copyWith(color: context.colors.brand700)),
-        ],
-      ]));
+      ]),
+    );
 
+    if (art == null) return paragraph;
     if (layout.besideArt) {
-      return ConstrainedBox(constraints: BoxConstraints(minHeight: art!.isPortrait ? 186 : 168),
-        child: Align(alignment: Alignment.topLeft, child: SizedBox(width: leftWidth! + 8, child: foreground)));
+      return CharacterHeaderArt(art: art, child: Align(alignment: Alignment.centerLeft,
+        child: SizedBox(width: leftWidth! + 48, child: paragraph)));
     }
-    if (art == null) return foreground;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      if (art.isWide) CharacterWideHeader(art: art)
-      else SizedBox(height: art.isPortrait ? 174 : 156),
-      ColoredBox(color: context.colors.surfaceAlt, child: foreground),
+      if (art.isWide) Padding(padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: CharacterWideHeader(art: art))
+      else CharacterHeaderArt(art: art),
+      paragraph,
     ]);
   });
 }

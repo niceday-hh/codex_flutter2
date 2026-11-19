@@ -544,6 +544,9 @@ class MemoType {
 
   TextStyle get detailTitle => TextStyle(fontSize: 23, height: 1.35,
     fontWeight: FontWeight.w500, color: c.ink);
+
+  TextStyle get detailParagraph => TextStyle(fontSize: 19, height: 1.55,
+    fontWeight: FontWeight.w400, color: c.ink);
 }
 
 /// Theme extension so a future dark theme can swap the whole palette without
