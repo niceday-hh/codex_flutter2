@@ -86,13 +86,12 @@ void main() {
           expect(contrast(colour(roles[pair[0]]!), colour(roles[pair[1]]!)), greaterThanOrEqualTo(4.5), reason: art.asset);
         }
       }
-      for (final width in [393.0, 320.0, 640.0]) {
-        final size = Size(width, art.detailHeaderHeight);
+      for (final size in [const Size(393, 740), const Size(320, 480), const Size(700, 280)]) {
         final rect = art.placement(size);
         expect(rect.width.isFinite && rect.width > 0 && rect.height.isFinite && rect.height > 0, isTrue);
         final focus = Offset(rect.left + art.focus.dx * rect.width / art.width, rect.top + art.focus.dy * rect.height / art.height);
         expect(focus.dx, closeTo(size.width * (art.isPortrait ? .73 : .79), .001));
-        expect(focus.dy, closeTo(size.height * (art.isPortrait ? .45 : .43), .001));
+        expect(focus.dy, closeTo(art.isPortrait ? 126 : 96, .001));
       }
     }
     expect(catalog.entries['115']!.bounds.width, lessThan(640));
@@ -168,45 +167,37 @@ void main() {
         expect(find.text('延后提醒'), archived ? findsNothing : findsOneWidget);
         if (archived) {
           expect(find.descendant(of: find.byType(ReminderDetail), matching: find.text('19:42')), findsOneWidget);
-          expect(find.text('已归档'), findsOneWidget);
+          expect(find.text('已结束 · 可编辑后重新开启'), findsOneWidget);
+        }
+        final sheet = find.byType(CharacterDetailBackdrop);
+        expect(tester.getSize(sheet).height, closeTo(852 * .94, 1),
+          reason: 'both entries use the tall v0.9.28 detail sheet');
+        final body = find.byKey(const ValueKey('detail-reminder-text'));
+        final rendered = tester.widget<Text>(body);
+        expect(rendered.data, reminder.text);
+        expect(rendered.style!.fontFamily, MemoType.serif);
+        expect(rendered.style!.fontSize, 28);
+        final textColumn = find.ancestor(of: body, matching: find.byWidgetPredicate(
+          (widget) => widget is FractionallySizedBox && widget.widthFactor != null));
+        expect(tester.widget<FractionallySizedBox>(textColumn).widthFactor, art == null ? 1 : .58);
+        if (art != null) {
+          final image = find.byKey(const ValueKey('detail-character-image'));
+          expect(find.ancestor(of: image, matching: sheet), findsOneWidget);
+          expect(find.ancestor(of: body, matching: sheet), findsOneWidget);
         }
         final audio = find.byType(ReminderAudioPanel);
-        final editButton = find.byKey(const ValueKey('detail-edit-button'));
-        final gap = tester.getTopLeft(editButton).dy - tester.getBottomLeft(audio).dy;
-        expect(gap, inInclusiveRange(0, 20), reason: '音频面板和编辑按钮之间不应留下空页');
-        final header = find.byType(CharacterHeaderArt);
-        if (sid == 103 || sid == 115 || sid == 228) {
-          expect(tester.getSize(header).height, art!.detailHeaderHeight);
-          expect(tester.getBottomLeft(header).dy, lessThan(tester.getTopLeft(audio).dy));
-        } else {
-          expect(header, findsNothing);
-        }
-        final body = find.byKey(const ValueKey('detail-reminder-text'));
-        final renderedText = tester.widget<Text>(body).data!;
-        expect(renderedText.replaceAll('\n', ''), reminder.text);
-        final paragraph = tester.renderObject<RenderParagraph>(find.descendant(of: body, matching: find.byType(RichText)));
-        final letters = paragraph.getBoxesForSelection(TextSelection(
-          baseOffset: renderedText.length - 2, extentOffset: renderedText.length));
-        expect(letters.length, 1, reason: '句尾「来了」应留在同一行');
-        final wide = find.byType(CharacterWideHeader);
-        if (sid == 131) {
-          expect(wide, findsOneWidget);
-          expect(tester.getTopLeft(body).dy, greaterThan(tester.getBottomLeft(wide).dy));
-        } else {
-          expect(wide, findsNothing);
-        }
-        if (sid == 103 || sid == 115 || sid == 228) {
-          // The short sentence stays in the hero instead of dropping below it.
-          final scroll = find.byKey(const ValueKey('reminder-detail-scroll'));
-          expect(tester.getTopLeft(body).dy - tester.getTopLeft(scroll).dy, lessThan(126));
-        }
+        final audition = find.byKey(const ValueKey('preview-reminder-audio'));
+        final panelRect = tester.getRect(audio);
+        final auditionRect = tester.getRect(audition);
+        expect(auditionRect.left - panelRect.left, 17);
+        expect(panelRect.right - auditionRect.right, 17);
         if (art != null) {
           final local = tester.element(find.byKey(const ValueKey('reminder-detail-scroll')));
           final roles = mode == ThemeMode.dark ? art.dark! : art.light!;
           expect(Theme.of(local).colorScheme.primary.toARGB32(), int.parse('ff${roles['primary']!.substring(1)}', radix: 16));
           expect(local.colors.brand500, Theme.of(local).colorScheme.primary);
           expect(Theme.of(tester.element(find.byType(MemoHome, skipOffstage: false))).colorScheme.primary, isNot(Theme.of(local).colorScheme.primary));
-          expect(find.text('到点播报已关闭，试听和保存不会开启。'), findsNothing);
+          expect(find.text('到点语音播报当前关闭；试听和保存不会开启它。'), findsNothing);
         }
         if (screenshots) {
           await tester.runAsync(() async {

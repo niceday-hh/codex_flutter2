@@ -5,7 +5,7 @@ import 'package:timed_memo/design_tokens.dart';
 import 'package:timed_memo/main.dart';
 import 'package:timed_memo/reminder.dart';
 
-const size = Size(360, 168);
+const size = Size(360, 700);
 
 Future<CharacterBackdropBake> _bakeFor(WidgetTester tester, String speaker, {Brightness brightness = Brightness.light}) async {
   final catalog = (await tester.runAsync(() => CharacterArtCatalog.load()))!;
@@ -19,10 +19,10 @@ void main() {
   testWidgets('bake renders both layers at the requested density', (tester) async {
     final bake = await _bakeFor(tester, '228');
     expect(bake.underlay.width, 720);
-    expect(bake.underlay.height, 336);
+    expect(bake.underlay.height, 1400);
     expect(bake.overlay.width, 720);
-    expect(bake.overlay.height, 336);
-    expect(bake.bytes, 720 * 336 * 4 * 2);
+    expect(bake.overlay.height, 1400);
+    expect(bake.bytes, 720 * 1400 * 4 * 2);
     bake.underlay.dispose();
     bake.overlay.dispose();
   });
@@ -52,14 +52,14 @@ void main() {
     final catalog = (await tester.runAsync(() => CharacterArtCatalog.load()))!;
     final art = catalog.entries['228']!;
     final palette = MemoPalette.light.withArtRoles(art.light!);
-    final target = Size(393, art.detailHeaderHeight);
+    const target = Size(393, 760 * .94);
     // The prewarm pass waits for the home entrance to settle, then bakes; the
     // delay has to live in the real zone to fire.
     await tester.runAsync(() async {
-      cache.prewarm(speakers: const ['131', '228'], width: target.width, palette: MemoPalette.light, brightness: Brightness.light);
+      cache.prewarm(speakers: const ['131', '228'], size: target, palette: MemoPalette.light, brightness: Brightness.light);
       await Future<void>.delayed(const Duration(milliseconds: 1500));
     });
-    expect(cache.length, 1);
+    expect(cache.length, 2);
     expect(cache.peek(CharacterBackdropCache.keyFor(art.asset, target, Brightness.light, palette)), isNotNull);
     cache.clear();
   });
@@ -71,14 +71,14 @@ void main() {
     final cache = CharacterBackdropCache.instance;
     cache.clear();
     await tester.runAsync(() => CharacterArtCatalog.load());
+    const target = Size(393, 760 * .94);
     await tester.runAsync(() async {
-      cache.prewarm(speakers: const ['131', '228'], width: 393, palette: MemoPalette.light, brightness: Brightness.light);
+      cache.prewarm(speakers: const ['131', '228'], size: target, palette: MemoPalette.light, brightness: Brightness.light);
       await Future<void>.delayed(const Duration(milliseconds: 1500));
     });
-    expect(cache.length, 1);
+    expect(cache.length, 2);
 
-    final reminder = Reminder(id: 12, text: List.filled(18, '背景贴图留在页头。').join(),
-      date: DateTime(2030, 1, 1, 9),
+    final reminder = Reminder(id: 12, text: '背景烘焙', date: DateTime(2030, 1, 1, 9),
       speechMode: 'on', speechVoice: '228', speechState: 'ready');
     final host = MaterialApp(home: Scaffold(body: Builder(builder: (context) => TextButton(
       onPressed: () => showModalBottomSheet<void>(context: context, isScrollControlled: true,
@@ -90,26 +90,16 @@ void main() {
     await tester.tap(find.text('打开'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 32));
-    // A warm open and expanding the text use the same fixed-size textures.
-    final header = find.byType(CharacterHeaderArt);
-    expect(find.byType(RawImage), findsWidgets);
-    final size = tester.getSize(header);
-    final width = size.width;
-    final textures = find.descendant(of: header, matching: find.byType(RawImage));
-    final underlay = tester.widget<RawImage>(textures.first).image;
-    expect(underlay?.height, (size.height * 2).round());
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('展开全文'));
-    await tester.pumpAndSettle();
-    expect(tester.getSize(header), Size(width, size.height));
-    expect(tester.widget<RawImage>(textures.first).image, same(underlay));
-    expect(cache.length, 1);
+    // The two backdrop textures already cover the full v0.9.28-style sheet.
+    final layers = tester.widgetList<RawImage>(find.byType(RawImage)).where((widget) =>
+      widget.image?.width == 786 && widget.image?.height == (760 * .94 * 2).round());
+    expect(layers, hasLength(2));
     Navigator.of(tester.element(find.byType(ReminderDetail))).pop();
     await tester.pumpAndSettle();
     await tester.tap(find.text('打开'));
     await tester.pump(); await tester.pump(const Duration(milliseconds: 32));
     expect(find.byType(RawImage), findsWidgets);
-    expect(cache.length, 1);
+    expect(cache.length, 2);
     await tester.pumpWidget(const SizedBox()); await tester.pumpAndSettle();
     cache.clear();
   });

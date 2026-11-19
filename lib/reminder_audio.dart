@@ -8,9 +8,7 @@ import 'speech.dart';
 class ReminderAudioPanel extends StatefulWidget {
   final Reminder reminder;
   final SpeechSession? session;
-  final String? voiceName;
-
-  const ReminderAudioPanel({super.key, required this.reminder, this.session, this.voiceName});
+  const ReminderAudioPanel({super.key, required this.reminder, this.session});
   @override State<ReminderAudioPanel> createState() => _ReminderAudioPanelState();
 }
 class _ReminderAudioPanelState extends State<ReminderAudioPanel> {
@@ -19,7 +17,7 @@ class _ReminderAudioPanelState extends State<ReminderAudioPanel> {
   String? _busy;
   Map<String, dynamic>? _candidate;
   String _playingMessage = '正在试听本条提醒。';
-  String? _message;
+  String _message = '使用本条提醒的正文、音色和语速，可保存为 WAV 音频。';
   bool _failed = false;
   int _operation = 0;
   @override void dispose() {
@@ -67,11 +65,11 @@ class _ReminderAudioPanelState extends State<ReminderAudioPanel> {
   Future<void> _newVariant() async {
     session.stopPreview(owner: _owner);
     final operation = ++_operation;
-    setState(() { _busy = 'variant'; _failed = false; _message = '正在用当前音色生成新版本…'; });
+    setState(() { _busy = 'variant'; _failed = false; _message = '正在为同一音色准备新版本，当前音频继续保留…'; });
     try {
       final job = await session.prepareCandidate(widget.reminder.id);
       if (!mounted || operation != _operation) { await session.releaseAudio(job); return; }
-      setState(() { _candidate = job; _message = '新版本已就绪。试听后可选择使用。'; });
+      setState(() { _candidate = job; _message = '新版本已准备好。试听后，点击“使用此版本”才会替换当前音频。'; });
     } catch (e) {
       if (mounted && operation == _operation) setState(() { _failed = true; _message = niceError(e); });
     } finally {
@@ -90,7 +88,7 @@ class _ReminderAudioPanelState extends State<ReminderAudioPanel> {
     try {
       await session.useCandidate(job);
       if (!mounted || operation != _operation) return;
-      setState(() { _candidate = null; _message = '已使用此版本。'; });
+      setState(() { _candidate = null; _message = '已使用此版本。提醒、试听和保存音频将复用它。'; });
       await session.releaseAudio(job);
     } catch (e) {
       if (mounted && operation == _operation) setState(() { _failed = true; _message = niceError(e); });
@@ -98,70 +96,61 @@ class _ReminderAudioPanelState extends State<ReminderAudioPanel> {
       if (mounted && operation == _operation) setState(() => _busy = null);
     }
   }
-  @override
-  Widget build(BuildContext context) => ValueListenableBuilder<SpeechPreviewState>(
-    valueListenable: session.previewState,
-    builder: (context, preview, _) {
+  @override Widget build(BuildContext context) => ValueListenableBuilder<SpeechPreviewState>(
+    valueListenable: session.previewState, builder: (_, preview, _) {
       final own = identical(preview.owner, _owner);
       final playing = own && preview.playing;
       final failure = own && preview.error != null;
       final message = failure ? preview.error! : playing ? _playingMessage : _message;
-      final colours = context.colors;
-      final primary = FilledButton.styleFrom(
-        minimumSize: const Size(48, 48), padding: const EdgeInsets.symmetric(horizontal: 10),
-        backgroundColor: Color.alphaBlend(colours.brand500.withValues(alpha: .12), colours.surface),
-        foregroundColor: colours.brand700,
-      );
-      final secondary = TextButton.styleFrom(
-        minimumSize: const Size(48, 48), padding: const EdgeInsets.symmetric(horizontal: 8),
-        foregroundColor: colours.brand700,
-      );
-      return Container(width: double.infinity, padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-        decoration: BoxDecoration(color: colours.surface,
-          borderRadius: BorderRadius.circular(MemoRadius.lg),
-          border: Border.all(color: colours.line)),
+      return Container(width: double.infinity, padding: const EdgeInsets.all(16),
+        // A hairline, because the sheet behind it is now tinted with the same
+        // brand hue: brand100 on surfaceAlt was two near-identical greens.
+        decoration: BoxDecoration(color: context.colors.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: context.colors.line, width: 1)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Icon(Icons.graphic_eq_rounded, size: 20, color: colours.brand700),
-            const SizedBox(width: 8),
-            Expanded(child: Wrap(spacing: 8, runSpacing: 2,
-              crossAxisAlignment: WrapCrossAlignment.center, children: [
-                Text('提醒音频', style: context.text.subtitle),
-                if (widget.voiceName case final voice?)
-                  Text('播报音色 · $voice', style: context.text.caption),
-              ])),
-          ]),
-          if (message != null) Padding(padding: const EdgeInsets.only(top: 6),
-            child: Semantics(liveRegion: true, child: Text(message, key: const ValueKey('reminder-audio-feedback'),
-              style: context.text.body.copyWith(color: _failed || failure ? colours.danger : colours.muted, height: 1.45))))
-          else if (widget.reminder.speechState == 'off') Padding(padding: const EdgeInsets.only(top: 4),
-            child: Text('到点播报已关闭，试听和保存不会开启。', style: context.text.caption)),
-          const SizedBox(height: 6),
-          Wrap(spacing: 4, runSpacing: 4, children: [
-            FilledButton.icon(key: const ValueKey('preview-reminder-audio'), style: primary,
-              onPressed: _busy != null && _busy != 'play' ? null : playing || _busy == 'play' ? _stop : () => _listen(),
-              icon: Icon(playing || _busy == 'play' ? Icons.stop_rounded : Icons.play_arrow_rounded, size: 18),
-              label: Text(playing ? '停止试听' : _busy == 'play' ? '取消试听' : '试听提醒')),
-            TextButton.icon(key: const ValueKey('new-reminder-audio'), style: secondary,
+          Row(children: [Icon(Icons.graphic_eq_rounded, size: 20, color: context.colors.brand700),
+            const SizedBox(width: 8), Text('提醒音频', style: context.text.subtitle)]),
+          const SizedBox(height: 8),
+          Semantics(liveRegion: true, child: Text(message, key: const ValueKey('reminder-audio-feedback'),
+            style: TextStyle(color: _failed || failure ? context.colors.danger : context.colors.muted, fontSize: 13, height: 1.5))),
+          if (widget.reminder.speechState == 'off')  Padding(padding: EdgeInsets.only(top: 8), child: Text(
+            '到点语音播报当前关闭；试听和保存不会开启它。', style: TextStyle(color: context.colors.muted, fontSize: 12))),
+          const SizedBox(height: 14),
+          // One primary, two secondaries. Three equal outlined buttons wrapped
+          // into 2 + 1 on a 400dp screen, leaving 保存音频 alone on its own
+          // line — the shape of a layout that never decided which action
+          // matters. Auditioning is the reason this panel exists.
+          SizedBox(width: double.infinity, child: FilledButton.icon(
+            key: const ValueKey('preview-reminder-audio'),
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(46)),
+            onPressed: _busy != null && _busy != 'play' ? null : playing || _busy == 'play' ? _stop : () => _listen(),
+            icon: Icon(playing || _busy == 'play' ? Icons.stop_rounded : Icons.play_arrow_rounded),
+            label: Text(playing ? '停止试听' : _busy == 'play' ? '取消试听' : '试听提醒'))),
+          // Wrap, not Row: at 320dp with a 1.6x text scale the two labels
+          // measure wider than the card, and a Row would simply clip the
+          // second one instead of stacking it.
+          Wrap(alignment: WrapAlignment.center, spacing: 4, runSpacing: 2, children: [
+            TextButton.icon(key: const ValueKey('new-reminder-audio'),
               onPressed: _busy == 'variant' ? _stop : _busy == null && _candidate == null ? _newVariant : null,
               icon: const Icon(Icons.refresh_rounded, size: 18),
               label: Text(_busy == 'variant' ? '取消准备' : '换一版')),
-            TextButton.icon(key: const ValueKey('save-reminder-audio'), style: secondary,
+            TextButton.icon(key: const ValueKey('save-reminder-audio'),
               onPressed: _busy == null && _candidate == null ? _save : null,
               icon: _busy == 'save' ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.download_rounded, size: 18), label: const Text('保存音频')),
           ]),
           if (_candidate != null) ...[
-            const Divider(height: 16),
-            Text('候选音频', style: context.text.subtitle),
-            Wrap(spacing: 4, runSpacing: 4, children: [
-              TextButton.icon(style: secondary, onPressed: _busy == null ? () => _listen(candidate: true) : null,
-                icon: const Icon(Icons.play_arrow_rounded, size: 18), label: const Text('试听新版本')),
-              FilledButton(style: primary, onPressed: _busy == null ? _select : null, child: const Text('使用此版本')),
-              TextButton(style: secondary, onPressed: _busy == null ? _discard : null, child: const Text('放弃新版本')),
+            const SizedBox(height: 16), const Divider(), const SizedBox(height: 10),
+            const Text('新版本 · 选择后才用于提醒', style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 10),
+            Wrap(spacing: 10, runSpacing: 8, children: [
+              OutlinedButton.icon(onPressed: _busy == null ? () => _listen(candidate: true) : null,
+                icon: const Icon(Icons.play_arrow_rounded), label: const Text('试听新版本')),
+              FilledButton(onPressed: _busy == null ? _select : null, child: const Text('使用此版本')),
+              TextButton(onPressed: _busy == null ? _discard : null, child: const Text('放弃新版本')),
             ]),
           ],
         ]));
-    },
-  );
+    });
 }

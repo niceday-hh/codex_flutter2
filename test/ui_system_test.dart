@@ -262,7 +262,7 @@ void main() {
     final t = MemoType(MemoPalette.dark);
     expect(t.detailTitle.fontSize!, greaterThan(t.detailTime.fontSize!),
       reason: 'the sentence outranks the time it happens at');
-    expect(t.detailTitle.fontFamily, isNull, reason: 'details inherit the system sans font');
+    expect(t.detailTitle.fontFamily, MemoType.serif);
     expect(t.detailTime.color, MemoPalette.dark.muted, reason: 'the clock is an attribute');
     expect(t.detailTime.fontWeight, FontWeight.w600, reason: 'still scans as a clock');
     expect(t.detailTime.fontFeatures, contains(const FontFeature.tabularFigures()));
