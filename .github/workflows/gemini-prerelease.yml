@@ -66,25 +66,40 @@ jobs:
           python3 tool/fetch_model.py
           python3 tool/fetch_vad.py
           python3 tool/fetch_tts.py
+      - name: Prepare fixed release signing
+        id: sign
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: python3 tool/prepare_signing.py
+      - uses: actions/cache/restore@v4
+        id: nativecache
+        with:
+          path: build/.cxx
+          key: mnn-cxx-v2-arm64-release-${{ hashFiles('native/app/src/main/cpp/**', 'native/app/build.gradle.kts', 'tool/fetch_mnn.py') }}
       - name: Build arm64 release APK and run native Robolectric regression tests
         run: |
           flutter build apk --release --target-platform android-arm64
           cd android && ./gradlew :app:testReleaseUnitTest --no-daemon -Ptarget-platform=android-arm64
+      - uses: actions/cache/save@v4
+        if: steps.nativecache.outputs.cache-hit != 'true'
+        with:
+          path: build/.cxx
+          key: ${{ steps.nativecache.outputs.cache-primary-key }}
+      - name: Verify embedded model and fixed certificate
+        run: python3 tool/verify_apk.py
       - uses: actions/upload-artifact@v4
         with:
           name: codex-flutter2-gemini-arm64-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/SHA256SUMS.txt
           retention-days: 7
-      - name: Publish GitHub Pre-release on v1.0.* tag
-        if: startsWith(github.ref, 'refs/tags/v1.0.')
+      - name: Update v1.0.0-gemini.1 Pre-release with verified signed APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
-          gh release delete "$TAG" --yes 2>/dev/null || true
-          gh release create "$TAG" "$APK_PATH" \
-            --prerelease \
-            --target gemini \
-            --title "超级提醒 ${TAG} (Gemini 全栈优化预发布)" \
-            --notes "## v1.0.0-gemini.1 预发布变更说明\n\n### 1. 工程架构与 Android 原生层重构\n- 新增 \`lib/sheet_coordinator.dart\` 并在 \`lib/main.dart\` 接入，集中管理主页多弹窗状态与切换，配套单元测试 \`test/sheet_coordinator_test.dart\`。\n- 抽离 \`DeviceSettingsNavigator.java\`，封装系统通知/电池/渠道/应用设置跳转并增加定制 ROM 缺页降级兜底，配套 Robolectric 单测 \`DeviceSettingsNavigatorTest.java\`。\n- 抽离 \`ReminderDialogPresenter.java\`，修复前台 10 秒自动关闭弹窗的 \`Handler\` 泄漏与窗口生命周期隐患。\n\n### 2. UI 美化\n- \`lib/app_style.dart\`：\`memoSnackBar\` 支持 \`MemoPalette\` 语义令牌与 \`1px\` 边框，深浅色及 4 套强调色统一协调。\n- \`lib/widgets/memo_sheet.dart\`：保持零 \`BackdropFilter\` 性能预算，增加深浅色自适应 \`1px\` 顶缘描边与提示胶囊底色。\n- \`lib/widgets/memo_art.dart\`：扩展 \`MemoEmptyKind\`（upcoming / history / search）三套零位图矢量插画。\n\n### 3. 动效优化（严守无循环动画预算）\n- \`lib/recording_waveform.dart\`：新增中心余弦包络衰减、振幅色阶插值与满幅警示色，修复主题切换 \`shouldRepaint\` 边界。\n- \`lib/widgets/memo_slide_to_confirm.dart\`：越过 88% 阈值触发轻量 \`selectionClick\` 触觉预反馈，松手采用 \`easeOutBack\` 弹性回弹。\n- \`lib/widgets/memo_motion.dart\`：\`MemoNumberSwap\` 支持双向数字翻滚。\n\n### 回归测试状态\n- 已在发布前通过 \`flutter analyze\`、全量 \`flutter test\`、C++ 韵律测试、Java 排程测试、Android \`arm64\` Release APK 构建及全量 Robolectric 原生单元测试。"
+          cp build/app/outputs/flutter-apk/app-release.apk /tmp/timed_memo-v1.0.0-gemini.1-arm64.apk
+          gh release upload v1.0.0-gemini.1 /tmp/timed_memo-v1.0.0-gemini.1-arm64.apk build/app/outputs/flutter-apk/SHA256SUMS.txt --clobber
