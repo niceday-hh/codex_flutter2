@@ -21,6 +21,7 @@ import 'design_tokens.dart';
 import 'voice_page.dart';
 import 'voice_groups_page.dart';
 import 'app_style.dart';
+import 'sheet_coordinator.dart';
 import 'appearance.dart';
 import 'settings_page.dart';
 import 'voice_catalog.dart';
@@ -170,7 +171,15 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   DialogRoute<void>? _voiceDialog;
   bool _dialogScheduled = false, _wasPaused = false, _entryPending = true;
   bool _initialized = false, _foreground = true, _checkingEntry = false, _entryAgain = false, _suppressVoiceEntry = false;
-  bool _taskLibraryOpen = false, _settingsSheetOpen = false, _detailOpen = false, _editorOpen = false;
+  final SheetCoordinator _sheets = SheetCoordinator();
+  bool get _taskLibraryOpen => _sheets.isOpen(MemoSheetKind.taskLibrary);
+  set _taskLibraryOpen(bool open) => open ? _sheets.tryOpen(MemoSheetKind.taskLibrary) : _sheets.close(MemoSheetKind.taskLibrary);
+  bool get _settingsSheetOpen => _sheets.isOpen(MemoSheetKind.settings);
+  set _settingsSheetOpen(bool open) => open ? _sheets.tryOpen(MemoSheetKind.settings) : _sheets.close(MemoSheetKind.settings);
+  bool get _detailOpen => _sheets.isOpen(MemoSheetKind.detail);
+  set _detailOpen(bool open) => open ? _sheets.tryOpen(MemoSheetKind.detail) : _sheets.close(MemoSheetKind.detail);
+  bool get _editorOpen => _sheets.isOpen(MemoSheetKind.editor);
+  set _editorOpen(bool open) => open ? _sheets.tryOpen(MemoSheetKind.editor) : _sheets.close(MemoSheetKind.editor);
   bool _homeRefreshPending = false;
   ValueNotifier<Reminder>? _detailSelection;
   final _settingsMessenger = GlobalKey<ScaffoldMessengerState>();
@@ -313,6 +322,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     try { await voice.pause(); } catch (_) {}
   }
   @override void dispose() {
+    _sheets.dispose();
     voice.removeListener(_voiceChanged); voice.dispose();
     asr.setForeground(false); asr.release();
     for (final a in _revealCache.values) { if (a is CurvedAnimation) a.dispose(); }
@@ -444,7 +454,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     final messenger = local != null && ModalRoute.of(local.context)?.isCurrent == true
       ? local : ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(memoSnackBar(s, error: error));
+    messenger.showSnackBar(memoSnackBar(s, error: error, palette: context.colors));
   }
   void _pauseForNavigation() {
     _entryPending = false; _entryEpoch++; speech.stopPreview();

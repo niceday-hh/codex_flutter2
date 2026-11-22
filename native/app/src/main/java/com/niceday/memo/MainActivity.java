@@ -22,27 +22,11 @@ import java.io.*;
 public final class MainActivity extends FlutterActivity {
     private static boolean capturedLaunch;
     private static java.lang.ref.WeakReference<MainActivity> foreground = new java.lang.ref.WeakReference<>(null);
-    private AlertDialog reminderDialog;
+    private final ReminderDialogPresenter reminderDialogPresenter = new ReminderDialogPresenter();
     private boolean resumed;
     static boolean showReminder(JSONObject reminder, long token) {
         MainActivity activity = foreground.get();
-        if (activity == null || !activity.resumed || activity.isFinishing()
-            || activity.getSystemService(KeyguardManager.class).isKeyguardLocked()
-            || !activity.getSystemService(PowerManager.class).isInteractive()) return false;
-        activity.runOnUiThread(() -> {
-            if (!activity.resumed || activity.getSystemService(KeyguardManager.class).isKeyguardLocked()) return;
-            if (activity.reminderDialog != null) activity.reminderDialog.dismiss();
-            AlertDialog dialog = new AlertDialog.Builder(activity).setTitle("超级提醒")
-                .setMessage(reminder.optString("text"))
-                .setNegativeButton("收起", null).setPositiveButton("已读", (d, which) -> {
-                    try { new ReminderEngine(activity).acknowledge(reminder.optInt("id"), token); }
-                    catch (Exception e) { new ReminderEngine(activity).error("确认已读失败，请在通知栏重试"); }
-                }).create();
-            activity.reminderDialog = dialog; dialog.show();
-            dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
-            new Handler(Looper.getMainLooper()).postDelayed(dialog::dismiss, 10000);
-        });
-        return true;
+        return activity != null && activity.reminderDialogPresenter.show(activity, activity.resumed, reminder, token);
     }
     static boolean isRecordingAudio() {
         MainActivity activity = foreground.get();
@@ -257,15 +241,14 @@ public final class MainActivity extends FlutterActivity {
                         result.success(null);
                     }
                     case "notificationSettings" -> {
-                        startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()));
+                        DeviceSettingsNavigator.openNotificationSettings(this);
                         result.success(null);
                     }
                     case "batterySettings" -> {
-                        startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)); result.success(null);
+                        DeviceSettingsNavigator.openBatterySettings(this); result.success(null);
                     }
                     case "appSettings" -> {
-                        startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                            Uri.parse("package:" + getPackageName()))); result.success(null);
+                        DeviceSettingsNavigator.openAppSettings(this); result.success(null);
                     }
                     case "pickRingtone" -> {
                         if (ringtoneResult != null) throw new IllegalStateException("铃声选择处理中");
@@ -313,14 +296,12 @@ public final class MainActivity extends FlutterActivity {
                     }
                     case "notificationStyleSettings" -> {
                         String id = store.channelForStyle((String) call.arguments);
-                        startActivity(new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
-                            .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()).putExtra(Settings.EXTRA_CHANNEL_ID, id));
+                        DeviceSettingsNavigator.openChannelSettings(this, id);
                         result.success(null);
                     }
                     case "channelSettings" -> {
                         String id = (String) call.arguments;
-                        startActivity(new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
-                            .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()).putExtra(Settings.EXTRA_CHANNEL_ID, id));
+                        DeviceSettingsNavigator.openChannelSettings(this, id);
                         result.success(null);
                     }
                     case "exportBackup" -> {
@@ -509,7 +490,7 @@ public final class MainActivity extends FlutterActivity {
         return path;
     }
     @Override protected void onPause() {
-        resumed = false; if (reminderDialog != null) { reminderDialog.dismiss(); reminderDialog = null; }
+        resumed = false; reminderDialogPresenter.dismiss();
         super.onPause(); stopSpeechPreview();
     }
     @Override protected void onStop() {
