@@ -97,8 +97,15 @@ jobs:
             build/app/outputs/flutter-apk/*.apk
             build/app/outputs/flutter-apk/SHA256SUMS.txt
           retention-days: 7
-      - name: Update v1.0.0-gemini.1 Pre-release with verified signed APK
+      - name: Publish or update Gemini Pre-release with verified signed APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload v1.0.0-gemini.1 build/app/outputs/flutter-apk/*.apk build/app/outputs/flutter-apk/SHA256SUMS.txt --clobber
+          TAG=$(tr -d '[:space:]' < .release-version)
+          NOTES_FILE="docs/releases/${TAG}.md"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "超级提醒 ${TAG} (预发布)" --notes-file "$NOTES_FILE" --prerelease
+            gh release upload "$TAG" build/app/outputs/flutter-apk/*.apk build/app/outputs/flutter-apk/SHA256SUMS.txt --clobber
+          else
+            gh release create "$TAG" build/app/outputs/flutter-apk/*.apk build/app/outputs/flutter-apk/SHA256SUMS.txt               --prerelease               --target gemini               --title "超级提醒 ${TAG} (预发布)"               --notes-file "$NOTES_FILE"
+          fi

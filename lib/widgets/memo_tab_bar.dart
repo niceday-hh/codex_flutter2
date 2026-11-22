@@ -82,10 +82,21 @@ class MemoTabBar extends StatelessWidget {
           // 1.06, not 1.2: the icon is 21dp, so the whole move is 1.3dp per
           // edge — enough to feel like the tab grew, not enough to nudge the
           // label underneath it.
-          AnimatedScale(scale: on ? 1.06 : 1, duration: MemoMotion.base,
+          AnimatedContainer(
+            duration: MemoMotion.base,
             curve: Curves.easeOutCubic,
-            child: Icon(on ? item.$2 : item.$1, size: 21,
-              color: on ? c.brand600 : c.muted)),
+            width: on ? 46 : 28,
+            height: 28,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: on ? c.brand100 : Colors.transparent,
+              borderRadius: BorderRadius.circular(MemoRadius.pill),
+            ),
+            child: AnimatedScale(scale: on ? 1.08 : 1, duration: MemoMotion.base,
+              curve: Curves.easeOutCubic,
+              child: Icon(on ? item.$2 : item.$1, size: 20,
+                color: on ? c.brand600 : c.muted)),
+          ),
           const SizedBox(height: 3),
           // copyWith on the inherited style, not a fresh TextStyle: a bare
           // TextStyle drops the theme's font family and fallback chain, and
@@ -125,19 +136,19 @@ class _CreateDiscState extends State<_CreateDisc> {
         onTapCancel: () => setState(() => _down = false),
         onTapUp: (_) => setState(() => _down = false),
         onTap: () { HapticFeedback.mediumImpact(); widget.onTap(); },
-        child: AnimatedScale(scale: _down ? .94 : 1, duration: MemoMotion.press,
+        child: AnimatedScale(scale: _down ? .92 : 1, duration: MemoMotion.press,
           curve: MemoMotion.curve,
-          // A 3px ring in the bar's own colour, not a drop shadow. The disc is
-          // half-sunk in the capsule, so any shadow long enough to read as
-          // light also pooled underneath it as a purple crescent. The ring
-          // cuts the disc out of the surface instead, which is the same trick
-          // the card corners use: the shape, not the shadow, says "raised".
           child: Container(width: 56, height: 56,
             decoration: BoxDecoration(shape: BoxShape.circle,
               gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
                 colors: [c.brand400, c.brand600]),
               border: Border.all(color: c.surface, width: 3)),
-            child: const Icon(Icons.add_rounded, color: Colors.white, size: 26))),
+            child: AnimatedRotation(
+              turns: _down ? 0.125 : 0,
+              duration: MemoMotion.press,
+              curve: MemoMotion.curve,
+              child: const Icon(Icons.add_rounded, color: Colors.white, size: 26),
+            ))),
       ));
   }
 }

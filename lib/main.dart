@@ -212,8 +212,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   /// already wrapped in `RepaintBoundary`. Moving a layer only repaints the
   /// composite, not the list inside it — which is why this is allowed while a
   /// cross-fade (an `Opacity` over a scrolling page) is not.
-  late final Animation<Offset> _tabShift = Tween<Offset>(begin: const Offset(0, .016), end: Offset.zero)
-    .animate(CurvedAnimation(parent: _tabMove, curve: MemoMotion.curve));
+  int _tabDirection = 1;
+  late final Animation<double> _tabCurve = CurvedAnimation(parent: _tabMove, curve: MemoMotion.curve);
 
   Animation<double> _revealAt(int i) => _revealCache.putIfAbsent(i, () {
     final begin = (i.clamp(0, MemoMotion.enterMaxItems) * MemoMotion.enterStep)
@@ -235,7 +235,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     super.initState(); WidgetsBinding.instance.addObserver(this);
     _enter = AnimationController(vsync: this, duration: MemoMotion.enter)
       ..addStatusListener((s) { if (s == AnimationStatus.completed && mounted) _refreshHome(); });
-    _tabMove = AnimationController(vsync: this, duration: const Duration(milliseconds: 200), value: 1);
+    _tabMove = AnimationController(vsync: this, duration: const Duration(milliseconds: 220), value: 1);
     asr.setForeground(true);
     voice.addListener(_voiceChanged);
     // The page-level chrome (action bar, FAB, hero slot) depends on whether a
@@ -306,6 +306,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     _entryPending = false; _entryEpoch++; speech.stopPreview();
     final stopped = voice.active || voice.pending != null ? voice.pause(keepDraft: false) : Future<void>.value();
     _selection.clear();
+    _tabDirection = i > tab ? 1 : -1;
     setState(() { tab = i; });
     _tabMove.forward(from: 0);
     unawaited(stopped.then((_) async {
@@ -721,7 +722,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       //
       // Each tab keeps its own layer too: a banner or a snackbar appearing over
       // the list no longer repaints the calendar sitting behind it.
-      : SlideTransition(position: _tabShift, child: IndexedStack(index: tab, children: [
+      : AnimatedBuilder(animation: _tabCurve, builder: (_, child) => Transform.translate(
+        offset: Offset((1 - _tabCurve.value) * 18 * _tabDirection, 0), child: child), child: IndexedStack(index: tab, children: [
         RepaintBoundary(child: homePage()),
         RepaintBoundary(child: calendarPage()),
         TickerMode(enabled: tab == 2, child: RepaintBoundary(child: VoicePage(flow: voice))),
@@ -847,6 +849,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
         decoration: BoxDecoration(
           gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
             colors: context.colors.heroGradientFor(now.hour)),
+          border: Border.all(color: Colors.white.withValues(alpha: .18), width: 1),
           borderRadius: const BorderRadius.all(Radius.circular(MemoRadius.xxl))),
         // The two arcs are clipped by the card, not by their own box: a
         // 240dp disc parked off the top-right corner draws one crescent of
@@ -871,11 +874,21 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
             Padding(padding: const EdgeInsets.fromLTRB(22, 20, 22, 21),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Icon(r.unread ? Icons.mark_email_unread_outlined : Icons.notifications_active_outlined,
-                  color: context.colors.onBrand, size: 18),
-                const SizedBox(width: MemoSpace.sm),
-                Text(r.unread ? '待确认提醒' : '下一条提醒',
-                  style: context.text.label.copyWith(color: context.colors.onBrand)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: .16),
+                    borderRadius: BorderRadius.circular(MemoRadius.pill),
+                    border: Border.all(color: Colors.white.withValues(alpha: .22), width: .8),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(r.unread ? Icons.mark_email_unread_outlined : Icons.notifications_active_outlined,
+                      color: context.colors.onBrand, size: 16),
+                    const SizedBox(width: 6),
+                    Text(r.unread ? '待确认提醒' : '下一条提醒',
+                      style: context.text.label.copyWith(color: context.colors.onBrand)),
+                  ]),
+                ),
                 const Spacer(),
                 // The card is the only reminder on a one-item day, so it needs
                 // the same exits a row has. The arrow promised "tap to open"
@@ -1021,11 +1034,19 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
         onTap: selecting ? () { HapticFeedback.selectionClick(); pick.toggle(r.id); } : () => _openDetail(r),
         onLongPress: () { HapticFeedback.selectionClick(); pick.toggle(r.id); },
         child: Padding(
-          padding: EdgeInsets.fromLTRB(selecting ? 16 : 24, 15, 8, 15),
+          padding: EdgeInsets.fromLTRB(selecting ? 16 : 18, 15, 8, 15),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             if (selecting) Padding(padding: const EdgeInsets.only(right: 12, top: 3),
               child: Icon(picked ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-                color: picked ? context.colors.brand600 : context.colors.outline, size: 22)),
+                color: picked ? context.colors.brand600 : context.colors.outline, size: 22))
+            else Padding(padding: const EdgeInsets.only(right: 10, top: 4),
+              child: Container(
+                width: 3.5, height: 34,
+                decoration: BoxDecoration(
+                  color: dim ? context.colors.lineStrong : (r.unread ? context.colors.amber : context.colors.brand500),
+                  borderRadius: BorderRadius.circular(MemoRadius.pill),
+                ),
+              )),
             // Fixed 56dp rail: the clocks line up down the page even when one
             // of them is "9:05" and the next is "23:45".
             SizedBox(width: 60, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1181,7 +1202,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
           })),
       ]))),
       section('${selectedDate.month}月${selectedDate.day}日', '${list.length} 个提醒'),
-      if (list.isEmpty) MemoEmptyState(icon: Icons.event_available_rounded,
+      if (list.isEmpty) MemoEmptyState(art: const MemoEmptyArt(kind: MemoEmptyKind.history), icon: Icons.event_available_rounded,
         title: '这一天还没有提醒', subtitle: '点击 + 添加一件值得记住的事',
         actionLabel: '新建提醒', onAction: () => edit()),
     ]),
