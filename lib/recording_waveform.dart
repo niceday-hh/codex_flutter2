@@ -61,22 +61,89 @@ class RecordingWaveform extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final auraPrimary = dark ? const Color(0xFF5EEAD4) : c.brand400;
+    final auraSecondary = c.brand500;
+
     return Column(children: [
-      RepaintBoundary(
-        child: SizedBox(
-          height: 40,
-          width: double.infinity,
-          child: CustomPaint(
-            painter: RecordingWavePainter(
-              meter,
-              c.brand500,
-              lowColor: c.brand200,
-              peakColor: c.danger,
-            ),
+      const SizedBox(height: 12),
+      Container(
+        height: 82,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: dark
+              ? c.surfaceAlt.withValues(alpha: 0.72)
+              : c.brand50.withValues(alpha: 0.65),
+          borderRadius: BorderRadius.circular(MemoRadius.xl),
+          border: Border.all(
+            color: dark
+                ? Colors.white.withValues(alpha: 0.09)
+                : c.line.withValues(alpha: 0.8),
+            width: 1,
           ),
         ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Static ambient aura inside RepaintBoundary: zero ticker, zero blur cost.
+            Positioned.fill(
+              child: IgnorePointer(
+                child: RepaintBoundary(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        center: const Alignment(-0.28, 0),
+                        radius: 1.05,
+                        colors: [
+                          auraPrimary.withValues(alpha: dark ? 0.18 : 0.10),
+                          auraSecondary.withValues(alpha: dark ? 0.14 : 0.06),
+                          Colors.transparent,
+                        ],
+                        stops: const [0.0, 0.52, 1.0],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: RepaintBoundary(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        center: const Alignment(0.36, 0),
+                        radius: 0.95,
+                        colors: [
+                          auraSecondary.withValues(alpha: dark ? 0.22 : 0.10),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            RepaintBoundary(
+              child: SizedBox(
+                height: 68,
+                width: double.infinity,
+                child: CustomPaint(
+                  painter: RecordingWavePainter(
+                    meter,
+                    c.brand500,
+                    lowColor: dark ? const Color(0xFF5EEAD4) : c.brand200,
+                    peakColor: c.danger,
+                    dark: dark,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-      const SizedBox(height: 8),
+      const SizedBox(height: 10),
       AnimatedBuilder(
         animation: meter,
         builder: (_, child) => Text(
@@ -96,45 +163,68 @@ class RecordingWavePainter extends CustomPainter {
   final Color color;
   final Color? lowColor;
   final Color? peakColor;
+  final bool dark;
 
   RecordingWavePainter(
     this.meter,
     this.color, {
     this.lowColor,
     this.peakColor,
+    this.dark = false,
   }) : super(repaint: meter);
 
   @override
   void paint(Canvas canvas, Size size) {
     final count = meter.levels.length;
     final half = (count - 1) / 2.0;
-    final step = (size.width / count).clamp(0.0, 7.0);
-    final baseLow = lowColor ?? color.withValues(alpha: 0.45);
+    final step = ((size.width - 28) / count).clamp(0.0, 7.6);
+    final edgeTone = lowColor ?? color.withValues(alpha: 0.45);
     final clipping = meter.active && meter.peak >= 0.97;
-    final paint = Paint()..strokeCap = StrokeCap.round;
+    final corePaint = Paint()..strokeCap = StrokeCap.round;
+    final glowPaint = Paint()..strokeCap = StrokeCap.round;
 
     for (var i = 0; i < count; i++) {
-      final normDist = (i - half).abs() / half;
-      final envelope = 0.42 + 0.58 * math.cos(normDist * math.pi * 0.5);
+      final normPos = i / (count - 1); // 0 left -> 1 right
+      final normDist = (i - half).abs() / half; // 0 center -> 1 edge
+      final envelope = 0.36 + 0.64 * math.cos(normDist * math.pi * 0.5);
       final amp = meter.levels[i];
       final x = size.width / 2 + (i - half) * step;
-      final height = 1.6 + amp * 16.5 * (0.72 + 0.28 * envelope);
+      final maxHalfHeight = (size.height / 2) - 4;
+      final height = (2.2 + amp * (maxHalfHeight - 2.2) * (0.64 + 0.36 * envelope))
+          .clamp(2.0, maxHalfHeight);
 
+      // Luminous left-to-right gradient in dark mode (cyan-teal -> brand violet).
+      final baseTone = dark
+          ? Color.lerp(edgeTone, color, normPos)!
+          : Color.lerp(edgeTone, color, (0.35 + 0.65 * amp).clamp(0.0, 1.0))!;
       final barColor = clipping && amp > 0.72 && peakColor != null
-          ? Color.lerp(color, peakColor, ((amp - 0.72) / 0.28).clamp(0.0, 1.0))!
-          : Color.lerp(baseLow, color, amp.clamp(0.0, 1.0))!;
-      final alpha = meter.active
-          ? (0.32 + 0.62 * envelope * (0.55 + 0.45 * amp)).clamp(0.0, 1.0)
-          : 0.24 * envelope;
+          ? Color.lerp(baseTone, peakColor, ((amp - 0.72) / 0.28).clamp(0.0, 1.0))!
+          : baseTone;
 
-      paint
+      final alpha = meter.active
+          ? (0.30 + 0.68 * envelope * (0.50 + 0.50 * amp)).clamp(0.0, 1.0)
+          : 0.26 * envelope;
+
+      // Cheap luminous outer halo stroke in dark mode (zero blur filter cost).
+      if (dark && meter.active && amp > 0.12) {
+        glowPaint
+          ..color = barColor.withValues(alpha: (alpha * 0.22).clamp(0.0, 0.26))
+          ..strokeWidth = 6.8 + amp * 1.4;
+        canvas.drawLine(
+          Offset(x, size.height / 2 - height),
+          Offset(x, size.height / 2 + height),
+          glowPaint,
+        );
+      }
+
+      corePaint
         ..color = barColor.withValues(alpha: alpha)
-        ..strokeWidth = 2.8 + amp * 0.6;
+        ..strokeWidth = 2.8 + amp * 0.7;
 
       canvas.drawLine(
         Offset(x, size.height / 2 - height),
         Offset(x, size.height / 2 + height),
-        paint,
+        corePaint,
       );
     }
   }
@@ -144,5 +234,6 @@ class RecordingWavePainter extends CustomPainter {
       oldDelegate.meter != meter ||
       oldDelegate.color != color ||
       oldDelegate.lowColor != lowColor ||
-      oldDelegate.peakColor != peakColor;
+      oldDelegate.peakColor != peakColor ||
+      oldDelegate.dark != dark;
 }
