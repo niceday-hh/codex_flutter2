@@ -94,12 +94,11 @@ jobs:
         with:
           name: codex-flutter2-gemini-arm64-apk
           path: |
-            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/*.apk
             build/app/outputs/flutter-apk/SHA256SUMS.txt
           retention-days: 7
       - name: Update v1.0.0-gemini.1 Pre-release with verified signed APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp build/app/outputs/flutter-apk/app-release.apk /tmp/timed_memo-v1.0.0-gemini.1-arm64.apk
-          gh release upload v1.0.0-gemini.1 /tmp/timed_memo-v1.0.0-gemini.1-arm64.apk build/app/outputs/flutter-apk/SHA256SUMS.txt --clobber
+          gh release upload v1.0.0-gemini.1 build/app/outputs/flutter-apk/*.apk build/app/outputs/flutter-apk/SHA256SUMS.txt --clobber
