@@ -30,7 +30,7 @@ class _VoicePageState extends State<VoicePage> {
   Widget build(BuildContext context) {
     final c = context.colors;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final auraTint = dark ? const Color(0xFF5EEAD4) : c.brand400;
+    final auraTint = dark ? MemoColor.voiceAuraCyan : c.brand400;
 
     return ListView(padding: const EdgeInsets.fromLTRB(24, 26, 24, 30), children: [
       Row(children: [

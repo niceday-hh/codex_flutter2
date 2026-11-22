@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 
 /// Brand ramp, 50 → 900. One hue, ten steps, no ad-hoc purples.
 abstract final class MemoColor {
+  static const voiceAuraCyan = Color(0xFF5EEAD4);
   static const brand50 = Color(0xFFF7F4FF);
   static const brand100 = Color(0xFFF0ECFF); // lavender — tints, chips
   static const brand200 = Color(0xFFDDD2FF); // borders on tinted surfaces

@@ -62,7 +62,7 @@ class RecordingWaveform extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final auraPrimary = dark ? const Color(0xFF5EEAD4) : c.brand400;
+    final auraPrimary = dark ? MemoColor.voiceAuraCyan : c.brand400;
     final auraSecondary = c.brand500;
 
     return Column(children: [
@@ -133,7 +133,7 @@ class RecordingWaveform extends StatelessWidget {
                   painter: RecordingWavePainter(
                     meter,
                     c.brand500,
-                    lowColor: dark ? const Color(0xFF5EEAD4) : c.brand200,
+                    lowColor: dark ? MemoColor.voiceAuraCyan : c.brand200,
                     peakColor: c.danger,
                     dark: dark,
                   ),
