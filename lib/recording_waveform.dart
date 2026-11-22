@@ -66,9 +66,9 @@ class RecordingWaveform extends StatelessWidget {
     final auraSecondary = c.brand500;
 
     return Column(children: [
-      const SizedBox(height: 12),
+      const SizedBox(height: 6),
       Container(
-        height: 82,
+        height: 58,
         width: double.infinity,
         decoration: BoxDecoration(
           color: dark
@@ -127,7 +127,7 @@ class RecordingWaveform extends StatelessWidget {
             ),
             RepaintBoundary(
               child: SizedBox(
-                height: 68,
+                height: 50,
                 width: double.infinity,
                 child: CustomPaint(
                   painter: RecordingWavePainter(
@@ -143,7 +143,7 @@ class RecordingWaveform extends StatelessWidget {
           ],
         ),
       ),
-      const SizedBox(height: 10),
+      const SizedBox(height: 6),
       AnimatedBuilder(
         animation: meter,
         builder: (_, child) => Text(

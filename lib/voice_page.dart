@@ -74,16 +74,21 @@ class _VoicePageState extends State<VoicePage> {
         textAlign: TextAlign.center,
         style: context.text.caption.copyWith(color: c.muted),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: 18),
       Center(
         child: SizedBox(
-          width: 212,
-          height: 212,
+          width: 156,
+          height: 156,
           child: Stack(
+            clipBehavior: Clip.none,
             alignment: Alignment.center,
             children: [
-              // Static ambient glow behind the mic trigger (zero idle ticker).
-              Positioned.fill(
+              // Static ambient glow behind the mic trigger (Clip.none avoids pushing fold).
+              Positioned(
+                left: -30,
+                right: -30,
+                top: -30,
+                bottom: -30,
                 child: IgnorePointer(
                   child: RepaintBoundary(
                     child: DecoratedBox(
@@ -190,7 +195,7 @@ class _VoicePageState extends State<VoicePage> {
       Text(flow.message.isEmpty ? '点击开始说话' : flow.message, textAlign: TextAlign.center, style: context.text.headline),
       if (flow.capturing) ...[
         RecordingWaveform(meter: flow.meter),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         Center(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -209,7 +214,7 @@ class _VoicePageState extends State<VoicePage> {
             ),
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         ValueListenableBuilder<String>(
           valueListenable: asr.status,
           builder: (_, status, _) => Text(
