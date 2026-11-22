@@ -212,8 +212,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
   /// already wrapped in `RepaintBoundary`. Moving a layer only repaints the
   /// composite, not the list inside it — which is why this is allowed while a
   /// cross-fade (an `Opacity` over a scrolling page) is not.
-  int _tabDirection = 1;
-  late final Animation<double> _tabCurve = CurvedAnimation(parent: _tabMove, curve: MemoMotion.curve);
+  late final CurvedAnimation _tabCurve = CurvedAnimation(parent: _tabMove, curve: MemoMotion.curve);
+  late Animation<Offset> _tabShift = Tween<Offset>(begin: const Offset(.042, 0), end: Offset.zero).animate(_tabCurve);
 
   Animation<double> _revealAt(int i) => _revealCache.putIfAbsent(i, () {
     final begin = (i.clamp(0, MemoMotion.enterMaxItems) * MemoMotion.enterStep)
@@ -306,7 +306,8 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     _entryPending = false; _entryEpoch++; speech.stopPreview();
     final stopped = voice.active || voice.pending != null ? voice.pause(keepDraft: false) : Future<void>.value();
     _selection.clear();
-    _tabDirection = i > tab ? 1 : -1;
+    final dir = i > tab ? 1.0 : -1.0;
+    _tabShift = Tween<Offset>(begin: Offset(.042 * dir, 0), end: Offset.zero).animate(_tabCurve);
     setState(() { tab = i; });
     _tabMove.forward(from: 0);
     unawaited(stopped.then((_) async {
@@ -329,6 +330,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
     for (final a in _revealCache.values) { if (a is CurvedAnimation) a.dispose(); }
     _revealCache.clear();
     _enter.dispose();
+    _tabCurve.dispose();
     _tabMove.dispose();
     _selection.removeListener(_selectionChanged); _selection.dispose();
     WidgetsBinding.instance.removeObserver(this); native.setMethodCallHandler(null); super.dispose();
@@ -722,8 +724,7 @@ class _MemoHomeState extends State<MemoHome> with WidgetsBindingObserver, Ticker
       //
       // Each tab keeps its own layer too: a banner or a snackbar appearing over
       // the list no longer repaints the calendar sitting behind it.
-      : AnimatedBuilder(animation: _tabCurve, builder: (_, child) => Transform.translate(
-        offset: Offset((1 - _tabCurve.value) * 18 * _tabDirection, 0), child: child), child: IndexedStack(index: tab, children: [
+      : SlideTransition(position: _tabShift, child: IndexedStack(index: tab, children: [
         RepaintBoundary(child: homePage()),
         RepaintBoundary(child: calendarPage()),
         TickerMode(enabled: tab == 2, child: RepaintBoundary(child: VoicePage(flow: voice))),
